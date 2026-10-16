@@ -2,6 +2,8 @@ import http from "node:http";
 import path from "node:path";
 import { createServer as createVite, type Connect } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
+import { isComponentName, isPageId, pageById, SOURCE_FOLDERS } from "../shared/frame.ts";
+import { createInstruction } from "./brief.ts";
 import { AGENT_IDS, type AgentId, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
@@ -89,9 +91,8 @@ const previewVite = await createVite({
   resolve: {
     alias: {
       "@ds": path.join(workspaceDir, "components", "index.ts"),
-      // The folders themselves, for discovering *.specimen.tsx files.
-      "@components": path.join(workspaceDir, "components"),
-      "@patterns": path.join(workspaceDir, "patterns"),
+      // The workspace itself, for discovering *.specimen.tsx files in its source folders.
+      "@workspace": workspaceDir,
     },
     // Workspace files may live outside this repo; React must still resolve to one copy.
     dedupe: ["react", "react-dom"],
@@ -104,7 +105,7 @@ const previewVite = await createVite({
   },
 });
 // New specimen files must be noticed even when the workspace lives outside this repo.
-previewVite.watcher.add([path.join(workspaceDir, "components"), path.join(workspaceDir, "patterns")]);
+previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(workspaceDir, folder)));
 const previewGuard = guard((url) => url === "/" || url === "/index.html");
 previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
 
@@ -159,6 +160,15 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       const text = message.text.trim();
       const hasAttachments = Boolean(message.images?.length || message.annotations?.length);
       if (text || hasAttachments) await agent.prompt(text, { images: message.images, annotations: message.annotations });
+      return;
+    }
+    case "create": {
+      const name = String(message.name ?? "").trim();
+      const purpose = String(message.purpose ?? "").trim().slice(0, 2000);
+      if (!isPageId(message.page) || !isComponentName(name)) return;
+      const page = pageById(message.page);
+      const text = `New ${page.kind}: ${name}${purpose ? `\n\n${purpose}` : ""}`;
+      await agent.prompt(text, { instruction: createInstruction(page.kind, page.folder, name, purpose) });
       return;
     }
     case "cancel":

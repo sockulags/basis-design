@@ -214,6 +214,7 @@ export class AgentHost extends EventEmitter<Events> {
 ${message}` : message;
     this.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
+    if (attachments.instruction) blocks.push({ type: "text", text: attachments.instruction });
     if (annotations.length) blocks.push({ type: "text", text: formatAnnotations(annotations) });
     for (const image of images) blocks.push({ type: "image", mimeType: image.mimeType, data: image.data });
     blocks.push({ type: "text", text: body });
@@ -255,7 +256,11 @@ ${message}` : message;
     if (!errors && !typeErrors) await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
     const sections: string[] = [];
     if (errors) sections.push(`design-system.json does not validate, so the preview still shows the previous version:\n${list(errors)}`);
-    if (typeErrors) sections.push(`components/ does not type-check against the gallery contracts (.basis/contracts.ts):\n${list(typeErrors)}`);
+    if (typeErrors) {
+      sections.push(
+        `The source does not type-check, or no longer satisfies the contracts (.basis/contracts.ts and components/contracts.ts):\n${list(typeErrors)}`,
+      );
+    }
     if (this.previewErrors.length) sections.push(`The preview fails to render:\n${list(this.previewErrors)}`);
     return sections.length ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}` : null;
   }
@@ -430,6 +435,8 @@ ${message}` : message;
 export interface Attachments {
   images?: PromptImage[];
   annotations?: Annotation[];
+  /** Instructions sent to the agent ahead of the prompt but not shown in the chat (guided turns). */
+  instruction?: string;
 }
 
 function acceptedImages(images: PromptImage[] | undefined): PromptImage[] {

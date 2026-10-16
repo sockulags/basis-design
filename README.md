@@ -34,6 +34,7 @@ workspace/
   design-system.json     tokens, validated against shared/design.ts
   components/            React + CSS Modules source of every component (seeded from template/)
     *.specimen.tsx       how the gallery shows each component: one section per specimen
+    contracts.ts         the API of every component added beyond the Basis baseline
   patterns/              larger building blocks composed from components/ (seeded from template/)
   .git/                  history: one commit per agent turn, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
@@ -46,12 +47,14 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 
 `patterns/` holds composed components such as Navbar, SidebarNav, PageHeader, DataTable with Pagination, StatCard, FormSection, EmptyState and AppShell. They import only from `../components`, have their own specimens, and appear on the gallery's **Patterns** page, which you switch to in the top bar. The agent edits and extends them like everything else, so a token or base-component change flows through to every pattern.
 
-`shared/contracts.ts` (copied to `.basis/contracts.ts`) is the baseline API every design system keeps. A component can change completely and gain props or variants, but it must keep its export and accept the contract's props.
+`shared/contracts.ts` (copied to `.basis/contracts.ts`) is the baseline API every design system keeps. A component can change completely and gain props or variants, but it must keep its export and accept the contract's props. Components the design system adds get their contract in `components/contracts.ts`, which the agent writes when it creates them; every export of `components/index.ts` needs a contract in one of the two files.
+
+**New component** and **New pattern** at the bottom of the sidebar ask for a name and what it is for, then start a guided agent turn: it checks for an existing component with the same job, creates the source, contract (for base components), export and specimen, and the result appears in the gallery. You can ask for the same thing in the chat.
 
 ## How it works
 
 - **Live preview:** the gallery runs on its own origin (`BASIS_PREVIEW_PORT`) in a sandboxed iframe, because it executes code the agent writes. That code cannot reach the bridge to the agent or the Basis UI. Vite compiles `components/` on the fly, so saved edits hot-reload in place, and token changes arrive over `postMessage`.
-- **Problems loop:** after every turn Basis validates the tokens, type-checks `components/` against the contracts, and collects render errors and malformed specimens from the preview. A broken section shows its error instead of taking down the gallery. Anything wrong is sent back to the agent automatically, at most twice per turn, and is listed above the composer.
+- **Problems loop:** after every turn Basis validates the tokens, type-checks `components/` and `patterns/`, checks the components against their contracts, and collects render errors and malformed specimens from the preview. A broken section shows its error instead of taking down the gallery. Anything wrong is sent back to the agent automatically, at most twice per turn, and is listed above the composer.
 - **History:** the workspace is a git repository. Each agent turn becomes one commit, labelled with its prompt and with the tokens and files it changed. Click an entry to inspect it. The preview shows that version's tokens, and a banner lists the token and component-code differences from now. You can step through versions or restore one; restoring brings back tokens and code alike. Undo walks back through the steps instead of toggling between two of them.
 - **Composer:**
   - Paste, drop or attach images. They are sent as ACP image blocks when the agent supports them.

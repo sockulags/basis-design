@@ -1,5 +1,6 @@
 import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
+import type { PageId } from "./frame.ts";
 
 /** Messages between the browser and the Basis server over the /bridge WebSocket. */
 
@@ -111,7 +112,7 @@ export interface DesignState {
   design: Design;
   /** Validation errors for the file on disk; null when it is valid. The preview keeps the last valid design. */
   errors: string[] | null;
-  /** Type errors in components/ (including broken contracts); null when clean. */
+  /** Type errors in the source folders (including broken or missing contracts); null when clean. */
   typeErrors: string[] | null;
   workspace: string;
 }
@@ -137,6 +138,8 @@ export type ServerMessage =
 
 export type ClientMessage =
   | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[] }
+  /** Asks the agent to create a new component or pattern (decided by the page) in a guided turn. */
+  | { type: "create"; page: PageId; name: string; purpose: string }
   | { type: "cancel" }
   | { type: "permission"; id: string; optionId: string | null }
   | { type: "new-session" }

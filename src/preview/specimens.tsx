@@ -1,30 +1,20 @@
 import { createElement, type ComponentType } from "react";
 import type { Design } from "../../shared/design.ts";
-import type { PageId } from "../../shared/frame.ts";
+import { PAGES, type PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
 import { Grid, Group, Matrix, Row, Section, Specimen as Labelled } from "./Gallery.tsx";
 
 /**
- * Every `*.specimen.tsx` in the workspace's components and patterns folders.
- * "@components" and "@patterns" resolve to those folders in the preview Vite
- * config; adding, editing or deleting a specimen file hot-updates the gallery.
- * The folder decides the page: components on the design system page,
- * patterns on the patterns page.
+ * Every `*.specimen.tsx` one folder deep in the workspace. "@workspace"
+ * resolves to the workspace in the preview Vite config; adding, editing or
+ * deleting a specimen file hot-updates the gallery. The folder decides the
+ * page (see PAGES); specimens in other folders are ignored. Glob keys are
+ * "@workspace/<folder>/<file>", or a relative path when the workspace lives
+ * outside this repo, so the folder is always the second-to-last segment.
  */
 type SpecimenModule = { default?: unknown };
 
-const sources: { folder: "components" | "patterns"; page: PageId; modules: Record<string, SpecimenModule> }[] = [
-  {
-    folder: "components",
-    page: "system",
-    modules: import.meta.glob<SpecimenModule>("@components/*.specimen.tsx", { eager: true }),
-  },
-  {
-    folder: "patterns",
-    page: "patterns",
-    modules: import.meta.glob<SpecimenModule>("@patterns/*.specimen.tsx", { eager: true }),
-  },
-];
+const modules = import.meta.glob<SpecimenModule>("@workspace/*/*.specimen.tsx", { eager: true });
 
 export interface LoadedSpecimen extends Specimen {
   id: string;
@@ -76,9 +66,13 @@ export function loadSpecimens(): { specimens: LoadedSpecimen[]; problems: Specim
   const specimens: LoadedSpecimen[] = [];
   const problems: SpecimenProblem[] = [];
   const seen = new Set<string>();
-  const entries = sources.flatMap(({ folder, page, modules }) =>
-    Object.entries(modules).map(([path, module]) => ({ page, module, file: `${folder}/${path.split("/").pop() ?? path}` })),
-  );
+  const entries = Object.entries(modules).flatMap(([key, module]) => {
+    const parts = key.split("/");
+    const folder = parts.at(-2) ?? "";
+    const name = parts.at(-1) ?? key;
+    const page = PAGES.find((item) => item.folder === folder)?.id;
+    return page ? [{ page, module, file: `${folder}/${name}` }] : [];
+  });
   for (const { page, module, file } of entries) {
     const exported = module.default;
     const list = Array.isArray(exported) ? exported : [exported];

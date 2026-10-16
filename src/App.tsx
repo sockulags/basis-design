@@ -4,6 +4,7 @@ import { isPageId, PAGES, type NavSection, type PageId } from "../shared/frame.t
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
+import { CreateDialog } from "./shell/CreateDialog.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
@@ -47,6 +48,7 @@ export function App() {
   });
   const [draft, setDraft] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [picking, setPicking] = useState(false);
   const [inspectId, setInspectId] = useState<string | null>(null);
@@ -249,6 +251,7 @@ export function App() {
             }}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+            onCreate={() => setCreating(true)}
           />
           {design && state.previewPort ? (
             <PreviewFrame
@@ -271,6 +274,15 @@ export function App() {
           )}
         </div>
       </main>
+      {creating && (
+        <CreateDialog
+          page={page}
+          agentReady={state.connected && state.agent?.status === "ready"}
+          send={send}
+          onCreated={() => setChatHidden(false)}
+          onClose={() => setCreating(false)}
+        />
+      )}
       {exporting && live && state.design && (
         <ExportDialog
           design={live}

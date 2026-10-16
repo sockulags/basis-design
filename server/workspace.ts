@@ -4,6 +4,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.ts";
 import { diffDesigns } from "../shared/diff.ts";
+import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts";
 import { AGENT_BRIEF, CLAUDE_MD } from "./brief.ts";
 import { git, typecheck } from "./exec.ts";
@@ -11,8 +12,8 @@ import { git, typecheck } from "./exec.ts";
 const DESIGN_FILE = "design-system.json";
 const COMPONENTS_DIR = "components";
 const PATTERNS_DIR = "patterns";
-/** Folders of agent-owned source: base components, and patterns composed from them. */
-const SOURCE_DIRS = [COMPONENTS_DIR, PATTERNS_DIR];
+/** Folders of agent-owned source, one per gallery page: base components, patterns composed from them. */
+const SOURCE_DIRS: string[] = SOURCE_FOLDERS;
 const isSourcePath = (relative: string) => SOURCE_DIRS.some((dir) => relative.startsWith(`${dir}/`));
 const HISTORY_LIMIT = 300;
 const DIFF_LIMIT = 400_000;
@@ -63,6 +64,10 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     else if (!existsSync(path.join(this.componentsDir, "specimen.ts"))) {
       await this.seed(COMPONENTS_DIR, (name) => name.includes("specimen"));
       notes.push("gallery specimens");
+    }
+    if (!existsSync(path.join(this.componentsDir, "contracts.ts"))) {
+      await this.seed(COMPONENTS_DIR, (name) => name === "contracts.ts");
+      notes.push("component contracts");
     }
     if (!existsSync(this.patternsDir)) {
       const fresh = notes.length === 0 && !existsSync(path.join(this.dir, ".git"));
@@ -319,11 +324,17 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     await writeFile(
       path.join(this.basisDir, "check.ts"),
       [
-        "// Fails to type-check when components/ stops satisfying the gallery contracts.",
+        "// Fails to type-check when components/ stops satisfying its contracts: the Basis baseline",
+        "// (./contracts.ts) and the contracts this design system added (components/contracts.ts).",
         'import type { Contracts } from "./contracts.ts";',
+        'import type { AddedContracts } from "../components/contracts.ts";',
         'import * as components from "../components/index.ts";',
         "",
-        "export const satisfiesContracts: Contracts = components;",
+        "export const satisfiesContracts: Contracts & AddedContracts = components;",
+        "",
+        "// Every export of components/index.ts needs a contract; add missing ones to components/contracts.ts.",
+        "type Uncovered = Exclude<keyof typeof components, keyof Contracts | keyof AddedContracts>;",
+        "export const everyExportHasAContract: [Uncovered] extends [never] ? true : { missingContractFor: Uncovered } = true;",
         "",
       ].join("\n"),
     );

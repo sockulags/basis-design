@@ -35,13 +35,14 @@ The result becomes the starting point of real projects, so treat the components 
 
 ## Rules for components
 
-- Components are grouped by family, each file with a matching \`.module.css\`: \`Button.tsx\`; \`Field.tsx\`
-  (Field, TextInput, Textarea, Select); \`Controls.tsx\` (Checkbox, Radio, Switch); \`Display.tsx\` (Badge,
-  StatusIcon, Alert, Card, Progress, Spinner, Skeleton, Avatar); \`Tabs.tsx\`; \`Overlay.tsx\` (Tooltip, Toast,
-  DialogStage). \`components/index.ts\` re-exports everything; check it to find where a component lives.
-- \`.basis/contracts.ts\` is the baseline API every design system made with Basis keeps (read it before changing
-  a component's props). Keep every listed export and accept at least the listed props. You may add props,
-  variants and new components.
+- Components are grouped by family, each file with a matching \`.module.css\` (\`Field.tsx\` holds Field,
+  TextInput, Textarea and Select, for example). \`components/index.ts\` re-exports everything; read it to see
+  which components exist and where each one lives. The set grows, so do not assume it from memory.
+- Every export of \`components/index.ts\` has a contract, its public API. \`.basis/contracts.ts\` is the baseline
+  every design system made with Basis keeps: keep every listed export and accept at least the listed props.
+  \`components/contracts.ts\` holds the contracts of components this design system added; you own it. Read the
+  contract before changing a component's props. You may add optional props and variants freely; change or
+  remove an existing contract entry only when the user asks for a different API.
 - Style with the CSS custom properties from the token map (\`var(--color-primary)\`, \`var(--button-radius)\` ...),
   never hard-coded colours, so tokens stay the single source of truth. For a knob the token schema lacks, use a
   local custom property inside the module (for example \`--_lift: -2px\`).
@@ -50,8 +51,8 @@ The result becomes the starting point of real projects, so treat the components 
   keep \`data-variant\` where it exists and \`data-state-label\` on Field.
 - Import only from "react" and relative files. No other packages, no network requests, no global CSS outside
   your modules. Keep components accessible: real buttons and inputs, labels, focus-visible styles, ARIA roles.
-- After every turn Basis type-checks \`components/\` against the contracts and collects render errors from the
-  preview. If you get a list of problems, fix them before doing anything else.
+- After every turn Basis type-checks \`components/\` and \`patterns/\`, checks the components against their
+  contracts and collects render errors from the preview. If you get a list of problems, fix them before doing anything else.
 
 ## Specimens: what the gallery shows
 
@@ -69,9 +70,9 @@ The result becomes the starting point of real projects, so treat the components 
 
 ## Patterns: larger building blocks
 
-- \`patterns/\` holds composed components: Navbar, SidebarNav, PageHeader and Breadcrumbs, DataTable and
-  Pagination, StatCard, FormSection, EmptyState and AppShell, each with a \`.module.css\` and a
-  \`.specimen.tsx\`. \`patterns/index.ts\` re-exports them. They show on the gallery's Patterns page.
+- \`patterns/\` holds composed components (navigation, data tables, forms, empty states, whole layouts), each
+  with a \`.module.css\` and a \`.specimen.tsx\`. \`patterns/index.ts\` re-exports them; read it to see which exist.
+  They show on the gallery's Patterns page.
 - Patterns build on the base components: import them from \`../components/index.ts\`, never the other way
   round, and do not copy a base component's markup or styles into a pattern. If a pattern needs something
   a base component lacks, extend the base component.
@@ -80,6 +81,24 @@ The result becomes the starting point of real projects, so treat the components 
 - New patterns (a command palette, a kanban board, a pricing table ...) follow the same shape: a file pair,
   a specimen with a sensible group (Navigation, Data, Forms, Feedback, Examples or a new one) and order,
   and an export from \`patterns/index.ts\`.
+
+## Adding a component or pattern
+
+Whether the user asks in chat or through Basis' "New component" and "New pattern" buttons:
+
+1. Read \`index.ts\` in the target folder first. If something with the same name or the same job exists, stop and
+   ask the user whether to extend it instead; do not create a duplicate.
+2. A base component (\`components/\`) is a single control or surface built on the tokens. Anything assembled from
+   several base components is a pattern (\`patterns/\`). If the request is in the wrong place, say so and put it
+   where it belongs.
+3. Create the file pair (\`Name.tsx\` + \`Name.module.css\`), or add to an existing family file when it clearly
+   belongs there. Follow the component rules above: token variables, \`data-ds\`, \`data-force\` states,
+   accessibility.
+4. For a base component, add its contract to \`components/contracts.ts\`: a props interface and an entry in
+   \`AddedContracts\`. Basis rejects exports without a contract.
+5. Export it from the folder's \`index.ts\` and write its specimen in the same turn, showing every variant and
+   state, with a group and an \`order\` that place it next to its relatives.
+6. Reply with what you built, its main props, and one or two refinements worth asking for next.
 
 ## How to work
 
@@ -141,6 +160,18 @@ camelCase keys become kebab-case. Component tokens may reference global ones, e.
 export const CLAUDE_MD = `<!-- Generated by Basis on every start. Edits here are overwritten. -->
 @AGENTS.md
 `;
+
+/** The hidden instruction for a guided "New component" or "New pattern" turn. */
+export function createInstruction(kind: "component" | "pattern", folder: string, name: string, purpose: string): string {
+  const what = kind === "component" ? "base component" : "pattern";
+  return [
+    `The user pressed "New ${kind}" in Basis. Create a new ${what} named ${name} in ${folder}/.`,
+    purpose
+      ? "What it is for is in the user's message below."
+      : "The user gave no description: infer a sensible scope from the name, and ask first if the name is ambiguous.",
+    'Follow "Adding a component or pattern" in AGENTS.md step by step.',
+  ].join(" ");
+}
 
 /** Prepended to the first prompt when the agent cannot take an appended system prompt. */
 export const FIRST_PROMPT_PREAMBLE =

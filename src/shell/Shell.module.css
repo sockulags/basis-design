@@ -749,3 +749,54 @@ a.primaryButton {
     grid-template-rows: minmax(0, 1fr);
   }
 }
+
+.createDialog {
+  width: min(480px, calc(100vw - 32px));
+}
+
+.createFields {
+  display: grid;
+  gap: 6px;
+  margin: 0 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.createFields label {
+  font-weight: 600;
+}
+
+.createFields label .muted {
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.createFields p {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.createFields input,
+.createFields textarea {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-ink-2);
+  color: var(--app-text);
+  font: inherit;
+}
+
+.createFields input {
+  height: 32px;
+}
+
+.createFields textarea {
+  resize: vertical;
+}
+
+.createFields input:focus,
+.createFields textarea:focus {
+  border-color: color-mix(in srgb, var(--app-signal) 55%, var(--app-line));
+  outline: none;
+}

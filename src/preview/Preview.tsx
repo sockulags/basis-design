@@ -1,11 +1,17 @@
 import { useEffect, useMemo } from "react";
 import type { Design } from "../../shared/design.ts";
-import type { NavSection, PageId } from "../../shared/frame.ts";
+import { pageById, type NavSection, type PageId } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import { clearProblems, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
+
+/** Introductions under the title of every page but the design system page, which has its own hero. */
+const INTROS: Partial<Record<PageId, string>> = {
+  patterns:
+    "Larger building blocks composed from the base components: navigation, data, forms and whole layouts. They change with every token and every component edit.",
+};
 
 interface PreviewProps {
   design: Design;
@@ -65,11 +71,8 @@ export function Preview({ design, theme, page, onAsk, onSections }: PreviewProps
           ) : (
             <header className={styles.hero}>
               <p className={styles.kicker}>{design.name}</p>
-              <h1 className={styles.title}>Patterns</h1>
-              <p className={styles.description}>
-                Larger building blocks composed from the base components: navigation, data, forms and whole layouts.
-                They change with every token and every component edit.
-              </p>
+              <h1 className={styles.title}>{pageById(page).label}</h1>
+              {INTROS[page] && <p className={styles.description}>{INTROS[page]}</p>}
             </header>
           )}
           {onPage.map((specimen) => (

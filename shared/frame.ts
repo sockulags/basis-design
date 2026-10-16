@@ -8,12 +8,30 @@ import type { Design } from "./design.ts";
  * trigger a prompt, a permission answer or any other privileged action.
  */
 
-/** Pages of the gallery: the design system itself, and patterns composed from it. */
+/**
+ * Pages of the gallery: the design system itself, and patterns composed from it.
+ * Each page shows the specimens of one agent-owned source folder in the
+ * workspace, and `kind` names what that folder holds. A new page is a new entry
+ * here plus its starter folder in template/.
+ */
 export const PAGES = [
-  { id: "system", label: "Design system" },
-  { id: "patterns", label: "Patterns" },
+  { id: "system", label: "Design system", folder: "components", kind: "component" },
+  { id: "patterns", label: "Patterns", folder: "patterns", kind: "pattern" },
 ] as const;
 export type PageId = (typeof PAGES)[number]["id"];
+export type SourceFolder = (typeof PAGES)[number]["folder"];
+
+/** Workspace folders of agent-owned source, in page order. */
+export const SOURCE_FOLDERS: SourceFolder[] = PAGES.map((page) => page.folder);
+
+export function pageById(id: PageId): (typeof PAGES)[number] {
+  return PAGES.find((page) => page.id === id) ?? PAGES[0];
+}
+
+/** A name for a new component or pattern: PascalCase, usable as an export and a file name. */
+export function isComponentName(value: string): boolean {
+  return /^[A-Z][A-Za-z0-9]{0,47}$/.test(value);
+}
 
 export function isPageId(value: unknown): value is PageId {
   return PAGES.some((page) => page.id === value);
