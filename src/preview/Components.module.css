@@ -1,0 +1,69 @@
+.stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fill {
+  width: 100%;
+}
+
+.toastStage {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--space-3);
+  min-height: 200px;
+}
+
+.skeletonCard {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.skeletonLines {
+  display: grid;
+  flex: 1;
+  gap: var(--space-2);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+}
+
+.cardMeta {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.planHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.planPrice {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.tooltipSlot {
+  padding-top: 44px;
+  margin-right: var(--space-6);
+}

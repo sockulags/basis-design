@@ -1,0 +1,346 @@
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+
+.swatch {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 56px;
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.chip {
+  display: block;
+}
+
+.swatchName {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: var(--weight-medium);
+}
+
+/* Contrast table */
+
+.contrastTable {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) 70px 1fr 1fr;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.contrastRow {
+  display: contents;
+}
+
+.th {
+  padding-bottom: var(--space-1);
+  border-bottom: var(--border-thin) dashed var(--color-border);
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.pair {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.on,
+.target {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ratio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ratioSample {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 22px;
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: var(--weight-semibold);
+}
+
+.ratioBadge {
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-success-subtle);
+  color: var(--color-success-strong);
+  font-size: 10px;
+}
+
+.ratio[data-pass="false"] .ratioBadge {
+  background: var(--color-danger-subtle);
+  color: var(--color-danger-strong);
+}
+
+/* Typography */
+
+.families {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-6) var(--space-4);
+}
+
+.family {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.familySample {
+  margin-bottom: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+}
+
+.trackingSample {
+  margin-bottom: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+}
+
+.scale {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.scaleRow {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.scaleMeta {
+  display: grid;
+  gap: 2px;
+}
+
+.scaleSample {
+  overflow: hidden;
+  color: var(--color-text);
+  line-height: var(--leading-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prose {
+  max-width: 68ch;
+  color: var(--color-text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.prose h1,
+.prose h2,
+.prose h3 {
+  margin: var(--space-8) 0 var(--space-3);
+  font-family: var(--font-display);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.prose h1 {
+  margin-top: var(--space-2);
+  font-size: var(--text-4xl);
+  font-weight: var(--weight-bold);
+}
+
+.prose h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+}
+
+.prose h3 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.prose p {
+  margin: 0 0 var(--space-4);
+}
+
+.prose code {
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.overline {
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.lede {
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+
+.leading {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-5);
+  font-size: var(--text-sm);
+}
+
+/* Shape */
+
+.spaceList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.spaceRow {
+  display: grid;
+  grid-template-columns: 80px 60px 1fr;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.spaceBar {
+  height: 12px;
+  border-radius: 2px;
+  background: var(--color-primary);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: var(--space-6) var(--space-4);
+}
+
+.tileWrap {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.radiusTile,
+.shadowTile,
+.borderTile {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-bottom: var(--space-2);
+}
+
+.radiusTile {
+  border: var(--border-thick) solid var(--color-primary);
+  background: var(--color-primary-subtle);
+}
+
+.shadowTile {
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.borderTile {
+  border-style: solid;
+  border-color: var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+/* Motion */
+
+.tracks {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.trackRow {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.easeRow {
+  display: grid;
+  grid-template-columns: 64px 220px 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.track {
+  position: relative;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+}
+
+.dot {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.tracks[data-played] .dot {
+  left: calc(100% - 4px);
+  translate: -100% 0;
+}
+
+.curve {
+  width: 64px;
+  height: 64px;
+}
+
+.curveFrame {
+  fill: var(--color-surface-sunken);
+  stroke: var(--color-border);
+}
+
+.curveHandle {
+  stroke: var(--color-text-subtle);
+  stroke-dasharray: 2 2;
+}
+
+.curvePath {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.curveFallback {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

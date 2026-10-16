@@ -1,0 +1,80 @@
+/* Basis chrome. The design system preview is styled separately, inside .ds-root, by generated tokens only. */
+
+:root {
+  --app-ink: #121210;
+  --app-ink-2: #1a1a17;
+  --app-ink-3: #262620;
+  --app-line: #2e2e28;
+  --app-text: #ecebe4;
+  --app-muted: #a5a399;
+  --app-subtle: #7a786e;
+  --app-signal: #c8f25a;
+  --app-danger: #ff8a7a;
+  --app-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --app-bar-height: 52px;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--app-ink);
+  color: var(--app-text);
+}
+
+/* The preview follows its own theme, not the chrome's. */
+.ds-root {
+  color-scheme: light;
+}
+
+.ds-root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ask-button {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px dashed color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  opacity: 0.65;
+  cursor: pointer;
+  transition: opacity 120ms ease, border-color 120ms ease;
+}
+
+.ask-button:hover {
+  border-style: solid;
+  opacity: 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--app-signal);
+  outline-offset: 2px;
+}

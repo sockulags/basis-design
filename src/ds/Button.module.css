@@ -1,0 +1,141 @@
+.button {
+  --_bg: var(--color-primary);
+  --_bg-hover: var(--color-primary-hover);
+  --_bg-active: var(--color-primary-active);
+  --_fg: var(--color-on-primary);
+  --_border: transparent;
+  --_shadow: var(--button-shadow);
+  --_shadow-hover: var(--button-shadow-hover);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--button-gap);
+  height: var(--button-height-md);
+  padding-inline: var(--button-padding-x);
+  border: var(--button-border-width) solid var(--_border);
+  border-radius: var(--button-radius);
+  background: var(--_bg);
+  color: var(--_fg);
+  font-family: var(--font-sans);
+  font-size: var(--button-font-size);
+  font-weight: var(--button-font-weight);
+  letter-spacing: var(--button-letter-spacing);
+  text-transform: var(--button-text-transform);
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: var(--_shadow);
+  cursor: pointer;
+  user-select: none;
+  transition: var(--button-transition);
+}
+
+.button[data-size="sm"] {
+  height: var(--button-height-sm);
+  padding-inline: calc(var(--button-padding-x) * 0.75);
+}
+
+.button[data-size="lg"] {
+  height: var(--button-height-lg);
+  padding-inline: calc(var(--button-padding-x) * 1.35);
+  font-size: var(--text-base);
+}
+
+.button[data-variant="secondary"] {
+  --_bg: var(--color-secondary);
+  --_bg-hover: var(--color-secondary-hover);
+  --_bg-active: var(--color-secondary-active);
+  --_fg: var(--color-on-secondary);
+}
+
+.button[data-variant="outline"] {
+  --_bg: transparent;
+  --_bg-hover: var(--color-secondary);
+  --_bg-active: var(--color-secondary-hover);
+  --_fg: var(--color-text);
+  --_border: var(--color-border-strong);
+  --_shadow: none;
+  --_shadow-hover: none;
+}
+
+.button[data-variant="ghost"] {
+  --_bg: transparent;
+  --_bg-hover: var(--color-secondary);
+  --_bg-active: var(--color-secondary-active);
+  --_fg: var(--color-text);
+  --_shadow: none;
+  --_shadow-hover: none;
+}
+
+.button[data-variant="danger"] {
+  --_bg: var(--color-danger);
+  --_bg-hover: var(--color-danger-hover);
+  --_bg-active: var(--color-danger-active);
+  --_fg: var(--color-on-danger);
+}
+
+.button:hover:not(:disabled, [data-loading]),
+.button[data-force="hover"] {
+  background: var(--_bg-hover);
+  box-shadow: var(--_shadow-hover);
+}
+
+.button:active:not(:disabled, [data-loading]),
+.button[data-force="active"] {
+  background: var(--_bg-active);
+  box-shadow: var(--_shadow);
+  transform: scale(var(--button-press-scale));
+}
+
+.button:focus-visible,
+.button[data-force="focus"] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.button:disabled {
+  background: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.button[data-variant="outline"]:disabled {
+  background: transparent;
+  border-color: var(--color-border);
+}
+
+.button[data-variant="ghost"]:disabled {
+  background: transparent;
+}
+
+.button[data-loading] {
+  cursor: progress;
+}
+
+.button[data-loading] .label {
+  visibility: hidden;
+}
+
+.spinner {
+  position: absolute;
+  width: 1.1em;
+  height: 1.1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin calc(var(--duration-slower) * 1.6) linear infinite;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
