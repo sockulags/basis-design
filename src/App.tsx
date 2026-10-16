@@ -3,11 +3,12 @@ import type { Annotation } from "../shared/annotations.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
-import { Preview, SECTIONS } from "./preview/Preview.tsx";
+import { Preview } from "./preview/Preview.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
+import { Sidebar } from "./shell/Sidebar.tsx";
 import styles from "./shell/Shell.module.css";
 
 type Theme = "light" | "dark";
@@ -39,6 +40,7 @@ export function App() {
   const [theme, setTheme] = useState<Theme>(() => (readPref("theme") === "dark" ? "dark" : "light"));
   const [chatWidth, setChatWidth] = useState(initialChatWidth);
   const [chatHidden, setChatHidden] = useState(() => readPref("chat-hidden") === "true");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPref("sidebar-collapsed") === "true");
   const [draft, setDraft] = useState("");
   const [exporting, setExporting] = useState(false);
   const [picks, setPicks] = useState<Pick[]>([]);
@@ -57,6 +59,7 @@ export function App() {
   useEffect(() => writePref("theme", theme), [theme]);
   useEffect(() => writePref("chat-width", String(chatWidth)), [chatWidth]);
   useEffect(() => writePref("chat-hidden", String(chatHidden)), [chatHidden]);
+  useEffect(() => writePref("sidebar-collapsed", String(sidebarCollapsed)), [sidebarCollapsed]);
 
   // Keep the stored width valid when the window shrinks.
   useEffect(() => {
@@ -171,13 +174,6 @@ export function App() {
             <span className={styles.brandMark} aria-hidden />
             Basis
           </span>
-          <nav className={styles.sections} aria-label="Sections">
-            {SECTIONS.map((section) => (
-              <a key={section.id} href={`#${section.id}`}>
-                {section.label}
-              </a>
-            ))}
-          </nav>
           <div className={styles.actions}>
             <div className={styles.themeToggle} role="group" aria-label="Preview theme">
               {(["light", "dark"] as const).map((value) => (
@@ -207,12 +203,20 @@ export function App() {
             onExit={() => setInspectId(null)}
           />
         )}
-        <div ref={canvas} className={styles.canvas} data-inspecting={inspectEntry ? true : undefined}>
-          {design ? (
-            <Preview design={design} theme={theme} onAsk={ask} />
-          ) : (
-            <p className={styles.loading}>Connecting to the Basis server…</p>
-          )}
+        <div className={styles.stage}>
+          <Sidebar
+            container={canvas}
+            ready={Boolean(design)}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+          />
+          <div ref={canvas} className={styles.canvas} data-inspecting={inspectEntry ? true : undefined}>
+            {design ? (
+              <Preview design={design} theme={theme} onAsk={ask} />
+            ) : (
+              <p className={styles.loading}>Connecting to the Basis server…</p>
+            )}
+          </div>
         </div>
         {picks.length > 0 && <PickMarkers container={canvas} picks={picks} />}
         {picking && design && (

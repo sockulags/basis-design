@@ -3,7 +3,7 @@
   gap: var(--space-8);
   padding-block: var(--space-12);
   border-top: var(--border-thin) solid var(--color-border);
-  scroll-margin-top: 56px;
+  scroll-margin-top: 0;
 }
 
 .section:first-of-type {

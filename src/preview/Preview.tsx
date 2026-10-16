@@ -5,20 +5,6 @@ import { Buttons, Feedback, Inputs, Navigation, Overlays, Selection, Surfaces } 
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 
-export const SECTIONS = [
-  { id: "color", label: "Color" },
-  { id: "typography", label: "Type" },
-  { id: "shape", label: "Shape" },
-  { id: "motion", label: "Motion" },
-  { id: "buttons", label: "Buttons" },
-  { id: "inputs", label: "Inputs" },
-  { id: "selection", label: "Selection" },
-  { id: "feedback", label: "Feedback" },
-  { id: "navigation", label: "Tabs" },
-  { id: "surfaces", label: "Cards" },
-  { id: "overlays", label: "Overlays" },
-] as const;
-
 interface PreviewProps {
   design: Design;
   theme: "light" | "dark";
