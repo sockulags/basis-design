@@ -1,11 +1,27 @@
 .list {
+  position: relative;
+  isolation: isolate;
   display: flex;
   gap: var(--tabs-gap);
   font-family: var(--font-sans);
 }
 
+/* One shared indicator, positioned over the selected tab by Tabs.tsx and slid between tabs. */
+.indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.indicator[data-animate] {
+  transition: var(--tabs-indicator-transition);
+}
+
 .tab {
   position: relative;
+  z-index: 1;
   padding: var(--space-2) var(--space-3);
   border: 0;
   background: transparent;
@@ -62,8 +78,13 @@
   transform: scaleX(1);
 }
 
-.list[data-variant="underline"] .tab[aria-selected="true"]::after {
-  transform: scaleX(1);
+.list[data-variant="underline"] .indicator::after {
+  content: "";
+  position: absolute;
+  inset: auto var(--space-2) calc(var(--border-thin) * -1);
+  height: var(--tabs-indicator-height);
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
 }
 
 /* pill */
@@ -78,8 +99,12 @@
 }
 
 .list[data-variant="pill"] .tab[aria-selected="true"] {
-  background: var(--color-primary-subtle);
   color: var(--color-primary);
+}
+
+.list[data-variant="pill"] .indicator {
+  border-radius: var(--tabs-radius);
+  background: var(--color-primary-subtle);
 }
 
 /* segmented */
@@ -100,7 +125,8 @@
   background: color-mix(in srgb, var(--color-surface) 50%, transparent);
 }
 
-.list[data-variant="segmented"] .tab[aria-selected="true"] {
+.list[data-variant="segmented"] .indicator {
+  border-radius: var(--tabs-radius);
   background: var(--color-surface);
   box-shadow: var(--shadow-xs);
 }

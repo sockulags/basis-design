@@ -30,6 +30,9 @@ Each time you save the file, the user sees the result within a fraction of a sec
 - After editing, reply with two or three sentences: what changed and why, then one or two concrete next
   refinements the user could ask for. No long token dumps; the user sees the preview.
 - If the file fails validation, Basis tells you the errors. Fix them before doing anything else.
+- Some requests need a component to behave differently, not just look different (new structure, new interaction,
+  a state the gallery does not have). Those are changes to Basis itself, outside this folder. Say so in a sentence,
+  offer the closest result tokens can give, and do not offer to edit Basis source code.
 
 ## Token map (JSON path → CSS variable)
 
@@ -73,7 +76,9 @@ camelCase keys become kebab-case. Component tokens may reference global ones, e.
 - Checkbox, radio, switch: components.control.* (checked uses primary, thumb uses onPrimary).
 - Card: components.card.* (hover lifts by liftHover and swaps to shadowHover).
 - Badge: components.badge.*. Alert: components.alert.* (accentWidth > 0 adds a coloured left stripe).
-- Tabs: components.tabs.* where \`variant\` is one of "underline", "pill", "segmented".
+- Tabs: components.tabs.* where \`variant\` is one of "underline", "pill", "segmented". The selected-tab indicator
+  (underline, pill or segment) slides between tabs; \`indicatorTransition\` is its full CSS transition list
+  (transform, width, height), while \`transition\` covers the tabs' own text and background colour.
 - Tooltip, toast, dialog: components.tooltip/toast/dialog.* and motion tokens for enter/exit.
 - Progress, spinner, skeleton: components.progress.* and motion tokens.
 - Focus rings everywhere: focus.ringWidth, focus.ringOffset, color.focusRing.
