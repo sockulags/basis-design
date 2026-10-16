@@ -69,12 +69,23 @@ body {
   transition: opacity 120ms ease, border-color 120ms ease;
 }
 
+.ask-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
 .ask-button:hover {
   border-style: solid;
   opacity: 1;
 }
 
-:focus-visible {
+/*
+ * Chrome-only default ring. :where() keeps its specificity at zero so any
+ * component's own focus style wins; inside the preview, focus comes from the
+ * design system's tokens.
+ */
+:where(:focus-visible:not(.ds-root, .ds-root *)) {
   outline: 2px solid var(--app-signal);
   outline-offset: 2px;
 }
