@@ -5,6 +5,7 @@ import type {
   ClientMessage,
   DesignState,
   HistoryEntry,
+  ExportWriteResult,
   ServerMessage,
   Snapshot,
 } from "../shared/protocol.ts";
@@ -19,6 +20,8 @@ export interface BridgeState {
   snapshots: Record<string, Snapshot>;
   /** Port of the sandboxed preview origin, from the server. */
   previewPort: number | null;
+  exportManifest: { folder: string; files: { path: string; bytes: number }[] } | null;
+  exportResult: ExportWriteResult | null;
 }
 
 const initial: BridgeState = {
@@ -29,6 +32,8 @@ const initial: BridgeState = {
   chat: [],
   snapshots: {},
   previewPort: null,
+  exportManifest: null,
+  exportResult: null,
 };
 
 type Action = ServerMessage | { type: "connected"; connected: boolean };
@@ -62,6 +67,10 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       chat[index] = action.item;
       return { ...state, chat };
     }
+    case "export-manifest":
+      return { ...state, exportManifest: { folder: action.folder, files: action.files } };
+    case "export-result":
+      return { ...state, exportResult: action.result };
     case "snapshot":
       return { ...state, snapshots: { ...state.snapshots, [action.snapshot.id]: action.snapshot } };
   }

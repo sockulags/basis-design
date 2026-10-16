@@ -91,6 +91,22 @@ export interface Snapshot {
   codeDiff: string;
 }
 
+/** One file of the exported starter kit, path relative to the kit folder. */
+export interface ExportFile {
+  path: string;
+  content: string;
+}
+
+export interface ExportWriteResult {
+  ok: boolean;
+  /** Absolute folder the kit was (or would have been) written to. */
+  target: string;
+  written: string[];
+  /** Existing files that would change; nothing is written until the user confirms. */
+  conflicts: string[];
+  error?: string;
+}
+
 export interface DesignState {
   design: Design;
   /** Validation errors for the file on disk; null when it is valid. The preview keeps the last valid design. */
@@ -115,7 +131,9 @@ export type ServerMessage =
   | { type: "agent"; agent: AgentState }
   | { type: "chat-upsert"; item: ChatItem }
   | { type: "chat-reset" }
-  | { type: "snapshot"; snapshot: Snapshot };
+  | { type: "snapshot"; snapshot: Snapshot }
+  | { type: "export-manifest"; folder: string; files: { path: string; bytes: number }[] }
+  | { type: "export-result"; result: ExportWriteResult };
 
 export type ClientMessage =
   | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[] }
@@ -126,4 +144,6 @@ export type ClientMessage =
   | { type: "revert"; historyId: string }
   | { type: "snapshot-get"; id: string }
   /** Render errors the preview currently shows (empty when it renders cleanly). */
-  | { type: "preview-errors"; errors: string[] };
+  | { type: "preview-errors"; errors: string[] }
+  | { type: "export-manifest" }
+  | { type: "export-write"; target: string; overwrite: boolean };

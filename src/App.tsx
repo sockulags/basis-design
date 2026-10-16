@@ -245,7 +245,15 @@ export function App() {
         </div>
       </main>
       {exporting && live && state.design && (
-        <ExportDialog design={live} workspace={state.design.workspace} onClose={() => setExporting(false)} />
+        <ExportDialog
+          design={live}
+          workspace={state.design.workspace}
+          problems={problems.length}
+          manifest={state.exportManifest}
+          result={state.exportResult}
+          send={send}
+          onClose={() => setExporting(false)}
+        />
       )}
     </div>
   );

@@ -54,7 +54,14 @@ The gallery renders each component through a contract (`shared/contracts.ts`, co
   - The sidebar scrolls the preview to each section and can collapse to an icon rail.
   - The chat can be resized by dragging its edge (double-click resets) and hidden with the toggle in the top bar or Ctrl+B.
 - **Permissions:** reads inside the workspace and edits to the files the agent may change are approved automatically. Anything else, such as shell commands, web fetches or other files, shows up in the chat for you to approve.
-- **Export:** gives you `tokens.css` (CSS custom properties, with dark mode via `data-theme` or the OS setting), a Tailwind v4 `@theme` stylesheet, or the raw JSON. The components themselves live in `workspace/components/`.
+- **Export:** the **Starter kit** tab packages the whole design system for a new project. You can download it as a zip or write it straight into a project folder; if any file there would change, nothing is written until you confirm. The kit contains:
+  - `components/`, with imports rewritten to extensionless form so any bundler and default `tsconfig` accept them,
+  - `tokens.css`, CSS custom properties with dark mode via `data-theme` or the OS setting,
+  - `theme.tailwind.css`, a Tailwind v4 entry stylesheet,
+  - `design-system.json`,
+  - a README on wiring it up.
+
+  The kit needs React 18+ and CSS Modules, nothing else. The other tabs export the token formats one at a time.
 
 ## Stack
 

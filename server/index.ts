@@ -4,6 +4,7 @@ import { createServer as createVite, type Connect } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AGENT_IDS, type AgentId, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
+import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { Workspace } from "./workspace.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -50,7 +51,34 @@ const chromeVite = await createVite({
   server: { middlewareMode: true, hmr: { server: chromeServer } },
 });
 const chromeGuard = guard((url) => url === "/preview.html");
-chromeServer.on("request", (req, res) => chromeGuard(req, res, () => chromeVite.middlewares(req, res)));
+chromeServer.on("request", (req, res) => {
+  if (req.method === "GET" && req.url === "/export/starter-kit.zip") {
+    void sendStarterKitZip(res);
+    return;
+  }
+  chromeGuard(req, res, () => chromeVite.middlewares(req, res));
+});
+
+async function starterKit() {
+  return buildStarterKit(workspace.state.design, workspace.componentsDir);
+}
+
+async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
+  try {
+    const folder = slug(workspace.state.design.name);
+    const zip = zipStarterKit(await starterKit(), folder);
+    res.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${folder}.zip"`,
+      "Content-Length": zip.byteLength,
+      "Cache-Control": "no-store",
+    });
+    res.end(zip);
+  } catch (error) {
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end(`Could not build the starter kit: ${(error as Error).message}`);
+  }
+}
 
 const previewServer = http.createServer();
 const previewVite = await createVite({
@@ -145,6 +173,20 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     case "preview-errors":
       if (Array.isArray(message.errors)) agent.setPreviewErrors(message.errors);
       return;
+    case "export-manifest": {
+      const files = await starterKit();
+      send(socket, {
+        type: "export-manifest",
+        folder: slug(workspace.state.design.name),
+        files: files.map((file) => ({ path: file.path, bytes: Buffer.byteLength(file.content) })),
+      });
+      return;
+    }
+    case "export-write": {
+      const result = await writeStarterKit(await starterKit(), String(message.target ?? ""), message.overwrite === true);
+      send(socket, { type: "export-result", result });
+      return;
+    }
   }
 }
 
