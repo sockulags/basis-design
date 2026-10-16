@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
+import type { NavSection } from "../shared/frame.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
@@ -47,6 +48,7 @@ export function App() {
   const [inspectId, setInspectId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>();
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
+  const [sections, setSections] = useState<NavSection[]>([]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<PreviewFrameHandle>(null);
   const live = state.design?.design;
@@ -218,6 +220,7 @@ export function App() {
         <div className={styles.stage}>
           <Sidebar
             active={activeSection}
+            sections={sections}
             onNavigate={(id) => {
               frame.current?.scrollTo(id);
               window.history.replaceState(null, "", `#${id}`);
@@ -238,6 +241,7 @@ export function App() {
               onAsk={ask}
               onActiveSection={setActiveSection}
               onErrors={setPreviewErrors}
+              onSections={setSections}
             />
           ) : (
             <p className={styles.loading}>Connecting to the Basis server…</p>

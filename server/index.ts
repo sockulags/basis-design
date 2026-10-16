@@ -87,7 +87,11 @@ const previewVite = await createVite({
   cacheDir: "node_modules/.vite/preview",
   optimizeDeps: { entries: ["preview.html"] },
   resolve: {
-    alias: { "@ds": path.join(workspaceDir, "components", "index.ts") },
+    alias: {
+      "@ds": path.join(workspaceDir, "components", "index.ts"),
+      // The folder itself, for discovering *.specimen.tsx files.
+      "@components": path.join(workspaceDir, "components"),
+    },
     // Workspace files may live outside this repo; React must still resolve to one copy.
     dedupe: ["react", "react-dom"],
   },
@@ -98,6 +102,8 @@ const previewVite = await createVite({
     headers: { "Content-Security-Policy": `frame-ancestors ${chromeOrigins.join(" ")}` },
   },
 });
+// New specimen files must be noticed even when the workspace lives outside this repo.
+previewVite.watcher.add(path.join(workspaceDir, "components"));
 const previewGuard = guard((url) => url === "/" || url === "/index.html");
 previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
 

@@ -1,11 +1,11 @@
-import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
+import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
-import type { FromPreview, ToPreview } from "../../shared/frame.ts";
+import type { FromPreview, NavSection, ToPreview } from "../../shared/frame.ts";
 import type { Design } from "../../shared/design.ts";
 import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
-import { Preview } from "./Preview.tsx";
+import type { Preview as PreviewComponent } from "./Preview.tsx";
 import "./preview.css";
 
 /*
@@ -74,8 +74,36 @@ function useScrollSpy(enabled: boolean): void {
   }, [enabled]);
 }
 
+type PreviewType = typeof PreviewComponent;
+
+/**
+ * Loaded dynamically: the gallery imports the workspace's components and
+ * specimens, and if those fail to compile the error is reported to the chrome
+ * instead of leaving an empty frame.
+ */
+function usePreviewModule(): ComponentType<Parameters<PreviewType>[0]> | null {
+  const [module, setModule] = useState<{ Preview: PreviewType } | null>(null);
+  useEffect(() => {
+    import("./Preview.tsx").then(
+      (loaded) => {
+        clearProblems("Gallery failed to load");
+        setModule(loaded);
+      },
+      (error: unknown) => {
+        setProblem("Gallery failed to load", describe(error));
+        // A failed module stays failed in this document; reload once the next edit lands.
+        import.meta.hot?.on("vite:afterUpdate", () => location.reload());
+      },
+    );
+  }, []);
+  return module?.Preview ?? null;
+}
+
+const postSections = (sections: NavSection[]) => post({ type: "sections", sections });
+
 function PreviewApp() {
   const [view, setView] = useState<View | null>(null);
+  const Preview = usePreviewModule();
   const [picking, setPicking] = useState(false);
   const [picks, setPicks] = useState<Pick[]>([]);
   const root = useRef<HTMLDivElement>(null);
@@ -138,11 +166,16 @@ function PreviewApp() {
     post({ type: "picking", on: false });
   }, []);
 
-  if (!view) return null;
+  if (!view || !Preview) return null;
   return (
     <>
       <div ref={root}>
-        <Preview design={view.design} theme={view.theme} onAsk={(prefix) => post({ type: "ask", prefix })} />
+        <Preview
+          design={view.design}
+          theme={view.theme}
+          onAsk={(prefix) => post({ type: "ask", prefix })}
+          onSections={postSections}
+        />
       </div>
       {picks.length > 0 && <PickMarkers picks={picks} />}
       {picking && <PickLayer container={root} design={view.design} picks={picks} onToggle={toggle} onDone={done} />}

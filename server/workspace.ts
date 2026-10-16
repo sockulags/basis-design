@@ -51,12 +51,17 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     await mkdir(this.basisDir, { recursive: true });
     await this.writeGeneratedFiles();
     if (!existsSync(this.file)) await writeFile(this.file, serialize(DEFAULT_DESIGN));
+    let note = "";
     if (!existsSync(this.componentsDir)) await this.seedComponents();
+    else if (!existsSync(path.join(this.componentsDir, "specimen.ts"))) {
+      await this.seedComponents((name) => name.includes("specimen"));
+      note = "Basis added gallery specimens";
+    }
     if (!existsSync(path.join(this.dir, ".git"))) await git(this.dir, ["init", "-q", "-b", "main"]);
     await this.reload();
     await this.check();
     const hasCommits = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() !== "";
-    await this.commit(hasCommits ? "external" : "init", {});
+    await this.commit(hasCommits ? "external" : "init", note ? { label: note } : {});
     this.history = await this.loadHistory();
     this.watcher = watch(this.dir, { recursive: true }, (_event, filename) => this.onFsEvent(filename));
   }
@@ -251,11 +256,16 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     return entries.reverse();
   }
 
-  /** Copies the starter components, normalising line endings (a Windows checkout of Basis may have CRLF). */
-  private async seedComponents(): Promise<void> {
+  /**
+   * Copies starter files that are missing, normalising line endings (a Windows
+   * checkout of Basis may have CRLF). Workspaces from before specimens existed
+   * get just the specimen files.
+   */
+  private async seedComponents(only: (name: string) => boolean = () => true): Promise<void> {
     const source = path.join(repoRoot, "template", COMPONENTS_DIR);
     await mkdir(this.componentsDir, { recursive: true });
     for (const name of await readdir(source)) {
+      if (!only(name) || existsSync(path.join(this.componentsDir, name))) continue;
       const text = await readFile(path.join(source, name), "utf8");
       await writeFile(path.join(this.componentsDir, name), text.replaceAll("\r\n", "\n"));
     }

@@ -33,6 +33,7 @@ Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex
 workspace/
   design-system.json     tokens, validated against shared/design.ts
   components/            React + CSS Modules source of every component (seeded from template/)
+    *.specimen.tsx       how the gallery shows each component: one section per specimen
   .git/                  history: one commit per agent turn, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
   tsconfig.json, .basis/ type-check setup and gallery contracts (generated)
@@ -40,12 +41,14 @@ workspace/
 
 The agent may edit `design-system.json` and anything under `components/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
 
-The gallery renders each component through a contract (`shared/contracts.ts`, copied to `.basis/contracts.ts`). A component can change completely and gain props or variants, but it must keep its export and accept the contract's props.
+Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar entry. A specimen lists blocks: a `matrix` of variants × states, a `grid` of labelled examples, or free `row` and `block` content for live demos (the format is in `components/specimen.ts`). The agent writes specimens alongside components, so a new component or variant shows up in the gallery as soon as it exists. Basis owns only the foundation sections: colour, type, shape and motion.
+
+`shared/contracts.ts` (copied to `.basis/contracts.ts`) is the baseline API every design system keeps. A component can change completely and gain props or variants, but it must keep its export and accept the contract's props.
 
 ## How it works
 
 - **Live preview:** the gallery runs on its own origin (`BASIS_PREVIEW_PORT`) in a sandboxed iframe, because it executes code the agent writes. That code cannot reach the bridge to the agent or the Basis UI. Vite compiles `components/` on the fly, so saved edits hot-reload in place, and token changes arrive over `postMessage`.
-- **Problems loop:** after every turn Basis validates the tokens, type-checks `components/` against the contracts, and collects render errors from the preview. A broken section shows its error instead of taking down the gallery. Anything wrong is sent back to the agent automatically, at most twice per turn, and is listed above the composer.
+- **Problems loop:** after every turn Basis validates the tokens, type-checks `components/` against the contracts, and collects render errors and malformed specimens from the preview. A broken section shows its error instead of taking down the gallery. Anything wrong is sent back to the agent automatically, at most twice per turn, and is listed above the composer.
 - **History:** the workspace is a git repository. Each agent turn becomes one commit, labelled with its prompt and with the tokens and files it changed. Click an entry to inspect it. The preview shows that version's tokens, and a banner lists the token and component-code differences from now. You can step through versions or restore one; restoring brings back tokens and code alike. Undo walks back through the steps instead of toggling between two of them.
 - **Composer:**
   - Paste, drop or attach images. They are sent as ACP image blocks when the agent supports them.

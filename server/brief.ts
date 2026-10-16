@@ -39,9 +39,9 @@ The result becomes the starting point of real projects, so treat the components 
   (Field, TextInput, Textarea, Select); \`Controls.tsx\` (Checkbox, Radio, Switch); \`Display.tsx\` (Badge,
   StatusIcon, Alert, Card, Progress, Spinner, Skeleton, Avatar); \`Tabs.tsx\`; \`Overlay.tsx\` (Tooltip, Toast,
   DialogStage). \`components/index.ts\` re-exports everything; check it to find where a component lives.
-- The gallery renders the components through the contracts in \`.basis/contracts.ts\` (read it before changing a
-  component's props). Keep every listed export and accept at least the listed props. You may add props,
-  variants and new components; new components are not shown in the gallery yet.
+- \`.basis/contracts.ts\` is the baseline API every design system made with Basis keeps (read it before changing
+  a component's props). Keep every listed export and accept at least the listed props. You may add props,
+  variants and new components.
 - Style with the CSS custom properties from the token map (\`var(--color-primary)\`, \`var(--button-radius)\` ...),
   never hard-coded colours, so tokens stay the single source of truth. For a knob the token schema lacks, use a
   local custom property inside the module (for example \`--_lift: -2px\`).
@@ -52,6 +52,20 @@ The result becomes the starting point of real projects, so treat the components 
   your modules. Keep components accessible: real buttons and inputs, labels, focus-visible styles, ARIA roles.
 - After every turn Basis type-checks \`components/\` against the contracts and collects render errors from the
   preview. If you get a list of problems, fix them before doing anything else.
+
+## Specimens: what the gallery shows
+
+- Every \`components/*.specimen.tsx\` file becomes a gallery section and a sidebar entry. It default-exports
+  \`defineSpecimen({ ... })\` (or an array of specimens) from \`components/specimen.ts\`; read that file for the format.
+- A specimen has a title, an optional description, group (default "Components"), order, and blocks:
+  \`matrix\` (rows × columns, usually variants × states), \`grid\` (labelled examples), \`row\` and \`block\`
+  (free content, for live demos). Every render is a React component, so it may use hooks.
+- Show every state side by side: pin states with the \`force\` prop (\`forced(columnLabel)\` maps "hover",
+  "focus-visible" and "pressed"), and add disabled, loading, invalid and the like as their own columns.
+- Keep specimens in step with components. When you add a variant, add it to the matrix. When you create a
+  component, create its specimen in the same turn, export the component from \`index.ts\`, and give the specimen
+  an \`order\` that places it sensibly. A component without a specimen is invisible to the user.
+- Style specimen layout with inline styles using token variables; the gallery provides the section frame.
 
 ## How to work
 

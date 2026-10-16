@@ -29,7 +29,7 @@ function stripImportExtensions(source: string): string {
 
 function readme(design: Design, components: string[]): string {
   const families = components
-    .filter((file) => /\.tsx$/.test(file))
+    .filter((file) => /\.tsx$/.test(file) && !file.includes(".specimen."))
     .map((file) => `- \`components/${file}\``)
     .join("\n");
   return `# ${design.name}
@@ -42,7 +42,9 @@ ${design.description || "A design system generated with Basis."}
   \`data-theme="dark"\` or the operating system's dark preference. Font imports are included.
 - \`theme.tailwind.css\`: the same tokens as a Tailwind v4 entry stylesheet, for Tailwind projects.
 - \`design-system.json\`: the source tokens, for tooling or for importing back into Basis.
-- \`components/\`: React components styled with CSS Modules and the token variables.
+- \`components/\`: React components styled with CSS Modules and the token variables. The
+  \`*.specimen.tsx\` files describe every component in every state; they are living documentation and
+  a ready-made source for stories or visual tests, and nothing imports them by default.
 
 ${families}
 

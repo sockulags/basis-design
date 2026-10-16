@@ -8,6 +8,13 @@ import type { Design } from "./design.ts";
  * trigger a prompt, a permission answer or any other privileged action.
  */
 
+/** A component section the preview found in the workspace's specimen files. */
+export interface NavSection {
+  id: string;
+  title: string;
+  group: string;
+}
+
 export type ToPreview =
   | { type: "render"; design: Design; theme: "light" | "dark" }
   | { type: "scroll-to"; id: string }
@@ -21,7 +28,8 @@ export type FromPreview =
   | { type: "ask"; prefix: string }
   | { type: "picks"; annotations: Annotation[] }
   | { type: "picking"; on: boolean }
-  | { type: "errors"; errors: string[] };
+  | { type: "errors"; errors: string[] }
+  | { type: "sections"; sections: NavSection[] };
 
 const text = (value: unknown, max: number): string | null =>
   typeof value === "string" ? value.slice(0, max) : null;
@@ -88,6 +96,19 @@ export function parseFromPreview(data: unknown): FromPreview | null {
               .slice(0, 10)
               .map((error) => text(error, 600))
               .filter((error): error is string => error !== null),
+          }
+        : null;
+    case "sections":
+      return Array.isArray(raw.sections)
+        ? {
+            type: "sections",
+            sections: raw.sections.slice(0, 80).flatMap((item: unknown) => {
+              const section = item as Record<string, unknown> | null;
+              const id = text(section?.id, 80);
+              const title = text(section?.title, 80);
+              const group = text(section?.group, 40);
+              return id && /^[a-z0-9-]+$/.test(id) && title && group ? [{ id, title, group }] : [];
+            }),
           }
         : null;
     default:
