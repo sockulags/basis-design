@@ -1,19 +1,20 @@
-import type { NavSection } from "../../shared/frame.ts";
+import type { NavSection, PageId } from "../../shared/frame.ts";
 import { buildPages } from "./navigation.tsx";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
   /** Section currently at the top of the preview, reported by the preview frame. */
   active: string | undefined;
-  /** Component sections reported by the preview. */
+  /** Sections of every page, reported by the preview. */
   sections: NavSection[];
+  page: PageId;
   onNavigate: (id: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
 
-export function Sidebar({ active, sections, onNavigate, collapsed, onToggleCollapsed }: SidebarProps) {
-  const pages = buildPages(sections);
+export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggleCollapsed }: SidebarProps) {
+  const pages = buildPages(sections).filter((item) => item.id === page);
   return (
     <nav className={styles.sidebar} data-collapsed={collapsed || undefined} aria-label="Preview sections">
       <div className={styles.scroll}>

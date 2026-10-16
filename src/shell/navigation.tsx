@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { NavSection } from "../../shared/frame.ts";
+import { PAGES, type NavSection, type PageId } from "../../shared/frame.ts";
 
 export interface NavItem {
   /** Section element id inside the preview. */
@@ -14,7 +14,7 @@ export interface NavGroup {
 }
 
 export interface NavPage {
-  id: string;
+  id: PageId;
   label: string;
   groups: NavGroup[];
 }
@@ -82,6 +82,42 @@ const SECTION_ICONS: Record<string, ReactNode> = {
   ),
 };
 
+Object.assign(SECTION_ICONS, {
+  navbar: icon(
+    <>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M1.75 6h12.5" />
+    </>,
+  ),
+  "sidebar-nav": icon(
+    <>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M6 2.75v10.5" />
+    </>,
+  ),
+  "page-header": icon(<path d="M2.5 3.5h6M2.5 7h11M2.5 10h11M2.5 13h7" />),
+  "data-table": icon(
+    <>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M1.75 6.25h12.5M1.75 9.75h12.5M6 6.25v7" />
+    </>,
+  ),
+  stats: icon(<path d="M2.5 13.5h11M4.5 11V8M8 11V4.5M11.5 11V6.5" />),
+  forms: icon(
+    <>
+      <rect x="2.25" y="2.75" width="11.5" height="3.5" rx="1" />
+      <rect x="2.25" y="8.75" width="11.5" height="3.5" rx="1" />
+    </>,
+  ),
+  "empty-states": icon(<path d="M2.5 9.5 4 3.5h8l1.5 6M2.5 9.5V13h11V9.5h-3.5a2 2 0 0 1-4 0Z" />),
+  "app-shell": icon(
+    <>
+      <rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1.5" />
+      <path d="M1.75 5.25h12.5M5.25 5.25v8.5" />
+    </>,
+  ),
+});
+
 const GENERIC_ICON = icon(
   <>
     <rect x="2.25" y="2.25" width="5" height="5" rx="1" />
@@ -92,22 +128,19 @@ const GENERIC_ICON = icon(
 );
 
 /**
- * Everything the sidebar can navigate to: the foundations plus every section
- * the preview found in the workspace's specimen files, grouped as they declare.
- * Further pages slot in here as more NavPage entries.
+ * Everything the sidebar can navigate to, per page: the foundations plus every
+ * section the preview found in the workspace's specimen files, grouped as they
+ * declare. Sections arrive in display order, so groups keep that order too.
  */
 export function buildPages(sections: NavSection[]): NavPage[] {
-  const groups = new Map<string, NavItem[]>();
-  for (const section of sections) {
-    const items = groups.get(section.group) ?? [];
-    items.push({ id: section.id, label: section.title, icon: SECTION_ICONS[section.id] ?? GENERIC_ICON });
-    groups.set(section.group, items);
-  }
-  return [
-    {
-      id: "system",
-      label: "Design system",
-      groups: [FOUNDATIONS, ...[...groups].map(([label, items]) => ({ label, items }))],
-    },
-  ];
+  return PAGES.map((page) => {
+    const groups = new Map<string, NavItem[]>();
+    for (const section of sections.filter((item) => item.page === page.id)) {
+      const items = groups.get(section.group) ?? [];
+      items.push({ id: section.id, label: section.title, icon: SECTION_ICONS[section.id] ?? GENERIC_ICON });
+      groups.set(section.group, items);
+    }
+    const found = [...groups].map(([label, items]) => ({ label, items }));
+    return { id: page.id, label: page.label, groups: page.id === "system" ? [FOUNDATIONS, ...found] : found };
+  });
 }

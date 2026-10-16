@@ -10,6 +10,10 @@ import { git, typecheck } from "./exec.ts";
 
 const DESIGN_FILE = "design-system.json";
 const COMPONENTS_DIR = "components";
+const PATTERNS_DIR = "patterns";
+/** Folders of agent-owned source: base components, and patterns composed from them. */
+const SOURCE_DIRS = [COMPONENTS_DIR, PATTERNS_DIR];
+const isSourcePath = (relative: string) => SOURCE_DIRS.some((dir) => relative.startsWith(`${dir}/`));
 const HISTORY_LIMIT = 300;
 const DIFF_LIMIT = 400_000;
 
@@ -26,6 +30,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 export class Workspace extends EventEmitter<{ design: [DesignState]; history: [HistoryEntry[]] }> {
   readonly file: string;
   readonly componentsDir: string;
+  readonly patternsDir: string;
   private readonly basisDir: string;
   private design: Design = DEFAULT_DESIGN;
   private errors: string[] | null = null;
@@ -44,6 +49,7 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     super();
     this.file = path.join(dir, DESIGN_FILE);
     this.componentsDir = path.join(dir, COMPONENTS_DIR);
+    this.patternsDir = path.join(dir, PATTERNS_DIR);
     this.basisDir = path.join(dir, ".basis");
   }
 
@@ -51,12 +57,19 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     await mkdir(this.basisDir, { recursive: true });
     await this.writeGeneratedFiles();
     if (!existsSync(this.file)) await writeFile(this.file, serialize(DEFAULT_DESIGN));
-    let note = "";
-    if (!existsSync(this.componentsDir)) await this.seedComponents();
+    // Seed new workspaces; bring older ones up to date with what Basis added since.
+    const notes: string[] = [];
+    if (!existsSync(this.componentsDir)) await this.seed(COMPONENTS_DIR);
     else if (!existsSync(path.join(this.componentsDir, "specimen.ts"))) {
-      await this.seedComponents((name) => name.includes("specimen"));
-      note = "Basis added gallery specimens";
+      await this.seed(COMPONENTS_DIR, (name) => name.includes("specimen"));
+      notes.push("gallery specimens");
     }
+    if (!existsSync(this.patternsDir)) {
+      const fresh = notes.length === 0 && !existsSync(path.join(this.dir, ".git"));
+      await this.seed(PATTERNS_DIR);
+      if (!fresh) notes.push("starter patterns");
+    }
+    const note = notes.length ? `Basis added ${notes.join(" and ")}` : "";
     if (!existsSync(path.join(this.dir, ".git"))) await git(this.dir, ["init", "-q", "-b", "main"]);
     await this.reload();
     await this.check();
@@ -85,11 +98,11 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
   }
 
-  /** Files the agent may change: the design file and anything under components/. */
+  /** Files the agent may change: the design file and anything under components/ or patterns/. */
   isEditable(target: string): boolean {
     if (!this.isInside(target)) return false;
     const relative = path.relative(this.dir, path.resolve(target)).split(path.sep).join("/");
-    return relative === DESIGN_FILE || relative.startsWith(`${COMPONENTS_DIR}/`);
+    return relative === DESIGN_FILE || isSourcePath(relative);
   }
 
   /** Marks the start of an agent turn; `label` is the prompt that started it. */
@@ -123,10 +136,10 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     try {
       const result = parseDesignText(await git(this.dir, ["show", `${historyId}:${DESIGN_FILE}`]));
       if (!result.ok) return null;
-      const files = (await git(this.dir, ["diff", "--name-only", historyId, "--", COMPONENTS_DIR]))
+      const files = (await git(this.dir, ["diff", "--name-only", historyId, "--", ...SOURCE_DIRS]))
         .split("\n")
         .filter(Boolean);
-      let codeDiff = files.length ? await git(this.dir, ["diff", "--no-color", "-R", historyId, "--", COMPONENTS_DIR]) : "";
+      let codeDiff = files.length ? await git(this.dir, ["diff", "--no-color", "-R", historyId, "--", ...SOURCE_DIRS]) : "";
       if (codeDiff.length > DIFF_LIMIT) codeDiff = `${codeDiff.slice(0, DIFF_LIMIT)}\n… diff truncated`;
       return { id: historyId, design: result.design, files, codeDiff };
     } catch {
@@ -141,7 +154,7 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
       clearTimeout(this.reloadTimer);
       this.reloadTimer = setTimeout(() => void this.reload(), 60);
     }
-    if (name !== DESIGN_FILE && !name.startsWith(`${COMPONENTS_DIR}/`)) return;
+    if (name !== DESIGN_FILE && !isSourcePath(name)) return;
     // Hand edits are checked and recorded once things settle; agent turns are handled by endTurn().
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(() => {
@@ -250,24 +263,24 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
         files: names
           .split("\n")
           .map((name) => name.trim())
-          .filter((name) => name.startsWith(`${COMPONENTS_DIR}/`)),
+          .filter(isSourcePath),
       });
     }
     return entries.reverse();
   }
 
   /**
-   * Copies starter files that are missing, normalising line endings (a Windows
-   * checkout of Basis may have CRLF). Workspaces from before specimens existed
-   * get just the specimen files.
+   * Copies starter files from template/<folder> that are missing, normalising
+   * line endings (a Windows checkout of Basis may have CRLF).
    */
-  private async seedComponents(only: (name: string) => boolean = () => true): Promise<void> {
-    const source = path.join(repoRoot, "template", COMPONENTS_DIR);
-    await mkdir(this.componentsDir, { recursive: true });
+  private async seed(folder: string, only: (name: string) => boolean = () => true): Promise<void> {
+    const source = path.join(repoRoot, "template", folder);
+    const destination = path.join(this.dir, folder);
+    await mkdir(destination, { recursive: true });
     for (const name of await readdir(source)) {
-      if (!only(name) || existsSync(path.join(this.componentsDir, name))) continue;
+      if (!only(name) || existsSync(path.join(destination, name))) continue;
       const text = await readFile(path.join(source, name), "utf8");
-      await writeFile(path.join(this.componentsDir, name), text.replaceAll("\r\n", "\n"));
+      await writeFile(path.join(destination, name), text.replaceAll("\r\n", "\n"));
     }
   }
 
@@ -295,7 +308,7 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
           "react-dom/*": [`${types("@types/react-dom")}/*`],
         },
       },
-      include: [`${COMPONENTS_DIR}/**/*`, ".basis/*.ts"],
+      include: [...SOURCE_DIRS.map((dir) => `${dir}/**/*`), ".basis/*.ts"],
     };
     await writeFile(path.join(this.dir, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`);
     await writeFile(path.join(this.basisDir, "contracts.ts"), await readFile(path.join(repoRoot, "shared", "contracts.ts"), "utf8"));

@@ -373,7 +373,7 @@ ${message}` : message;
 
   private async writeTextFile(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
     if (!this.workspace.isEditable(params.path)) {
-      throw new Error("Basis only lets the agent write design-system.json and files under components/ in its workspace.");
+      throw new Error("Basis only lets the agent write design-system.json and files under components/ or patterns/ in its workspace.");
     }
     await mkdir(path.dirname(params.path), { recursive: true });
     await writeFile(params.path, params.content);

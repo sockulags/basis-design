@@ -1,20 +1,37 @@
 import { createElement, type ComponentType } from "react";
 import type { Design } from "../../shared/design.ts";
+import type { PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
 import { Grid, Group, Matrix, Row, Section, Specimen as Labelled } from "./Gallery.tsx";
 
 /**
- * Every `*.specimen.tsx` in the workspace's components folder. "@components"
- * resolves to that folder in the preview Vite config; adding, editing or
- * deleting a specimen file hot-updates the gallery.
+ * Every `*.specimen.tsx` in the workspace's components and patterns folders.
+ * "@components" and "@patterns" resolve to those folders in the preview Vite
+ * config; adding, editing or deleting a specimen file hot-updates the gallery.
+ * The folder decides the page: components on the design system page,
+ * patterns on the patterns page.
  */
-const modules = import.meta.glob<{ default?: unknown }>("@components/*.specimen.tsx", { eager: true });
+type SpecimenModule = { default?: unknown };
+
+const sources: { folder: "components" | "patterns"; page: PageId; modules: Record<string, SpecimenModule> }[] = [
+  {
+    folder: "components",
+    page: "system",
+    modules: import.meta.glob<SpecimenModule>("@components/*.specimen.tsx", { eager: true }),
+  },
+  {
+    folder: "patterns",
+    page: "patterns",
+    modules: import.meta.glob<SpecimenModule>("@patterns/*.specimen.tsx", { eager: true }),
+  },
+];
 
 export interface LoadedSpecimen extends Specimen {
   id: string;
   group: string;
   order: number;
   file: string;
+  page: PageId;
 }
 
 export interface SpecimenProblem {
@@ -59,8 +76,10 @@ export function loadSpecimens(): { specimens: LoadedSpecimen[]; problems: Specim
   const specimens: LoadedSpecimen[] = [];
   const problems: SpecimenProblem[] = [];
   const seen = new Set<string>();
-  for (const [path, module] of Object.entries(modules)) {
-    const file = path.split("/").pop() ?? path;
+  const entries = sources.flatMap(({ folder, page, modules }) =>
+    Object.entries(modules).map(([path, module]) => ({ page, module, file: `${folder}/${path.split("/").pop() ?? path}` })),
+  );
+  for (const { page, module, file } of entries) {
     const exported = module.default;
     const list = Array.isArray(exported) ? exported : [exported];
     if (exported === undefined) {
@@ -86,13 +105,15 @@ export function loadSpecimens(): { specimens: LoadedSpecimen[]; problems: Specim
         id,
         title: raw.title,
         blocks: raw.blocks as SpecimenBlock[],
-        group: typeof raw.group === "string" && raw.group ? raw.group : "Components",
+        group: typeof raw.group === "string" && raw.group ? raw.group : page === "patterns" ? "Patterns" : "Components",
         order: typeof raw.order === "number" ? raw.order : 1000,
         file,
+        page,
       });
     }
   }
-  specimens.sort((a, b) => a.group.localeCompare(b.group) || a.order - b.order || a.title.localeCompare(b.title));
+  // Order decides placement; groups appear where their first specimen does.
+  specimens.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
   return { specimens, problems };
 }
 

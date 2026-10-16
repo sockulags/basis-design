@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
-import type { NavSection } from "../shared/frame.ts";
+import { isPageId, PAGES, type NavSection, type PageId } from "../shared/frame.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
@@ -41,6 +41,10 @@ export function App() {
   const [chatWidth, setChatWidth] = useState(initialChatWidth);
   const [chatHidden, setChatHidden] = useState(() => readPref("chat-hidden") === "true");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPref("sidebar-collapsed") === "true");
+  const [page, setPage] = useState<PageId>(() => {
+    const stored = readPref("page");
+    return isPageId(stored) ? stored : "system";
+  });
   const [draft, setDraft] = useState("");
   const [exporting, setExporting] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -63,6 +67,7 @@ export function App() {
   useEffect(() => writePref("chat-width", String(chatWidth)), [chatWidth]);
   useEffect(() => writePref("chat-hidden", String(chatHidden)), [chatHidden]);
   useEffect(() => writePref("sidebar-collapsed", String(sidebarCollapsed)), [sidebarCollapsed]);
+  useEffect(() => writePref("page", page), [page]);
 
   // Keep the stored width valid when the window shrinks.
   useEffect(() => {
@@ -188,6 +193,22 @@ export function App() {
             <span className={styles.brandMark} aria-hidden />
             Basis
           </span>
+          <nav className={styles.pages} aria-label="Pages">
+            {PAGES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={() => {
+                  setPage(item.id);
+                  setActiveSection(undefined);
+                  window.history.replaceState(null, "", " ");
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
           <div className={styles.actions}>
             <div className={styles.themeToggle} role="group" aria-label="Preview theme">
               {(["light", "dark"] as const).map((value) => (
@@ -221,6 +242,7 @@ export function App() {
           <Sidebar
             active={activeSection}
             sections={sections}
+            page={page}
             onNavigate={(id) => {
               frame.current?.scrollTo(id);
               window.history.replaceState(null, "", `#${id}`);
@@ -234,6 +256,7 @@ export function App() {
               port={state.previewPort}
               design={design}
               theme={theme}
+              page={page}
               picking={picking}
               inspecting={Boolean(inspectEntry)}
               onPicks={setAnnotations}

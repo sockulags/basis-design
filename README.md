@@ -34,14 +34,17 @@ workspace/
   design-system.json     tokens, validated against shared/design.ts
   components/            React + CSS Modules source of every component (seeded from template/)
     *.specimen.tsx       how the gallery shows each component: one section per specimen
+  patterns/              larger building blocks composed from components/ (seeded from template/)
   .git/                  history: one commit per agent turn, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
   tsconfig.json, .basis/ type-check setup and gallery contracts (generated)
 ```
 
-The agent may edit `design-system.json` and anything under `components/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
+The agent may edit `design-system.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
 
 Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar entry. A specimen lists blocks: a `matrix` of variants × states, a `grid` of labelled examples, or free `row` and `block` content for live demos (the format is in `components/specimen.ts`). The agent writes specimens alongside components, so a new component or variant shows up in the gallery as soon as it exists. Basis owns only the foundation sections: colour, type, shape and motion.
+
+`patterns/` holds composed components such as Navbar, SidebarNav, PageHeader, DataTable with Pagination, StatCard, FormSection, EmptyState and AppShell. They import only from `../components`, have their own specimens, and appear on the gallery's **Patterns** page, which you switch to in the top bar. The agent edits and extends them like everything else, so a token or base-component change flows through to every pattern.
 
 `shared/contracts.ts` (copied to `.basis/contracts.ts`) is the baseline API every design system keeps. A component can change completely and gain props or variants, but it must keep its export and accept the contract's props.
 

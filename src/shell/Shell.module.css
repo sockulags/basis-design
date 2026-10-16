@@ -139,6 +139,44 @@
   background: var(--app-signal);
 }
 
+.pages {
+  display: flex;
+  align-self: stretch;
+  gap: 2px;
+  margin-left: 12px;
+}
+
+.pages button {
+  position: relative;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--app-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.pages button:hover {
+  color: var(--app-text);
+}
+
+.pages button[aria-current="page"] {
+  color: var(--app-text);
+}
+
+.pages button[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--app-signal);
+}
+
 .actions {
   display: flex;
   margin-left: auto;

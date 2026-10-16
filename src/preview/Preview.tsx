@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { Design } from "../../shared/design.ts";
-import type { NavSection } from "../../shared/frame.ts";
+import type { NavSection, PageId } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import { clearProblems, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
@@ -10,8 +10,9 @@ import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
 interface PreviewProps {
   design: Design;
   theme: "light" | "dark";
+  page: PageId;
   onAsk: (prefix: string) => void;
-  /** Called with the component sections whenever the set of specimens changes. */
+  /** Called with the sections of every page whenever the set of specimens changes. */
   onSections: (sections: NavSection[]) => void;
 }
 
@@ -20,15 +21,16 @@ interface PreviewProps {
  * section comes from a *.specimen.tsx file in the workspace. Everything inside
  * .ds-root is styled only by the generated tokens.
  */
-export function Preview({ design, theme, onAsk, onSections }: PreviewProps) {
+export function Preview({ design, theme, page, onAsk, onSections }: PreviewProps) {
   const css = useMemo(() => previewCss(design, ".ds-root"), [design]);
   // Cheap, and re-evaluated after every hot update of a specimen file.
   const { specimens, problems } = loadSpecimens();
-  const sectionsKey = specimens.map((specimen) => `${specimen.id}|${specimen.title}|${specimen.group}`).join(",");
+  const sectionsKey = specimens.map((specimen) => `${specimen.id}|${specimen.title}|${specimen.group}|${specimen.page}`).join(",");
+  const onPage = specimens.filter((specimen) => specimen.page === page);
   const problemsKey = problems.map((problem) => `${problem.file}: ${problem.message}`).join("\n");
 
   useEffect(() => {
-    onSections(specimens.map(({ id, title, group }) => ({ id, title, group })));
+    onSections(specimens.map(({ id, title, group, page: specimenPage }) => ({ id, title, group, page: specimenPage })));
     // sectionsKey captures everything the list depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectionsKey, onSections]);
@@ -48,16 +50,29 @@ export function Preview({ design, theme, onAsk, onSections }: PreviewProps) {
       ))}
       <div className={`ds-root ${styles.root}`} data-theme={theme}>
         <div className={styles.inner}>
-          <header className={styles.hero}>
-            <p className={styles.kicker}>Design system</p>
-            <h1 className={styles.title}>{design.name}</h1>
-            {design.description && <p className={styles.description}>{design.description}</p>}
-          </header>
-          <Colors {...props} />
-          <Typography {...props} />
-          <Shape {...props} />
-          <Motion {...props} />
-          {specimens.map((specimen) => (
+          {page === "system" ? (
+            <>
+              <header className={styles.hero}>
+                <p className={styles.kicker}>Design system</p>
+                <h1 className={styles.title}>{design.name}</h1>
+                {design.description && <p className={styles.description}>{design.description}</p>}
+              </header>
+              <Colors {...props} />
+              <Typography {...props} />
+              <Shape {...props} />
+              <Motion {...props} />
+            </>
+          ) : (
+            <header className={styles.hero}>
+              <p className={styles.kicker}>{design.name}</p>
+              <h1 className={styles.title}>Patterns</h1>
+              <p className={styles.description}>
+                Larger building blocks composed from the base components: navigation, data, forms and whole layouts.
+                They change with every token and every component edit.
+              </p>
+            </header>
+          )}
+          {onPage.map((specimen) => (
             <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} />
           ))}
           {problems.map((problem) => (

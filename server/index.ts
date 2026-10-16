@@ -60,7 +60,7 @@ chromeServer.on("request", (req, res) => {
 });
 
 async function starterKit() {
-  return buildStarterKit(workspace.state.design, workspace.componentsDir);
+  return buildStarterKit(workspace.state.design, workspace.dir);
 }
 
 async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
@@ -89,8 +89,9 @@ const previewVite = await createVite({
   resolve: {
     alias: {
       "@ds": path.join(workspaceDir, "components", "index.ts"),
-      // The folder itself, for discovering *.specimen.tsx files.
+      // The folders themselves, for discovering *.specimen.tsx files.
       "@components": path.join(workspaceDir, "components"),
+      "@patterns": path.join(workspaceDir, "patterns"),
     },
     // Workspace files may live outside this repo; React must still resolve to one copy.
     dedupe: ["react", "react-dom"],
@@ -103,7 +104,7 @@ const previewVite = await createVite({
   },
 });
 // New specimen files must be noticed even when the workspace lives outside this repo.
-previewVite.watcher.add(path.join(workspaceDir, "components"));
+previewVite.watcher.add([path.join(workspaceDir, "components"), path.join(workspaceDir, "patterns")]);
 const previewGuard = guard((url) => url === "/" || url === "/index.html");
 previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
 

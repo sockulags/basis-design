@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { Design } from "../../shared/design.ts";
-import { parseFromPreview, type NavSection, type ToPreview } from "../../shared/frame.ts";
+import { parseFromPreview, type NavSection, type PageId, type ToPreview } from "../../shared/frame.ts";
 import styles from "./Shell.module.css";
 
 export interface PreviewFrameHandle {
@@ -14,6 +14,7 @@ interface PreviewFrameProps {
   port: number;
   design: Design;
   theme: "light" | "dark";
+  page: PageId;
   picking: boolean;
   inspecting: boolean;
   onPicks: (annotations: Annotation[]) => void;
@@ -30,7 +31,7 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  { port, design, theme, picking, inspecting, onPicks, onPickingEnd, onAsk, onActiveSection, onErrors, onSections },
+  { port, design, theme, page, picking, inspecting, onPicks, onPickingEnd, onAsk, onActiveSection, onErrors, onSections },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -83,8 +84,8 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
   }, [previewOrigin]);
 
   useEffect(() => {
-    if (generation > 0) post({ type: "render", design, theme });
-  }, [generation, design, theme]);
+    if (generation > 0) post({ type: "render", design, theme, page });
+  }, [generation, design, theme, page]);
 
   useEffect(() => {
     if (generation > 0) post({ type: "picking", on: picking });

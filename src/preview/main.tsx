@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
-import type { FromPreview, NavSection, ToPreview } from "../../shared/frame.ts";
+import type { FromPreview, NavSection, PageId, ToPreview } from "../../shared/frame.ts";
 import type { Design } from "../../shared/design.ts";
 import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
@@ -19,6 +19,12 @@ const trustedParent = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(parentOrigi
 function post(message: FromPreview): void {
   if (trustedParent) window.parent.postMessage(message, parentOrigin);
 }
+
+// The gallery is a showcase: links must never navigate, whether to "#" (which jumps to the top) or away
+// from the preview. Components' own click handlers still run first.
+window.addEventListener("click", (event) => {
+  if (event.target instanceof Element && event.target.closest("a[href]")) event.preventDefault();
+});
 
 window.addEventListener("error", (event) => setProblem("Uncaught error", describe(event.error ?? event.message)));
 window.addEventListener("unhandledrejection", (event) => setProblem("Unhandled rejection", describe(event.reason)));
@@ -38,12 +44,13 @@ if (import.meta.hot) {
 interface View {
   design: Design;
   theme: "light" | "dark";
+  page: PageId;
 }
 
-/** Reports the section nearest the top of the viewport. */
-function useScrollSpy(enabled: boolean): void {
+/** Reports the section nearest the top of the viewport; `page` restarts it when the page changes. */
+function useScrollSpy(page: PageId | null): void {
   useEffect(() => {
-    if (!enabled) return;
+    if (page === null) return;
     let raf = 0;
     let last = "";
     const measure = () => {
@@ -71,7 +78,7 @@ function useScrollSpy(enabled: boolean): void {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [enabled]);
+  }, [page]);
 }
 
 type PreviewType = typeof PreviewComponent;
@@ -114,7 +121,11 @@ function PreviewApp() {
       const message = event.data;
       switch (message?.type) {
         case "render":
-          setView({ design: message.design, theme: message.theme });
+          setView((current) => {
+            // A new page starts at the top.
+            if (current && current.page !== message.page) requestAnimationFrame(() => window.scrollTo(0, 0));
+            return { design: message.design, theme: message.theme, page: message.page };
+          });
           return;
         case "scroll-to": {
           const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -151,7 +162,7 @@ function PreviewApp() {
     if (ds) document.body.style.background = getComputedStyle(ds).backgroundColor;
   }, [view]);
 
-  useScrollSpy(view !== null);
+  useScrollSpy(view && Preview ? view.page : null);
 
   const toggle = useCallback((annotation: Annotation, element: HTMLElement) => {
     setPicks((current) =>
@@ -173,6 +184,7 @@ function PreviewApp() {
         <Preview
           design={view.design}
           theme={view.theme}
+          page={view.page}
           onAsk={(prefix) => post({ type: "ask", prefix })}
           onSections={postSections}
         />

@@ -8,15 +8,27 @@ import type { Design } from "./design.ts";
  * trigger a prompt, a permission answer or any other privileged action.
  */
 
-/** A component section the preview found in the workspace's specimen files. */
+/** Pages of the gallery: the design system itself, and patterns composed from it. */
+export const PAGES = [
+  { id: "system", label: "Design system" },
+  { id: "patterns", label: "Patterns" },
+] as const;
+export type PageId = (typeof PAGES)[number]["id"];
+
+export function isPageId(value: unknown): value is PageId {
+  return PAGES.some((page) => page.id === value);
+}
+
+/** A section the preview found in the workspace's specimen files. */
 export interface NavSection {
   id: string;
   title: string;
   group: string;
+  page: PageId;
 }
 
 export type ToPreview =
-  | { type: "render"; design: Design; theme: "light" | "dark" }
+  | { type: "render"; design: Design; theme: "light" | "dark"; page: PageId }
   | { type: "scroll-to"; id: string }
   | { type: "picking"; on: boolean }
   | { type: "picks-remove"; index: number }
@@ -107,7 +119,8 @@ export function parseFromPreview(data: unknown): FromPreview | null {
               const id = text(section?.id, 80);
               const title = text(section?.title, 80);
               const group = text(section?.group, 40);
-              return id && /^[a-z0-9-]+$/.test(id) && title && group ? [{ id, title, group }] : [];
+              const page = section?.page;
+              return id && /^[a-z0-9-]+$/.test(id) && title && group && isPageId(page) ? [{ id, title, group, page }] : [];
             }),
           }
         : null;
