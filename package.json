@@ -4,8 +4,7 @@
   "description": "Prompt a complete design system into existence with your own coding agent over ACP.",
   "scripts": {
     "dev": "tsx server/index.ts",
-    "build": "vite build",
-    "start": "tsx server/index.ts --prod",
+    "start": "tsx server/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "author": "Lucas Skog",

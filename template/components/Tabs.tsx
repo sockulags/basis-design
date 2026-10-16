@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 import styles from "./Tabs.module.css";
 import type { ForcedState } from "./util.ts";
 
@@ -29,7 +29,7 @@ interface IndicatorBox {
  * (instead of one per tab) is what lets the underline, pill or segment slide
  * from the previous tab to the new one.
  */
-function useIndicator(list: React.RefObject<HTMLDivElement | null>, value: string) {
+function useIndicator(list: RefObject<HTMLDivElement | null>, value: string) {
   const [box, setBox] = useState<IndicatorBox | null>(null);
   const [animate, setAnimate] = useState(false);
 

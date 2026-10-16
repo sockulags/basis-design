@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Design } from "../shared/design.ts";
 import type {
   AgentState,
   ChatItem,
@@ -7,6 +6,7 @@ import type {
   DesignState,
   HistoryEntry,
   ServerMessage,
+  Snapshot,
 } from "../shared/protocol.ts";
 
 export interface BridgeState {
@@ -15,11 +15,21 @@ export interface BridgeState {
   history: HistoryEntry[];
   agent: AgentState | null;
   chat: ChatItem[];
-  /** History snapshots fetched for inspection, by entry id. Snapshots never change, so they are cached. */
-  snapshots: Record<string, Design>;
+  /** History snapshots fetched for inspection, by entry id. */
+  snapshots: Record<string, Snapshot>;
+  /** Port of the sandboxed preview origin, from the server. */
+  previewPort: number | null;
 }
 
-const initial: BridgeState = { connected: false, design: null, history: [], agent: null, chat: [], snapshots: {} };
+const initial: BridgeState = {
+  connected: false,
+  design: null,
+  history: [],
+  agent: null,
+  chat: [],
+  snapshots: {},
+  previewPort: null,
+};
 
 type Action = ServerMessage | { type: "connected"; connected: boolean };
 
@@ -31,6 +41,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return {
         ...state,
         connected: true,
+        previewPort: action.previewPort,
         design: action.design,
         history: action.history,
         agent: action.agent,
@@ -52,7 +63,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, chat };
     }
     case "snapshot":
-      return { ...state, snapshots: { ...state.snapshots, [action.id]: action.design } };
+      return { ...state, snapshots: { ...state.snapshots, [action.snapshot.id]: action.snapshot } };
   }
 }
 

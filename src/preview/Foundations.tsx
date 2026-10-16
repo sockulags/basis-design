@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ColorRole, Design } from "../../shared/design.ts";
 import { kebab } from "../../shared/tokens.ts";
-import { Button } from "../ds/Button.tsx";
+import { Button } from "./ds.ts";
 import { contrast, useResolvedColors, type ResolvedTheme } from "./color.ts";
 import styles from "./Foundations.module.css";
 import { Group, Section, Token } from "./Gallery.tsx";

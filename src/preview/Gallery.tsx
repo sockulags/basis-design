@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import styles from "./Gallery.module.css";
+import { SectionBoundary } from "./SectionBoundary.tsx";
 
 interface SectionProps {
   id: string;
@@ -21,7 +22,9 @@ export function Section({ id, title, description, onAsk, children }: SectionProp
           Refine with agent
         </button>
       </header>
-      {children}
+      <SectionBoundary name={title} onAsk={onAsk}>
+        {children}
+      </SectionBoundary>
     </section>
   );
 }

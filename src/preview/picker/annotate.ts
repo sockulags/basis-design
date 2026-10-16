@@ -1,5 +1,5 @@
-import type { Annotation } from "../../shared/annotations.ts";
-import type { Design } from "../../shared/design.ts";
+import type { Annotation } from "../../../shared/annotations.ts";
+import type { Design } from "../../../shared/design.ts";
 
 /** Which component token group drives each picked element. */
 const COMPONENT_GROUP: Record<string, keyof Design["components"]> = {

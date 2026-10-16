@@ -29,7 +29,7 @@
 .hint {
   position: fixed;
   bottom: 16px;
-  left: calc(50% + var(--chat-width, 0px) / 2);
+  left: 50%;
   z-index: 40;
   display: flex;
   align-items: center;
@@ -41,10 +41,6 @@
   color: var(--app-text);
   font-size: 12px;
   translate: -50% 0;
-}
-
-[data-chat-hidden] .hint {
-  left: 50%;
 }
 
 .hint button {

@@ -2,12 +2,11 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import type { Annotation } from "../shared/annotations.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
-import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
-import { Preview } from "./preview/Preview.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
+import { PreviewFrame, type PreviewFrameHandle } from "./shell/PreviewFrame.tsx";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import styles from "./shell/Shell.module.css";
 
@@ -43,18 +42,20 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPref("sidebar-collapsed") === "true");
   const [draft, setDraft] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [picks, setPicks] = useState<Pick[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [picking, setPicking] = useState(false);
   const [inspectId, setInspectId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string>();
+  const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const composer = useRef<HTMLTextAreaElement>(null);
-  const canvas = useRef<HTMLDivElement>(null);
+  const frame = useRef<PreviewFrameHandle>(null);
   const live = state.design?.design;
 
   const history = state.history;
   const inspectIndex = inspectId ? history.findIndex((entry) => entry.id === inspectId) : -1;
   const inspectEntry = inspectIndex >= 0 ? history[inspectIndex] : undefined;
   const snapshot = inspectId ? state.snapshots[inspectId] : undefined;
-  const design = inspectEntry ? (snapshot ?? live) : live;
+  const design = inspectEntry ? (snapshot?.design ?? live) : live;
 
   useEffect(() => writePref("theme", theme), [theme]);
   useEffect(() => writePref("chat-width", String(chatWidth)), [chatWidth]);
@@ -113,13 +114,24 @@ export function App() {
     [focusComposer],
   );
 
-  const togglePick = useCallback((annotation: Annotation, element: HTMLElement) => {
-    setPicks((current) =>
-      current.some((pick) => pick.element === element)
-        ? current.filter((pick) => pick.element !== element)
-        : [...current, { annotation, element }],
-    );
-  }, []);
+  // The server folds what the preview fails to render into the agent's fix loop.
+  useEffect(() => {
+    if (state.connected) send({ type: "preview-errors", errors: previewErrors });
+  }, [previewErrors, state.connected, send]);
+
+  // Esc ends pick mode even when focus is outside the preview.
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPicking(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picking]);
+
+  const problems = [
+    ...(state.design?.errors ?? []).map((error) => `design-system.json: ${error}`),
+    ...(state.design?.typeErrors ?? []),
+    ...previewErrors,
+  ];
 
   const finishPicking = useCallback(() => {
     setPicking(false);
@@ -141,14 +153,14 @@ export function App() {
         agent={state.agent}
         chat={state.chat}
         connected={state.connected}
-        designErrors={state.design?.errors ?? null}
+        problems={problems}
         draft={draft}
         onDraft={setDraft}
         send={send}
         composerRef={composer}
-        annotations={picks.map((pick) => pick.annotation)}
-        onRemoveAnnotation={(index) => setPicks((current) => current.filter((_, i) => i !== index))}
-        onClearAnnotations={() => setPicks([])}
+        annotations={annotations}
+        onRemoveAnnotation={(index) => frame.current?.removePick(index)}
+        onClearAnnotations={() => frame.current?.clearPicks()}
         picking={picking}
         onTogglePick={() => (picking ? finishPicking() : setPicking(true))}
       />
@@ -205,23 +217,32 @@ export function App() {
         )}
         <div className={styles.stage}>
           <Sidebar
-            container={canvas}
-            ready={Boolean(design)}
+            active={activeSection}
+            onNavigate={(id) => {
+              frame.current?.scrollTo(id);
+              window.history.replaceState(null, "", `#${id}`);
+            }}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
           />
-          <div ref={canvas} className={styles.canvas} data-inspecting={inspectEntry ? true : undefined}>
-            {design ? (
-              <Preview design={design} theme={theme} onAsk={ask} />
-            ) : (
-              <p className={styles.loading}>Connecting to the Basis server…</p>
-            )}
-          </div>
+          {design && state.previewPort ? (
+            <PreviewFrame
+              ref={frame}
+              port={state.previewPort}
+              design={design}
+              theme={theme}
+              picking={picking}
+              inspecting={Boolean(inspectEntry)}
+              onPicks={setAnnotations}
+              onPickingEnd={finishPicking}
+              onAsk={ask}
+              onActiveSection={setActiveSection}
+              onErrors={setPreviewErrors}
+            />
+          ) : (
+            <p className={styles.loading}>Connecting to the Basis server…</p>
+          )}
         </div>
-        {picks.length > 0 && <PickMarkers container={canvas} picks={picks} />}
-        {picking && design && (
-          <PickLayer container={canvas} design={design} picks={picks} onToggle={togglePick} onDone={finishPicking} />
-        )}
       </main>
       {exporting && live && state.design && (
         <ExportDialog design={live} workspace={state.design.workspace} onClose={() => setExporting(false)} />

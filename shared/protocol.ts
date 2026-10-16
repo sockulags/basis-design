@@ -77,18 +77,34 @@ export interface HistoryEntry {
   restoredFrom?: string;
   /** Token paths that differ from the previous entry. */
   changed: string[];
+  /** Component files (relative to the workspace) changed in this entry. */
+  files: string[];
+}
+
+/** A past version fetched for inspection. */
+export interface Snapshot {
+  id: string;
+  design: Design;
+  /** Component files that differ between that version and now. */
+  files: string[];
+  /** Unified diff from now to that version, limited to components/. */
+  codeDiff: string;
 }
 
 export interface DesignState {
   design: Design;
   /** Validation errors for the file on disk; null when it is valid. The preview keeps the last valid design. */
   errors: string[] | null;
+  /** Type errors in components/ (including broken contracts); null when clean. */
+  typeErrors: string[] | null;
   workspace: string;
 }
 
 export type ServerMessage =
   | {
       type: "hello";
+      /** Port of the sandboxed preview origin. */
+      previewPort: number;
       design: DesignState;
       history: HistoryEntry[];
       agent: AgentState;
@@ -99,7 +115,7 @@ export type ServerMessage =
   | { type: "agent"; agent: AgentState }
   | { type: "chat-upsert"; item: ChatItem }
   | { type: "chat-reset" }
-  | { type: "snapshot"; id: string; design: Design };
+  | { type: "snapshot"; snapshot: Snapshot };
 
 export type ClientMessage =
   | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[] }
@@ -108,4 +124,6 @@ export type ClientMessage =
   | { type: "new-session" }
   | { type: "switch-agent"; agent: AgentId }
   | { type: "revert"; historyId: string }
-  | { type: "snapshot-get"; id: string };
+  | { type: "snapshot-get"; id: string }
+  /** Render errors the preview currently shows (empty when it renders cleanly). */
+  | { type: "preview-errors"; errors: string[] };

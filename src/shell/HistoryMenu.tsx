@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientMessage, HistoryEntry } from "../../shared/protocol.ts";
-import { SOURCE_LABEL, undoStep, when } from "./history.ts";
+import { describeChanges, SOURCE_LABEL, undoStep, when } from "./history.ts";
 import styles from "./Shell.module.css";
 
 interface HistoryMenuProps {
@@ -40,7 +40,7 @@ export function HistoryMenu({ history, inspecting, onInspect, send }: HistoryMen
         disabled={!undo}
         title={
           undo
-            ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${undo.undoes.changed.length} tokens)`
+            ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${describeChanges(undo.undoes).toLowerCase()})`
             : "Nothing to undo"
         }
       >
@@ -72,7 +72,7 @@ export function HistoryMenu({ history, inspecting, onInspect, send }: HistoryMen
                 </span>
                 {entry.label && <span className={styles.menuLabel}>{entry.label}</span>}
                 <span className={styles.muted}>
-                  {when(entry.at)} · {entry.changed.length} {entry.changed.length === 1 ? "token" : "tokens"} changed
+                  {when(entry.at)} · {describeChanges(entry)}
                 </span>
               </button>
             );

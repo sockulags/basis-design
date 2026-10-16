@@ -16,7 +16,8 @@ interface ChatPanelProps {
   agent: AgentState | null;
   chat: ChatItem[];
   connected: boolean;
-  designErrors: string[] | null;
+  /** Validation, type and render problems in the workspace; empty when everything is fine. */
+  problems: string[];
   draft: string;
   onDraft: (text: string) => void;
   send: (message: ClientMessage) => void;
@@ -40,7 +41,7 @@ export function ChatPanel({
   agent,
   chat,
   connected,
-  designErrors,
+  problems,
   draft,
   onDraft,
   send,
@@ -135,15 +136,20 @@ export function ChatPanel({
         {busy && <div className={styles.working}>Working on it…</div>}
       </div>
 
-      {designErrors && (
-        <div className={styles.designErrors}>
-          <strong>design-system.json has errors.</strong> The preview shows the last valid version.
+      {problems.length > 0 && (
+        <details className={styles.designErrors}>
+          <summary>
+            <strong>
+              {problems.length} {problems.length === 1 ? "problem" : "problems"} in the workspace.
+            </strong>{" "}
+            {busy ? "The agent is working on it." : "The agent is asked to fix these after each turn."}
+          </summary>
           <ul>
-            {designErrors.slice(0, 4).map((error) => (
-              <li key={error}>{error}</li>
+            {problems.slice(0, 8).map((problem) => (
+              <li key={problem}>{problem}</li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
 
       <Composer

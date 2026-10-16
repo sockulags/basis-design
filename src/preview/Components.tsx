@@ -1,12 +1,27 @@
 import { useState } from "react";
+import type { ButtonVariant, ForcedState, Tone } from "../../shared/contracts.ts";
 import type { Design } from "../../shared/design.ts";
-import { Button, type ButtonVariant } from "../ds/Button.tsx";
-import { Checkbox, Radio, Switch } from "../ds/Controls.tsx";
-import { Alert, Avatar, Badge, Card, Progress, Skeleton, Spinner, type Tone } from "../ds/Display.tsx";
-import { Field, Select, Textarea, TextInput } from "../ds/Field.tsx";
-import { DialogStage, Toast, Tooltip } from "../ds/Overlay.tsx";
-import { Tabs } from "../ds/Tabs.tsx";
-import type { ForcedState } from "../ds/util.ts";
+import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  DialogStage,
+  Field,
+  Progress,
+  Radio,
+  Select,
+  Skeleton,
+  Spinner,
+  Switch,
+  Tabs,
+  Textarea,
+  TextInput,
+  Toast,
+  Tooltip,
+} from "./ds.ts";
 import styles from "./Components.module.css";
 import { Grid, Group, Matrix, Row, Section, Specimen, type Axis } from "./Gallery.tsx";
 

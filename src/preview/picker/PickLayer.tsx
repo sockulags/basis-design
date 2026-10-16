@@ -1,6 +1,6 @@
 import { useEffect, useState, type RefObject } from "react";
-import { annotationLabel, type Annotation } from "../../shared/annotations.ts";
-import type { Design } from "../../shared/design.ts";
+import { annotationLabel, type Annotation } from "../../../shared/annotations.ts";
+import type { Design } from "../../../shared/design.ts";
 import { annotate, pickable } from "./annotate.ts";
 import styles from "./PickLayer.module.css";
 
@@ -68,7 +68,7 @@ export function PickLayer({ container, design, picks, onToggle, onDone }: PickLa
     root.addEventListener("pointerdown", swallow, true);
     root.addEventListener("mousedown", swallow, true);
     root.addEventListener("click", onClick, true);
-    root.addEventListener("scroll", onScroll);
+    window.addEventListener("scroll", onScroll);
     window.addEventListener("keydown", onKey);
     root.dataset.picking = "true";
     return () => {
@@ -76,7 +76,7 @@ export function PickLayer({ container, design, picks, onToggle, onDone }: PickLa
       root.removeEventListener("pointerdown", swallow, true);
       root.removeEventListener("mousedown", swallow, true);
       root.removeEventListener("click", onClick, true);
-      root.removeEventListener("scroll", onScroll);
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("keydown", onKey);
       delete root.dataset.picking;
     };
@@ -105,32 +105,30 @@ export function PickLayer({ container, design, picks, onToggle, onDone }: PickLa
 }
 
 /** Numbered markers on every attached element, kept until the prompt is sent. */
-export function PickMarkers({ container, picks }: { container: RefObject<HTMLElement | null>; picks: Pick[] }) {
+export function PickMarkers({ picks }: { picks: Pick[] }) {
   const [, setFrame] = useState(0);
 
   useEffect(() => {
-    const root = container.current;
     let raf = 0;
     const refresh = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => setFrame((frame) => frame + 1));
     };
-    root?.addEventListener("scroll", refresh);
+    window.addEventListener("scroll", refresh);
     window.addEventListener("resize", refresh);
     return () => {
       cancelAnimationFrame(raf);
-      root?.removeEventListener("scroll", refresh);
+      window.removeEventListener("scroll", refresh);
       window.removeEventListener("resize", refresh);
     };
-  }, [container]);
+  }, []);
 
-  const bounds = container.current?.getBoundingClientRect();
   return (
     <>
       {picks.map((pick, index) => {
-        if (!pick.element.isConnected || !bounds) return null;
+        if (!pick.element.isConnected) return null;
         const rect = pick.element.getBoundingClientRect();
-        if (rect.bottom < bounds.top || rect.top > bounds.bottom) return null;
+        if (rect.bottom < 0 || rect.top > window.innerHeight) return null;
         return (
           <div
             key={index}

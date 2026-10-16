@@ -40,3 +40,11 @@ export function undoStep(history: HistoryEntry[]): { undoes: HistoryEntry; targe
   return target ? { undoes, target } : null;
 }
 
+
+/** "3 tokens · 2 files changed", or "No changes". */
+export function describeChanges(entry: HistoryEntry): string {
+  const parts: string[] = [];
+  if (entry.changed.length) parts.push(`${entry.changed.length} ${entry.changed.length === 1 ? "token" : "tokens"}`);
+  if (entry.files.length) parts.push(`${entry.files.length} ${entry.files.length === 1 ? "file" : "files"}`);
+  return parts.length ? `${parts.join(" · ")} changed` : "No changes";
+}

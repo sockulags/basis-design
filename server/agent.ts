@@ -66,6 +66,7 @@ function agentEnv(): NodeJS.ProcessEnv {
 /** Tool kinds that are auto-approved when every touched path is inside the workspace. */
 const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
 const MAX_AUTO_FIXES = 2;
+const PREVIEW_SETTLE_MS = 1500;
 
 type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-reset": [] };
 
@@ -86,6 +87,7 @@ export class AgentHost extends EventEmitter<Events> {
   private permissions = new Map<string, (optionId: string | null) => void>();
   private stderrTail: string[] = [];
   private autoFixes = 0;
+  private previewErrors: string[] = [];
   private seq = 0;
 
   constructor(
@@ -205,7 +207,7 @@ export class AgentHost extends EventEmitter<Events> {
       annotations: annotations.length ? annotations.map(annotationLabel) : undefined,
     });
     this.setState({ ...this.state, status: "busy", detail: undefined });
-    this.workspace.beginTurn(text || annotations.map(annotationLabel).join(", ") || "Image prompt");
+    await this.workspace.beginTurn(text || annotations.map(annotationLabel).join(", ") || "Image prompt");
     const message = text || "See the attached context.";
     const body = this.needsPreamble ? `${FIRST_PROMPT_PREAMBLE}
 
@@ -227,19 +229,35 @@ ${message}` : message;
     } finally {
       this.openText = undefined;
       this.cancelPermissions();
-      if (this.connection === connection) this.setState({ ...this.state, status: "ready" });
     }
-    // Pick up the final file state, record one undo step, and make sure the turn left a valid file behind.
+    // Stay busy while the turn is checked and recorded as one undo step.
     await this.workspace.endTurn();
-    const errors = this.workspace.state.errors;
-    if (errors && this.connection === connection && this.autoFixes < MAX_AUTO_FIXES) {
+    const problems = await this.collectProblems();
+    if (this.connection === connection) this.setState({ ...this.state, status: "ready" });
+    if (problems && this.connection === connection && this.autoFixes < MAX_AUTO_FIXES) {
       this.autoFixes += 1;
-      await this.prompt(
-        `design-system.json no longer passes validation, so the preview is still showing the previous version. Fix these errors:\n${errors.map((e) => `- ${e}`).join("\n")}`,
-        {},
-        true,
-      );
+      await this.prompt(problems, {}, true);
     }
+  }
+
+  /** The preview reports render errors it currently shows; they feed the auto-fix loop. */
+  setPreviewErrors(errors: unknown[]): void {
+    this.previewErrors = errors
+      .filter((error): error is string => typeof error === "string")
+      .slice(0, 10)
+      .map((error) => error.slice(0, 600));
+  }
+
+  /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
+  private async collectProblems(): Promise<string | null> {
+    const { errors, typeErrors } = this.workspace.state;
+    // Give the preview a moment to hot-reload the new code and report what failed to render.
+    if (!errors && !typeErrors) await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
+    const sections: string[] = [];
+    if (errors) sections.push(`design-system.json does not validate, so the preview still shows the previous version:\n${list(errors)}`);
+    if (typeErrors) sections.push(`components/ does not type-check against the gallery contracts (.basis/contracts.ts):\n${list(typeErrors)}`);
+    if (this.previewErrors.length) sections.push(`The preview fails to render:\n${list(this.previewErrors)}`);
+    return sections.length ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}` : null;
   }
 
   async cancel(): Promise<void> {
@@ -326,8 +344,8 @@ ${message}` : message;
       name: option.name,
       kind: option.kind,
     }));
-    const autoAllow =
-      call.kind != null && SAFE_KINDS.has(call.kind) && paths.length > 0 && paths.every((p) => this.workspace.isInside(p));
+    const allowed = (p: string) => (call.kind === "edit" ? this.workspace.isEditable(p) : this.workspace.isInside(p));
+    const autoAllow = call.kind != null && SAFE_KINDS.has(call.kind) && paths.length > 0 && paths.every(allowed);
     const allowOnce = options.find((option) => option.kind === "allow_once");
     if (autoAllow && allowOnce) return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
 
@@ -354,8 +372,8 @@ ${message}` : message;
   }
 
   private async writeTextFile(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
-    if (!this.workspace.isInside(params.path)) {
-      throw new Error(`Basis only lets the agent write inside its workspace (${this.workspace.dir}).`);
+    if (!this.workspace.isEditable(params.path)) {
+      throw new Error("Basis only lets the agent write design-system.json and files under components/ in its workspace.");
     }
     await mkdir(path.dirname(params.path), { recursive: true });
     await writeFile(params.path, params.content);
@@ -423,6 +441,10 @@ function acceptedImages(images: PromptImage[] | undefined): PromptImage[] {
         image.data.length <= MAX_IMAGE_BASE64,
     )
     .slice(0, MAX_IMAGES);
+}
+
+function list(items: string[]): string {
+  return items.map((item) => `- ${item}`).join("\n");
 }
 
 function describeRawInput(raw: unknown): string | undefined {

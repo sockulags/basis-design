@@ -1,65 +1,74 @@
 import { EventEmitter } from "node:events";
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.ts";
 import { diffDesigns } from "../shared/diff.ts";
-import type { DesignState, HistoryEntry } from "../shared/protocol.ts";
+import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts";
 import { AGENT_BRIEF, CLAUDE_MD } from "./brief.ts";
+import { git, typecheck } from "./exec.ts";
 
 const DESIGN_FILE = "design-system.json";
-const HISTORY_LIMIT = 200;
+const COMPONENTS_DIR = "components";
+const HISTORY_LIMIT = 300;
+const DIFF_LIMIT = 400_000;
 
 type Source = HistoryEntry["source"];
+type EntryMeta = Pick<HistoryEntry, "label" | "restoredFrom">;
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 /**
- * The folder the agent works in. Owns design-system.json, validates every
- * change to it (whoever made it) and keeps a snapshot history for undo.
+ * The folder the agent works in: design-system.json plus the component source
+ * in components/. Validates and type-checks every change, and records history
+ * as git commits so undo covers tokens and code alike.
  */
 export class Workspace extends EventEmitter<{ design: [DesignState]; history: [HistoryEntry[]] }> {
   readonly file: string;
-  private readonly historyDir: string;
+  readonly componentsDir: string;
+  private readonly basisDir: string;
   private design: Design = DEFAULT_DESIGN;
   private errors: string[] | null = null;
-  private lastSerialized = "";
-  private lastSnapshot = "";
-  private lastSnapshotDesign: Design | null = null;
-  private pendingMeta: EntryMeta = {};
-  private turnLabel = "";
+  private typeErrors: string[] | null = null;
   private history: HistoryEntry[] = [];
   private watcher?: FSWatcher;
   private reloadTimer?: NodeJS.Timeout;
-  /**
-   * True while an agent turn runs. Changes still stream to the preview, but the
-   * history snapshot waits for endTurn() so one prompt becomes one undo step.
-   */
+  private settleTimer?: NodeJS.Timeout;
+  private turnLabel = "";
+  /** Serialises git operations; concurrent commits would race on the index. */
+  private queue: Promise<unknown> = Promise.resolve();
+  /** True while an agent turn runs; its changes are committed once, when the turn ends. */
   agentActive = false;
 
   constructor(readonly dir: string) {
     super();
     this.file = path.join(dir, DESIGN_FILE);
-    this.historyDir = path.join(dir, ".basis", "history");
+    this.componentsDir = path.join(dir, COMPONENTS_DIR);
+    this.basisDir = path.join(dir, ".basis");
   }
 
   async init(): Promise<void> {
-    await mkdir(this.historyDir, { recursive: true });
-    await writeFile(path.join(this.dir, "AGENTS.md"), AGENT_BRIEF);
-    await writeFile(path.join(this.dir, "CLAUDE.md"), CLAUDE_MD);
+    await mkdir(this.basisDir, { recursive: true });
+    await this.writeGeneratedFiles();
     if (!existsSync(this.file)) await writeFile(this.file, serialize(DEFAULT_DESIGN));
+    if (!existsSync(this.componentsDir)) await this.seedComponents();
+    if (!existsSync(path.join(this.dir, ".git"))) await git(this.dir, ["init", "-q", "-b", "main"]);
+    await this.reload();
+    await this.check();
+    const hasCommits = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() !== "";
+    await this.commit(hasCommits ? "external" : "init", {});
     this.history = await this.loadHistory();
-    await this.reload("init");
-    this.watcher = watch(this.dir, (_event, filename) => {
-      if (filename === DESIGN_FILE) this.scheduleReload();
-    });
+    this.watcher = watch(this.dir, { recursive: true }, (_event, filename) => this.onFsEvent(filename));
   }
 
   close(): void {
     this.watcher?.close();
     clearTimeout(this.reloadTimer);
+    clearTimeout(this.settleTimer);
   }
 
   get state(): DesignState {
-    return { design: this.design, errors: this.errors, workspace: this.dir };
+    return { design: this.design, errors: this.errors, typeErrors: this.typeErrors, workspace: this.dir };
   }
 
   get entries(): HistoryEntry[] {
@@ -71,34 +80,76 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
   }
 
+  /** Files the agent may change: the design file and anything under components/. */
+  isEditable(target: string): boolean {
+    if (!this.isInside(target)) return false;
+    const relative = path.relative(this.dir, path.resolve(target)).split(path.sep).join("/");
+    return relative === DESIGN_FILE || relative.startsWith(`${COMPONENTS_DIR}/`);
+  }
+
+  /** Marks the start of an agent turn; `label` is the prompt that started it. */
+  async beginTurn(label: string): Promise<void> {
+    // Anything changed by hand since the last entry gets its own entry first.
+    await this.commit("external", {});
+    this.agentActive = true;
+    this.turnLabel = label;
+  }
+
+  /** After a turn: re-read, type-check and record one history entry for everything the turn changed. */
+  async endTurn(): Promise<void> {
+    await this.reload();
+    await this.check();
+    this.agentActive = false;
+    await this.commit("agent", { label: this.turnLabel });
+  }
+
   async revert(historyId: string): Promise<void> {
     const entry = this.history.find((item) => item.id === historyId);
     if (!entry) throw new Error(`Unknown history entry ${historyId}`);
-    const text = await readFile(this.snapshotFile(entry.id), "utf8");
-    this.pendingMeta = { label: entry.label ?? describeSource(entry.source), restoredFrom: entry.id };
-    await writeFile(this.file, text);
-    await this.reload("revert");
-    this.pendingMeta = {};
+    await this.serial(() => git(this.dir, ["restore", `--source=${entry.id}`, "--staged", "--worktree", "--", "."]));
+    await this.reload();
+    await this.check();
+    await this.commit("revert", { label: entry.label ?? describeSource(entry.source), restoredFrom: entry.id });
   }
 
-  /** The design as it was at a history entry, for read-only inspection. */
-  async snapshotDesign(historyId: string): Promise<Design | null> {
+  /** A past version for read-only inspection: its tokens, plus how its component code differs from now. */
+  async snapshot(historyId: string): Promise<Snapshot | null> {
     if (!this.history.some((item) => item.id === historyId)) return null;
     try {
-      const result = parseDesignText(await readFile(this.snapshotFile(historyId), "utf8"));
-      return result.ok ? result.design : null;
+      const result = parseDesignText(await git(this.dir, ["show", `${historyId}:${DESIGN_FILE}`]));
+      if (!result.ok) return null;
+      const files = (await git(this.dir, ["diff", "--name-only", historyId, "--", COMPONENTS_DIR]))
+        .split("\n")
+        .filter(Boolean);
+      let codeDiff = files.length ? await git(this.dir, ["diff", "--no-color", "-R", historyId, "--", COMPONENTS_DIR]) : "";
+      if (codeDiff.length > DIFF_LIMIT) codeDiff = `${codeDiff.slice(0, DIFF_LIMIT)}\n… diff truncated`;
+      return { id: historyId, design: result.design, files, codeDiff };
     } catch {
       return null;
     }
   }
 
-  private scheduleReload(): void {
-    clearTimeout(this.reloadTimer);
-    this.reloadTimer = setTimeout(() => void this.reload(), 60);
+  private onFsEvent(filename: string | Buffer | null): void {
+    const name = String(filename ?? "").split(path.sep).join("/");
+    if (!name || name.startsWith(".git") || name.startsWith(".basis") || name.includes("node_modules")) return;
+    if (name === DESIGN_FILE) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = setTimeout(() => void this.reload(), 60);
+    }
+    if (name !== DESIGN_FILE && !name.startsWith(`${COMPONENTS_DIR}/`)) return;
+    // Hand edits are checked and recorded once things settle; agent turns are handled by endTurn().
+    clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      if (this.agentActive) return;
+      void (async () => {
+        await this.check();
+        await this.commit("external", {});
+      })();
+    }, 900);
   }
 
-  /** Re-reads the file. Valid changes become the current design and a history snapshot. */
-  async reload(forcedSource?: Source): Promise<void> {
+  /** Re-reads design-system.json. A valid file becomes the current design; an invalid one is reported. */
+  async reload(): Promise<void> {
     clearTimeout(this.reloadTimer);
     let text: string;
     try {
@@ -107,103 +158,160 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
       return; // Mid-replace by an editor; the watcher fires again when the new file lands.
     }
     const result = parseDesignText(text);
-    if (!result.ok) {
+    if (result.ok) {
+      const changed = serialize(result.design) !== serialize(this.design);
+      const hadErrors = this.errors !== null;
+      this.design = result.design;
+      this.errors = null;
+      if (changed || hadErrors) this.emit("design", this.state);
+    } else {
       this.errors = result.errors;
       this.emit("design", this.state);
-      return;
     }
-    const hadErrors = this.errors !== null;
-    this.errors = null;
-    const serialized = serialize(result.design);
-    if (serialized === this.lastSerialized) {
-      if (hadErrors) this.emit("design", this.state);
-      return;
+  }
+
+  /** Type-checks components/ against the gallery contracts. */
+  async check(): Promise<string[]> {
+    const errors = await typecheck(this.dir).catch((error: Error) => [error.message]);
+    const next = errors.length ? errors.slice(0, 50) : null;
+    if (JSON.stringify(next) !== JSON.stringify(this.typeErrors)) {
+      this.typeErrors = next;
+      this.emit("design", this.state);
     }
-    const isFirstLoad = this.lastSerialized === "";
-    this.design = result.design;
-    this.lastSerialized = serialized;
-    this.emit("design", this.state);
-    if (this.agentActive && !forcedSource) return;
-    if (isFirstLoad && this.lastSnapshot === serialized) return;
-    await this.snapshot(forcedSource ?? "external", this.pendingMeta);
+    return errors;
   }
 
-  /** Marks the start of an agent turn; `label` is the prompt that started it. */
-  beginTurn(label: string): void {
-    this.agentActive = true;
-    this.turnLabel = label;
+  private serial<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(task, task);
+    this.queue = result.catch(() => undefined);
+    return result;
   }
 
-  /** Re-reads the file after an agent turn and records one history entry if the design changed. */
-  async endTurn(): Promise<void> {
-    await this.reload();
-    this.agentActive = false;
-    if (this.lastSerialized !== this.lastSnapshot) await this.snapshot("agent", { label: this.turnLabel });
-  }
-
-  private snapshotFile(id: string): string {
-    return path.join(this.historyDir, `${id}.json`);
-  }
-
-  private metaFile(id: string): string {
-    return path.join(this.historyDir, `${id}.meta.json`);
-  }
-
-  private async snapshot(source: Source, meta: EntryMeta): Promise<void> {
-    const at = Date.now();
-    const id = `${at}-${source}`;
-    const previous = this.lastSnapshotDesign;
-    await writeFile(this.snapshotFile(id), this.lastSerialized);
-    if (meta.label || meta.restoredFrom) await writeFile(this.metaFile(id), JSON.stringify(meta));
-    this.lastSnapshot = this.lastSerialized;
-    this.lastSnapshotDesign = this.design;
-    const changed = previous ? diffDesigns(previous, this.design).map((change) => change.path) : [];
-    this.history.push({ id, at, source, name: this.design.name, changed, ...meta });
-    while (this.history.length > HISTORY_LIMIT) {
-      const dropped = this.history.shift();
-      if (!dropped) break;
-      await rm(this.snapshotFile(dropped.id), { force: true });
-      await rm(this.metaFile(dropped.id), { force: true });
-    }
-    this.emit("history", this.history);
+  /** Commits the working tree if anything changed. Token-level changes are recorded in the message for the history list. */
+  private commit(source: Source, meta: EntryMeta): Promise<void> {
+    return this.serial(async () => {
+      await git(this.dir, ["add", "-A"]);
+      const staged = (await git(this.dir, ["diff", "--cached", "--name-only"])).split("\n").filter(Boolean);
+      const isFirst = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() === "";
+      if (staged.length === 0 && !isFirst) return;
+      let changed: string[] = [];
+      if (!isFirst && staged.includes(DESIGN_FILE)) {
+        const before = parseDesignText(await git(this.dir, ["show", `HEAD:${DESIGN_FILE}`]).catch(() => ""));
+        const after = parseDesignText(await readFile(this.file, "utf8").catch(() => ""));
+        if (before.ok && after.ok) changed = diffDesigns(before.design, after.design).map((change) => change.path);
+      }
+      const label = meta.label?.replace(/\s+/g, " ").trim();
+      const message = [
+        label ? `${source}: ${label.slice(0, 72)}` : source,
+        "",
+        `Basis-Source: ${source}`,
+        `Basis-Name: ${this.design.name}`,
+        label ? `Basis-Label: ${label}` : "",
+        meta.restoredFrom ? `Basis-Restored-From: ${meta.restoredFrom}` : "",
+        changed.length ? `Basis-Changed: ${changed.join(",")}` : "",
+      ]
+        .filter((line, index) => index < 2 || line)
+        .join("\n");
+      await git(this.dir, ["commit", "-q", "--allow-empty", "-m", message]);
+      this.history = await this.loadHistory();
+      this.emit("history", this.history);
+    });
   }
 
   private async loadHistory(): Promise<HistoryEntry[]> {
-    const files = (await readdir(this.historyDir))
-      .filter((file) => file.endsWith(".json") && !file.endsWith(".meta.json"))
-      .sort();
-    const entries: HistoryEntry[] = [];
-    let previous: Design | null = null;
-    for (const file of files) {
-      const id = file.slice(0, -".json".length);
-      const [stamp, source] = id.split("-");
-      const at = Number(stamp);
-      if (!Number.isFinite(at) || !isSource(source)) continue;
-      let text: string;
-      try {
-        text = await readFile(this.snapshotFile(id), "utf8");
-      } catch {
-        continue;
-      }
-      const result = parseDesignText(text);
-      if (!result.ok) continue;
-      let meta: EntryMeta = {};
-      try {
-        meta = JSON.parse(await readFile(this.metaFile(id), "utf8")) as EntryMeta;
-      } catch {
-        // Entries without a label have no sidecar.
-      }
-      const changed = previous ? diffDesigns(previous, result.design).map((change) => change.path) : [];
-      entries.push({ id, at, source, name: result.design.name, changed, ...meta });
-      previous = result.design;
-      this.lastSnapshot = text;
+    let raw: string;
+    try {
+      raw = await git(this.dir, ["log", `-n${HISTORY_LIMIT}`, "--name-only", "--format=%x1e%H%x1f%ct%x1f%B%x1f"]);
+    } catch {
+      return [];
     }
-    this.lastSnapshotDesign = previous;
-    return entries;
+    const entries: HistoryEntry[] = [];
+    for (const record of raw.split("\x1e").slice(1)) {
+      const [id = "", time = "0", body = "", names = ""] = record.split("\x1f");
+      const trailers = new Map<string, string>();
+      for (const line of body.split("\n")) {
+        const match = /^Basis-([A-Za-z-]+): (.*)$/.exec(line.trim());
+        if (match?.[1] && match[2] !== undefined) trailers.set(match[1], match[2]);
+      }
+      const source = trailers.get("Source");
+      entries.push({
+        id,
+        at: Number(time) * 1000,
+        source: isSource(source) ? source : "external",
+        name: trailers.get("Name") ?? "",
+        label: trailers.get("Label"),
+        restoredFrom: trailers.get("Restored-From"),
+        changed: trailers.get("Changed")?.split(",").filter(Boolean) ?? [],
+        files: names
+          .split("\n")
+          .map((name) => name.trim())
+          .filter((name) => name.startsWith(`${COMPONENTS_DIR}/`)),
+      });
+    }
+    return entries.reverse();
+  }
+
+  /** Copies the starter components, normalising line endings (a Windows checkout of Basis may have CRLF). */
+  private async seedComponents(): Promise<void> {
+    const source = path.join(repoRoot, "template", COMPONENTS_DIR);
+    await mkdir(this.componentsDir, { recursive: true });
+    for (const name of await readdir(source)) {
+      const text = await readFile(path.join(source, name), "utf8");
+      await writeFile(path.join(this.componentsDir, name), text.replaceAll("\r\n", "\n"));
+    }
+  }
+
+  /** Files Basis owns in the workspace, rewritten on every start and kept out of history. */
+  private async writeGeneratedFiles(): Promise<void> {
+    const types = (pkg: string) => path.join(repoRoot, "node_modules", pkg).split(path.sep).join("/");
+    const tsconfig = {
+      compilerOptions: {
+        target: "ES2022",
+        lib: ["ES2022", "DOM", "DOM.Iterable"],
+        module: "ESNext",
+        moduleResolution: "bundler",
+        jsx: "react-jsx",
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        isolatedModules: true,
+        allowImportingTsExtensions: true,
+        types: [],
+        // Resolve React's types from the Basis install, wherever this workspace lives.
+        paths: {
+          react: [`${types("@types/react")}/index.d.ts`],
+          "react/*": [`${types("@types/react")}/*`],
+          "react-dom": [`${types("@types/react-dom")}/index.d.ts`],
+          "react-dom/*": [`${types("@types/react-dom")}/*`],
+        },
+      },
+      include: [`${COMPONENTS_DIR}/**/*`, ".basis/*.ts"],
+    };
+    await writeFile(path.join(this.dir, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`);
+    await writeFile(path.join(this.basisDir, "contracts.ts"), await readFile(path.join(repoRoot, "shared", "contracts.ts"), "utf8"));
+    await writeFile(
+      path.join(this.basisDir, "env.d.ts"),
+      'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',
+    );
+    await writeFile(
+      path.join(this.basisDir, "check.ts"),
+      [
+        "// Fails to type-check when components/ stops satisfying the gallery contracts.",
+        'import type { Contracts } from "./contracts.ts";',
+        'import * as components from "../components/index.ts";',
+        "",
+        "export const satisfiesContracts: Contracts = components;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(path.join(this.dir, "AGENTS.md"), AGENT_BRIEF);
+    await writeFile(path.join(this.dir, "CLAUDE.md"), CLAUDE_MD);
+    await writeFile(
+      path.join(this.dir, ".gitignore"),
+      "# Generated by Basis on every start\n.basis/\nAGENTS.md\nCLAUDE.md\ntsconfig.json\nnode_modules/\n",
+    );
   }
 }
-
-type EntryMeta = Pick<HistoryEntry, "label" | "restoredFrom">;
 
 function describeSource(source: Source): string {
   return source === "init" ? "Starting point" : source === "external" ? "Edit on disk" : "Earlier version";
