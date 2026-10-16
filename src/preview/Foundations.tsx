@@ -98,7 +98,7 @@ export function Colors({ design, onAsk }: FoundationProps) {
         <Group key={group.title} title={group.title}>
           <div className={styles.swatches}>
             {group.roles.map((role) => (
-              <div key={role} className={styles.swatch}>
+              <div key={role} className={styles.swatch} data-ds="color" data-token={`color.*.${role}`}>
                 <div className={styles.chips}>
                   <span className={`ds-root ${styles.chip}`} data-theme="light" style={{ background: `var(--color-${kebab(role)})` }} />
                   <span className={`ds-root ${styles.chip}`} data-theme="dark" style={{ background: `var(--color-${kebab(role)})` }} />
@@ -155,7 +155,7 @@ export function Typography({ design, onAsk }: FoundationProps) {
       <Group title="Families">
         <div className={styles.families}>
           {(["display", "sans", "mono"] as const).map((family) => (
-            <div key={family} className={styles.family}>
+            <div key={family} className={styles.family} data-ds="font family" data-token={`typography.family.${family}`}>
               <span className={styles.familySample} style={{ fontFamily: `var(--font-${family})` }}>
                 Aa Gg 0123
               </span>
@@ -168,7 +168,7 @@ export function Typography({ design, onAsk }: FoundationProps) {
       <Group title="Scale">
         <div className={styles.scale}>
           {sizes.map(([key, value]) => (
-            <div key={key} className={styles.scaleRow}>
+            <div key={key} className={styles.scaleRow} data-ds="type size" data-token={`typography.size.${key}`}>
               <span className={styles.scaleMeta}>
                 <span className={styles.swatchName}>{key}</span>
                 <Token>{value}</Token>
@@ -249,7 +249,7 @@ export function Shape({ design, onAsk }: FoundationProps) {
       <Group title="Spacing">
         <div className={styles.spaceList}>
           {Object.entries(design.space).map(([key, value]) => (
-            <div key={key} className={styles.spaceRow}>
+            <div key={key} className={styles.spaceRow} data-ds="space" data-token={`space.${key}`}>
               <span className={styles.swatchName}>space-{key}</span>
               <Token>{value}</Token>
               <span className={styles.spaceBar} style={{ width: `var(--space-${key})` }} />
@@ -260,7 +260,7 @@ export function Shape({ design, onAsk }: FoundationProps) {
       <Group title="Radius">
         <div className={styles.tiles}>
           {Object.entries(design.radius).map(([key, value]) => (
-            <div key={key} className={styles.tileWrap}>
+            <div key={key} className={styles.tileWrap} data-ds="radius" data-token={`radius.${key}`}>
               <span className={styles.radiusTile} style={{ borderRadius: `var(--radius-${key})` }} />
               <span className={styles.swatchName}>{key}</span>
               <Token>{value}</Token>
@@ -271,7 +271,7 @@ export function Shape({ design, onAsk }: FoundationProps) {
       <Group title="Elevation">
         <div className={styles.tiles}>
           {Object.entries(design.shadow).map(([key, value]) => (
-            <div key={key} className={styles.tileWrap}>
+            <div key={key} className={styles.tileWrap} data-ds="shadow" data-token={`shadow.${key}`}>
               <span className={styles.shadowTile} style={{ boxShadow: `var(--shadow-${key})` }} />
               <span className={styles.swatchName}>shadow-{key}</span>
               <Token>{value}</Token>
@@ -330,7 +330,7 @@ export function Motion({ design, onAsk }: FoundationProps) {
       >
         <div className={styles.tracks} data-played={played || undefined}>
           {Object.entries(design.motion.duration).map(([key, value]) => (
-            <div key={key} className={styles.trackRow}>
+            <div key={key} className={styles.trackRow} data-ds="duration" data-token={`motion.duration.${key}`}>
               <span className={styles.scaleMeta}>
                 <span className={styles.swatchName}>{key}</span>
                 <Token>{value}</Token>
@@ -355,7 +355,7 @@ export function Motion({ design, onAsk }: FoundationProps) {
       >
         <div className={styles.tracks} data-played={played || undefined}>
           {Object.entries(design.motion.ease).map(([key, value]) => (
-            <div key={key} className={styles.easeRow}>
+            <div key={key} className={styles.easeRow} data-ds="easing" data-token={`motion.ease.${key}`}>
               <Curve value={value} />
               <span className={styles.scaleMeta}>
                 <span className={styles.swatchName}>{key}</span>

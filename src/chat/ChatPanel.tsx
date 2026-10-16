@@ -1,6 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef } from "react";
+import type { Annotation } from "../../shared/annotations.ts";
 import { AGENT_IDS, AGENT_LABELS, type AgentId, type AgentState, type ChatItem, type ClientMessage } from "../../shared/protocol.ts";
 import styles from "./ChatPanel.module.css";
+import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
 
 const STARTERS = [
@@ -19,6 +21,11 @@ interface ChatPanelProps {
   onDraft: (text: string) => void;
   send: (message: ClientMessage) => void;
   composerRef: React.RefObject<HTMLTextAreaElement | null>;
+  annotations: Annotation[];
+  onRemoveAnnotation: (index: number) => void;
+  onClearAnnotations: () => void;
+  picking: boolean;
+  onTogglePick: () => void;
 }
 
 const STATUS_TEXT: Record<AgentState["status"], string> = {
@@ -29,7 +36,17 @@ const STATUS_TEXT: Record<AgentState["status"], string> = {
   error: "Needs attention",
 };
 
-export function ChatPanel({ agent, chat, connected, designErrors, draft, onDraft, send, composerRef }: ChatPanelProps) {
+export function ChatPanel({
+  agent,
+  chat,
+  connected,
+  designErrors,
+  draft,
+  onDraft,
+  send,
+  composerRef,
+  ...composer
+}: ChatPanelProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const busy = agent?.status === "busy";
@@ -39,28 +56,6 @@ export function ChatPanel({ agent, chat, connected, designErrors, draft, onDraft
     const el = scroller.current;
     if (el && pinned.current) el.scrollTop = el.scrollHeight;
   }, [chat]);
-
-  useEffect(() => {
-    const el = composerRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [draft, composerRef]);
-
-  const submit = () => {
-    const text = draft.trim();
-    if (!text || !ready) return;
-    send({ type: "prompt", text });
-    onDraft("");
-    pinned.current = true;
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      submit();
-    }
-  };
 
   return (
     <aside className={styles.panel}>
@@ -151,34 +146,19 @@ export function ChatPanel({ agent, chat, connected, designErrors, draft, onDraft
         </div>
       )}
 
-      <form
-        className={styles.composer}
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
+      <Composer
+        ready={ready}
+        busy={busy}
+        supportsImages={Boolean(agent?.supportsImages)}
+        draft={draft}
+        onDraft={onDraft}
+        composerRef={composerRef}
+        send={send}
+        onSent={() => {
+          pinned.current = true;
         }}
-      >
-        <textarea
-          ref={composerRef}
-          value={draft}
-          onChange={(event) => onDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={ready || busy ? "Describe a change…" : "Waiting for the agent…"}
-          rows={2}
-        />
-        <div className={styles.composerBar}>
-          <span className={styles.hint}>Enter to send · Shift+Enter for a new line</span>
-          {busy ? (
-            <button type="button" className={styles.stop} onClick={() => send({ type: "cancel" })}>
-              Stop
-            </button>
-          ) : (
-            <button type="submit" className={styles.send} disabled={!ready || !draft.trim()}>
-              Send
-            </button>
-          )}
-        </div>
-      </form>
+        {...composer}
+      />
     </aside>
   );
 }
@@ -196,6 +176,25 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
       return (
         <div className={styles.user} data-auto={item.auto || undefined}>
           {item.auto && <span className={styles.autoLabel}>Basis → agent</span>}
+          {item.annotations && (
+            <span className={styles.userAttachments}>
+              {item.annotations.map((label, index) => (
+                <span key={index} className={styles.chip}>
+                  <span className={styles.chipIndex}>{index + 1}</span>
+                  {label}
+                </span>
+              ))}
+            </span>
+          )}
+          {item.images && (
+            <span className={styles.userAttachments}>
+              {item.images.map((src, index) => (
+                <span key={index} className={styles.thumb}>
+                  <img src={src} alt={`Attachment ${index + 1}`} />
+                </span>
+              ))}
+            </span>
+          )}
           {item.text}
         </div>
       );

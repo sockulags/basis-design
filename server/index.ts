@@ -36,7 +36,8 @@ if (production) {
 
 // The bridge can drive an agent that edits files, so only this app's own pages may connect.
 const allowedOrigins = new Set([`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
-const sockets = new WebSocketServer({ noServer: true });
+// Prompts can carry a few images, so allow larger frames than chat text needs.
+const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 server.on("upgrade", (req, socket, head) => {
   if (req.url !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
   if (!allowedOrigins.has(req.headers.origin ?? "")) {
@@ -76,15 +77,18 @@ sockets.on("connection", (ws: WebSocket) => {
     } catch {
       return;
     }
-    void handle(message).catch((error: unknown) => console.error("[basis]", error));
+    void handle(message, ws).catch((error: unknown) => console.error("[basis]", error));
   });
 });
 
-async function handle(message: ClientMessage): Promise<void> {
+async function handle(message: ClientMessage, socket: WebSocket): Promise<void> {
   switch (message.type) {
-    case "prompt":
-      if (message.text.trim()) await agent.prompt(message.text.trim());
+    case "prompt": {
+      const text = message.text.trim();
+      const hasAttachments = Boolean(message.images?.length || message.annotations?.length);
+      if (text || hasAttachments) await agent.prompt(text, { images: message.images, annotations: message.annotations });
       return;
+    }
     case "cancel":
       return agent.cancel();
     case "permission":
@@ -96,6 +100,11 @@ async function handle(message: ClientMessage): Promise<void> {
       return;
     case "revert":
       return workspace.revert(message.historyId);
+    case "snapshot-get": {
+      const design = await workspace.snapshotDesign(message.id);
+      if (design) send(socket, { type: "snapshot", id: message.id, design });
+      return;
+    }
   }
 }
 

@@ -1,0 +1,94 @@
+.outline {
+  position: fixed;
+  z-index: 40;
+  border: 2px solid var(--app-signal);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--app-signal) 10%, transparent);
+  pointer-events: none;
+  transition:
+    top 60ms ease-out,
+    left 60ms ease-out,
+    width 60ms ease-out,
+    height 60ms ease-out;
+}
+
+.tag {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: -2px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--app-signal);
+  color: var(--app-ink);
+  font-family: var(--app-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hint {
+  position: fixed;
+  bottom: 16px;
+  left: calc(50% + var(--chat-width, 0px) / 2);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 5px 5px 14px;
+  border-radius: 999px;
+  background: var(--app-ink);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  color: var(--app-text);
+  font-size: 12px;
+  translate: -50% 0;
+}
+
+[data-chat-hidden] .hint {
+  left: 50%;
+}
+
+.hint button {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--app-signal);
+  color: var(--app-ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.marker {
+  position: fixed;
+  z-index: 35;
+  border: 2px dashed var(--app-signal);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.badge {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--app-signal);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+  color: var(--app-ink);
+  font-family: var(--app-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:global([data-picking]) {
+  cursor: crosshair;
+}
+
+:global([data-picking]) * {
+  cursor: crosshair !important;
+}

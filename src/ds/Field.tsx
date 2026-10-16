@@ -11,7 +11,7 @@ interface FieldProps {
 
 export function Field({ label, hint, error, children }: FieldProps) {
   return (
-    <label className={styles.field}>
+    <label className={styles.field} data-state-label={label}>
       <span className={styles.label}>{label}</span>
       {children}
       {error ? <span className={styles.error}>{error}</span> : hint && <span className={styles.hint}>{hint}</span>}
@@ -25,13 +25,14 @@ interface Forceable {
 }
 
 export function TextInput({ force, invalid, ...rest }: InputHTMLAttributes<HTMLInputElement> & Forceable) {
-  return <input className={styles.input} data-force={force} aria-invalid={invalid || undefined} {...rest} />;
+  return <input className={styles.input} data-ds="input" data-force={force} aria-invalid={invalid || undefined} {...rest} />;
 }
 
 export function Textarea({ force, invalid, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & Forceable) {
   return (
     <textarea
       className={`${styles.input} ${styles.textarea}`}
+      data-ds="textarea"
       data-force={force}
       aria-invalid={invalid || undefined}
       {...rest}
@@ -44,6 +45,7 @@ export function Select({ force, invalid, children, ...rest }: SelectHTMLAttribut
     <span className={styles.selectWrap}>
       <select
         className={`${styles.input} ${styles.select}`}
+        data-ds="select"
         data-force={force}
         aria-invalid={invalid || undefined}
         {...rest}

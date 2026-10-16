@@ -68,7 +68,7 @@ export function Matrix<R extends string, C extends string>({ rows, cols, render,
           <Fragment key={row.id}>
             <span className={styles.rowHead}>{row.label}</span>
             {cols.map((col) => (
-              <div key={col.id} className={styles.cell}>
+              <div key={col.id} className={styles.cell} data-row={row.label} data-col={col.label}>
                 {render(row.id, col.id)}
               </div>
             ))}
@@ -81,7 +81,7 @@ export function Matrix<R extends string, C extends string>({ rows, cols, render,
 
 export function Specimen({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className={styles.specimen}>
+    <div className={styles.specimen} data-state-label={label}>
       <div className={styles.specimenBody}>{children}</div>
       <span className={styles.caption}>{label}</span>
     </div>

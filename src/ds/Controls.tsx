@@ -13,7 +13,7 @@ export function Checkbox({ label, force, indeterminate = false, ...rest }: Contr
     if (ref.current) ref.current.indeterminate = indeterminate;
   }, [indeterminate]);
   return (
-    <label className={styles.control} data-force={force}>
+    <label className={styles.control} data-ds="checkbox" data-force={force}>
       <input ref={ref} type="checkbox" className={styles.native} {...rest} />
       <span className={styles.box}>
         <svg className={styles.check} viewBox="0 0 16 16" aria-hidden>
@@ -30,7 +30,7 @@ export function Checkbox({ label, force, indeterminate = false, ...rest }: Contr
 
 export function Radio({ label, force, ...rest }: ControlProps) {
   return (
-    <label className={cx(styles.control, styles.radio)} data-force={force}>
+    <label className={cx(styles.control, styles.radio)} data-ds="radio" data-force={force}>
       <input type="radio" className={styles.native} {...rest} />
       <span className={styles.box} />
       {label && <span>{label}</span>}
@@ -40,7 +40,7 @@ export function Radio({ label, force, ...rest }: ControlProps) {
 
 export function Switch({ label, force, ...rest }: ControlProps) {
   return (
-    <label className={styles.control} data-force={force}>
+    <label className={styles.control} data-ds="switch" data-force={force}>
       <input type="checkbox" role="switch" className={styles.native} {...rest} />
       <span className={styles.track}>
         <span className={styles.thumb} />

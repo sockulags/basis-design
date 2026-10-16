@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import type { Design } from "../shared/design.ts";
 import type {
   AgentState,
   ChatItem,
@@ -14,9 +15,11 @@ export interface BridgeState {
   history: HistoryEntry[];
   agent: AgentState | null;
   chat: ChatItem[];
+  /** History snapshots fetched for inspection, by entry id. Snapshots never change, so they are cached. */
+  snapshots: Record<string, Design>;
 }
 
-const initial: BridgeState = { connected: false, design: null, history: [], agent: null, chat: [] };
+const initial: BridgeState = { connected: false, design: null, history: [], agent: null, chat: [], snapshots: {} };
 
 type Action = ServerMessage | { type: "connected"; connected: boolean };
 
@@ -26,6 +29,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, connected: action.connected };
     case "hello":
       return {
+        ...state,
         connected: true,
         design: action.design,
         history: action.history,
@@ -47,6 +51,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       chat[index] = action.item;
       return { ...state, chat };
     }
+    case "snapshot":
+      return { ...state, snapshots: { ...state.snapshots, [action.id]: action.design } };
   }
 }
 

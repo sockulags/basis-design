@@ -1,23 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientMessage, HistoryEntry } from "../../shared/protocol.ts";
+import { SOURCE_LABEL, undoStep, when } from "./history.ts";
 import styles from "./Shell.module.css";
 
-const SOURCE_LABEL: Record<HistoryEntry["source"], string> = {
-  init: "Starting point",
-  agent: "Agent change",
-  revert: "Restored",
-  external: "Edited on disk",
-};
-
-const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-const day = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
-
-function when(at: number): string {
-  const date = new Date(at);
-  return date.toDateString() === new Date().toDateString() ? time.format(date) : `${day.format(date)} ${time.format(date)}`;
+interface HistoryMenuProps {
+  history: HistoryEntry[];
+  inspecting: string | null;
+  onInspect: (id: string | null) => void;
+  send: (message: ClientMessage) => void;
 }
 
-export function HistoryMenu({ history, send }: { history: HistoryEntry[]; send: (message: ClientMessage) => void }) {
+export function HistoryMenu({ history, inspecting, onInspect, send }: HistoryMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -36,16 +29,20 @@ export function HistoryMenu({ history, send }: { history: HistoryEntry[]; send: 
   }, [open]);
 
   const entries = history.slice().reverse();
-  const undo = entries[1];
+  const undo = undoStep(history);
 
   return (
     <div ref={root} className={styles.menuRoot}>
       <button
         type="button"
         className={styles.chromeButton}
-        onClick={() => undo && send({ type: "revert", historyId: undo.id })}
+        onClick={() => undo && send({ type: "revert", historyId: undo.target.id })}
         disabled={!undo}
-        title={undo ? `Restore the version from ${when(undo.at)}` : "Nothing to undo"}
+        title={
+          undo
+            ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${undo.undoes.changed.length} tokens)`
+            : "Nothing to undo"
+        }
       >
         Undo
       </button>
@@ -54,31 +51,32 @@ export function HistoryMenu({ history, send }: { history: HistoryEntry[]; send: 
       </button>
       {open && (
         <div className={styles.menu} role="menu">
-          {entries.map((entry, index) => (
-            <div key={entry.id} className={styles.menuItem}>
-              <div>
+          <p className={styles.menuHint}>Click a version to inspect it without changing anything.</p>
+          {entries.map((entry, index) => {
+            const isCurrent = index === 0;
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                role="menuitem"
+                className={styles.menuItem}
+                aria-current={entry.id === inspecting || (isCurrent && !inspecting) || undefined}
+                onClick={() => {
+                  onInspect(isCurrent ? null : entry.id);
+                  setOpen(false);
+                }}
+              >
                 <span className={styles.menuTitle}>
                   {SOURCE_LABEL[entry.source]}
-                  {index === 0 && <span className={styles.current}>current</span>}
+                  {isCurrent && <span className={styles.current}>current</span>}
                 </span>
+                {entry.label && <span className={styles.menuLabel}>{entry.label}</span>}
                 <span className={styles.muted}>
-                  {when(entry.at)} · {entry.name}
+                  {when(entry.at)} · {entry.changed.length} {entry.changed.length === 1 ? "token" : "tokens"} changed
                 </span>
-              </div>
-              {index > 0 && (
-                <button
-                  type="button"
-                  className={styles.chromeButton}
-                  onClick={() => {
-                    send({ type: "revert", historyId: entry.id });
-                    setOpen(false);
-                  }}
-                >
-                  Restore
-                </button>
-              )}
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

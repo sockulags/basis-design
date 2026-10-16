@@ -26,6 +26,7 @@ export function Button({
     <button
       type={type}
       className={cx(styles.button, className)}
+      data-ds="button"
       data-variant={variant}
       data-size={size}
       data-force={force}

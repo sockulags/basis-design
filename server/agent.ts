@@ -5,7 +5,18 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentId, AgentState, ChatItem, PermissionChoice, ToolStatus } from "../shared/protocol.ts";
+import { annotationLabel, formatAnnotations, type Annotation } from "../shared/annotations.ts";
+import {
+  IMAGE_TYPES,
+  MAX_IMAGE_BASE64,
+  MAX_IMAGES,
+  type AgentId,
+  type AgentState,
+  type ChatItem,
+  type PermissionChoice,
+  type PromptImage,
+  type ToolStatus,
+} from "../shared/protocol.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -142,8 +153,9 @@ export class AgentHost extends EventEmitter<Events> {
         clientInfo: { name: "basis", version: "0.1.0" },
       });
       this.supportsSystemPrompt = Boolean(init.agentCapabilities?.sessionCapabilities?.systemPrompt);
+      const supportsImages = Boolean(init.agentCapabilities?.promptCapabilities?.image);
       await this.openSession();
-      this.setState({ id: agentId, status: "ready" });
+      this.setState({ id: agentId, status: "ready", supportsImages });
     } catch (error) {
       if (this.proc === proc) this.fail(describeError(error, spec.loginHint));
     }
@@ -177,20 +189,36 @@ export class AgentHost extends EventEmitter<Events> {
     }
   }
 
-  async prompt(text: string, auto = false): Promise<void> {
+  async prompt(text: string, attachments: Attachments = {}, auto = false): Promise<void> {
     const connection = this.connection;
     const sessionId = this.sessionId;
     if (!connection || !sessionId || this.state.status !== "ready") return;
     if (!auto) this.autoFixes = 0;
-    this.push({ kind: "user", id: this.nextId("user"), text, auto });
+    const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
+    const annotations = attachments.annotations ?? [];
+    this.push({
+      kind: "user",
+      id: this.nextId("user"),
+      text,
+      auto,
+      images: images.length ? images.map((image) => `data:${image.mimeType};base64,${image.data}`) : undefined,
+      annotations: annotations.length ? annotations.map(annotationLabel) : undefined,
+    });
     this.setState({ ...this.state, status: "busy", detail: undefined });
-    this.workspace.beginTurn();
-    const body = this.needsPreamble ? `${FIRST_PROMPT_PREAMBLE}\n\n${text}` : text;
+    this.workspace.beginTurn(text || annotations.map(annotationLabel).join(", ") || "Image prompt");
+    const message = text || "See the attached context.";
+    const body = this.needsPreamble ? `${FIRST_PROMPT_PREAMBLE}
+
+${message}` : message;
     this.needsPreamble = false;
+    const blocks: acp.ContentBlock[] = [];
+    if (annotations.length) blocks.push({ type: "text", text: formatAnnotations(annotations) });
+    for (const image of images) blocks.push({ type: "image", mimeType: image.mimeType, data: image.data });
+    blocks.push({ type: "text", text: body });
     try {
       const result = await connection.agent.request(acp.methods.agent.session.prompt, {
         sessionId,
-        prompt: [{ type: "text", text: body }],
+        prompt: blocks,
       });
       if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
       else if (result.stopReason !== "end_turn") this.notice(`The agent stopped early (${result.stopReason}).`, "error");
@@ -208,6 +236,7 @@ export class AgentHost extends EventEmitter<Events> {
       this.autoFixes += 1;
       await this.prompt(
         `design-system.json no longer passes validation, so the preview is still showing the previous version. Fix these errors:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+        {},
         true,
       );
     }
@@ -378,6 +407,22 @@ export class AgentHost extends EventEmitter<Events> {
     this.seq += 1;
     return `${prefix}-${Date.now().toString(36)}-${this.seq}`;
   }
+}
+
+export interface Attachments {
+  images?: PromptImage[];
+  annotations?: Annotation[];
+}
+
+function acceptedImages(images: PromptImage[] | undefined): PromptImage[] {
+  return (images ?? [])
+    .filter(
+      (image) =>
+        (IMAGE_TYPES as readonly string[]).includes(image.mimeType) &&
+        typeof image.data === "string" &&
+        image.data.length <= MAX_IMAGE_BASE64,
+    )
+    .slice(0, MAX_IMAGES);
 }
 
 function describeRawInput(raw: unknown): string | undefined {

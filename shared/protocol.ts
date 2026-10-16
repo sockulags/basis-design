@@ -1,3 +1,4 @@
+import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
 
 /** Messages between the browser and the Basis server over the /bridge WebSocket. */
@@ -17,6 +18,19 @@ export interface AgentState {
   status: AgentStatus;
   /** Human-readable detail for starting/error states. */
   detail?: string;
+  /** Whether the running agent accepts image content in prompts. */
+  supportsImages?: boolean;
+}
+
+export const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export const MAX_IMAGES = 6;
+/** Base64 length cap per image (~5 MB decoded). */
+export const MAX_IMAGE_BASE64 = 7_000_000;
+
+export interface PromptImage {
+  mimeType: string;
+  /** Base64 without the data: prefix. */
+  data: string;
 }
 
 export type ToolStatus = "pending" | "in_progress" | "completed" | "failed";
@@ -28,7 +42,16 @@ export interface PermissionChoice {
 }
 
 export type ChatItem =
-  | { kind: "user"; id: string; text: string; auto?: boolean }
+  | {
+      kind: "user";
+      id: string;
+      text: string;
+      auto?: boolean;
+      /** data: URLs of attached images, for display. */
+      images?: string[];
+      /** Labels of attached annotations, in order. */
+      annotations?: string[];
+    }
   | { kind: "agent"; id: string; text: string }
   | { kind: "thought"; id: string; text: string }
   | { kind: "tool"; id: string; title: string; toolKind: string; status: ToolStatus }
@@ -48,6 +71,12 @@ export interface HistoryEntry {
   at: number;
   source: "init" | "agent" | "revert" | "external";
   name: string;
+  /** The prompt behind an agent change, or what a restore went back to. */
+  label?: string;
+  /** For restores: the entry whose design was restored. */
+  restoredFrom?: string;
+  /** Token paths that differ from the previous entry. */
+  changed: string[];
 }
 
 export interface DesignState {
@@ -69,12 +98,14 @@ export type ServerMessage =
   | { type: "history"; history: HistoryEntry[] }
   | { type: "agent"; agent: AgentState }
   | { type: "chat-upsert"; item: ChatItem }
-  | { type: "chat-reset" };
+  | { type: "chat-reset" }
+  | { type: "snapshot"; id: string; design: Design };
 
 export type ClientMessage =
-  | { type: "prompt"; text: string }
+  | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[] }
   | { type: "cancel" }
   | { type: "permission"; id: string; optionId: string | null }
   | { type: "new-session" }
   | { type: "switch-agent"; agent: AgentId }
-  | { type: "revert"; historyId: string };
+  | { type: "revert"; historyId: string }
+  | { type: "snapshot-get"; id: string };

@@ -3,6 +3,7 @@ import { existsSync, watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.ts";
+import { diffDesigns } from "../shared/diff.ts";
 import type { DesignState, HistoryEntry } from "../shared/protocol.ts";
 import { AGENT_BRIEF, CLAUDE_MD } from "./brief.ts";
 
@@ -22,6 +23,9 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
   private errors: string[] | null = null;
   private lastSerialized = "";
   private lastSnapshot = "";
+  private lastSnapshotDesign: Design | null = null;
+  private pendingMeta: EntryMeta = {};
+  private turnLabel = "";
   private history: HistoryEntry[] = [];
   private watcher?: FSWatcher;
   private reloadTimer?: NodeJS.Timeout;
@@ -70,9 +74,22 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
   async revert(historyId: string): Promise<void> {
     const entry = this.history.find((item) => item.id === historyId);
     if (!entry) throw new Error(`Unknown history entry ${historyId}`);
-    const text = await readFile(path.join(this.historyDir, `${entry.id}.json`), "utf8");
+    const text = await readFile(this.snapshotFile(entry.id), "utf8");
+    this.pendingMeta = { label: entry.label ?? describeSource(entry.source), restoredFrom: entry.id };
     await writeFile(this.file, text);
     await this.reload("revert");
+    this.pendingMeta = {};
+  }
+
+  /** The design as it was at a history entry, for read-only inspection. */
+  async snapshotDesign(historyId: string): Promise<Design | null> {
+    if (!this.history.some((item) => item.id === historyId)) return null;
+    try {
+      const result = parseDesignText(await readFile(this.snapshotFile(historyId), "utf8"));
+      return result.ok ? result.design : null;
+    } catch {
+      return null;
+    }
   }
 
   private scheduleReload(): void {
@@ -107,65 +124,89 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     this.lastSerialized = serialized;
     this.emit("design", this.state);
     if (this.agentActive && !forcedSource) return;
-    const source = forcedSource ?? "external";
-    const latest = this.history.at(-1);
-    if (isFirstLoad && latest && (await this.snapshotText(latest)) === serialized) {
-      this.lastSnapshot = serialized;
-      return;
-    }
-    await this.snapshot(serialized, source);
+    if (isFirstLoad && this.lastSnapshot === serialized) return;
+    await this.snapshot(forcedSource ?? "external", this.pendingMeta);
   }
 
-  beginTurn(): void {
+  /** Marks the start of an agent turn; `label` is the prompt that started it. */
+  beginTurn(label: string): void {
     this.agentActive = true;
+    this.turnLabel = label;
   }
 
   /** Re-reads the file after an agent turn and records one history entry if the design changed. */
   async endTurn(): Promise<void> {
     await this.reload();
     this.agentActive = false;
-    if (this.lastSerialized !== this.lastSnapshot) await this.snapshot(this.lastSerialized, "agent");
+    if (this.lastSerialized !== this.lastSnapshot) await this.snapshot("agent", { label: this.turnLabel });
   }
 
-  private async snapshotText(entry: HistoryEntry): Promise<string | null> {
-    try {
-      return await readFile(path.join(this.historyDir, `${entry.id}.json`), "utf8");
-    } catch {
-      return null;
-    }
+  private snapshotFile(id: string): string {
+    return path.join(this.historyDir, `${id}.json`);
   }
 
-  private async snapshot(serialized: string, source: Source): Promise<void> {
+  private metaFile(id: string): string {
+    return path.join(this.historyDir, `${id}.meta.json`);
+  }
+
+  private async snapshot(source: Source, meta: EntryMeta): Promise<void> {
     const at = Date.now();
     const id = `${at}-${source}`;
-    await writeFile(path.join(this.historyDir, `${id}.json`), serialized);
-    this.lastSnapshot = serialized;
-    this.history.push({ id, at, source, name: this.design.name });
+    const previous = this.lastSnapshotDesign;
+    await writeFile(this.snapshotFile(id), this.lastSerialized);
+    if (meta.label || meta.restoredFrom) await writeFile(this.metaFile(id), JSON.stringify(meta));
+    this.lastSnapshot = this.lastSerialized;
+    this.lastSnapshotDesign = this.design;
+    const changed = previous ? diffDesigns(previous, this.design).map((change) => change.path) : [];
+    this.history.push({ id, at, source, name: this.design.name, changed, ...meta });
     while (this.history.length > HISTORY_LIMIT) {
       const dropped = this.history.shift();
-      if (dropped) await rm(path.join(this.historyDir, `${dropped.id}.json`), { force: true });
+      if (!dropped) break;
+      await rm(this.snapshotFile(dropped.id), { force: true });
+      await rm(this.metaFile(dropped.id), { force: true });
     }
     this.emit("history", this.history);
   }
 
   private async loadHistory(): Promise<HistoryEntry[]> {
-    const files = (await readdir(this.historyDir)).filter((file) => file.endsWith(".json")).sort();
+    const files = (await readdir(this.historyDir))
+      .filter((file) => file.endsWith(".json") && !file.endsWith(".meta.json"))
+      .sort();
     const entries: HistoryEntry[] = [];
+    let previous: Design | null = null;
     for (const file of files) {
       const id = file.slice(0, -".json".length);
       const [stamp, source] = id.split("-");
       const at = Number(stamp);
       if (!Number.isFinite(at) || !isSource(source)) continue;
-      let name = "";
+      let text: string;
       try {
-        name = (JSON.parse(await readFile(path.join(this.historyDir, file), "utf8")) as { name?: string }).name ?? "";
+        text = await readFile(this.snapshotFile(id), "utf8");
       } catch {
         continue;
       }
-      entries.push({ id, at, source, name });
+      const result = parseDesignText(text);
+      if (!result.ok) continue;
+      let meta: EntryMeta = {};
+      try {
+        meta = JSON.parse(await readFile(this.metaFile(id), "utf8")) as EntryMeta;
+      } catch {
+        // Entries without a label have no sidecar.
+      }
+      const changed = previous ? diffDesigns(previous, result.design).map((change) => change.path) : [];
+      entries.push({ id, at, source, name: result.design.name, changed, ...meta });
+      previous = result.design;
+      this.lastSnapshot = text;
     }
+    this.lastSnapshotDesign = previous;
     return entries;
   }
+}
+
+type EntryMeta = Pick<HistoryEntry, "label" | "restoredFrom">;
+
+function describeSource(source: Source): string {
+  return source === "init" ? "Starting point" : source === "external" ? "Edit on disk" : "Earlier version";
 }
 
 function isSource(value: string | undefined): value is Source {

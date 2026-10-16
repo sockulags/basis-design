@@ -28,7 +28,9 @@ Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex
 
 - `design-system.json` in the workspace is the single source of truth. The agent edits it; Basis watches it, validates it against the schema in `shared/design.ts` and pushes valid versions to the preview over a WebSocket.
 - If an edit breaks validation, the preview keeps the last valid version, and Basis automatically sends the errors back to the agent, at most twice per turn.
-- Every agent turn becomes one history entry. Undo and Restore write an earlier snapshot back to disk.
+- The composer takes more than text. Paste, drop or attach images (sent as ACP image blocks when the agent supports them), or press **Pick** and click components in the preview. Each pick is attached as a numbered annotation carrying its variant, state, theme, driving tokens and computed styles, so "make [1] softer" is unambiguous. Pick mode stays on until Done or Esc: click as many components as you like, click one again to remove it. Numbered markers stay on the picked components until you send.
+- Every agent turn becomes one history entry, labelled with its prompt and the tokens it changed. Click any entry to inspect that version in the preview without touching the file. A banner then lists every token that differs from now, and you can step through versions or restore one. Undo walks back through the steps instead of toggling between two of them.
+- The chat can be resized by dragging its edge (double-click resets) and hidden with the toggle in the top bar or Ctrl+B.
 - The agent's instructions are written into the workspace as `AGENTS.md` and `CLAUDE.md`, and are also sent as an appended system prompt when the agent supports it.
 - Edits and reads inside the workspace are approved automatically. Anything else, such as shell commands, web fetches or files outside the workspace, shows up in the chat for you to approve.
 - Export gives you `tokens.css` (CSS custom properties, with dark mode via `data-theme` or the OS setting), a Tailwind v4 `@theme` stylesheet, or the raw JSON.

@@ -9,7 +9,7 @@ export function Tooltip({ text, children, open }: { text: string; children: Reac
   return (
     <span className={styles.tooltipAnchor} data-open={open || undefined}>
       {children}
-      <span className={styles.tooltip} role="tooltip">
+      <span className={styles.tooltip} data-ds="tooltip" role="tooltip">
         {text}
       </span>
     </span>
@@ -27,7 +27,7 @@ interface ToastProps {
 
 export function Toast({ tone, title, children, action, animate, onClose }: ToastProps) {
   return (
-    <div className={cx(styles.toast, animate && styles[animate])} role="status">
+    <div className={cx(styles.toast, animate && styles[animate])} data-ds="toast" data-variant={tone} role="status">
       <StatusIcon tone={tone} />
       <div className={styles.toastText}>
         <p className={styles.toastTitle}>{title}</p>
@@ -59,7 +59,7 @@ export function DialogStage({ title, children, footer, animate }: DialogProps) {
   return (
     <div className={cx(styles.stage, animate && styles.animate)}>
       <div className={styles.scrim} />
-      <div className={styles.dialog} role="dialog" aria-label={title}>
+      <div className={styles.dialog} data-ds="dialog" role="dialog" aria-label={title}>
         <h3 className={styles.dialogTitle}>{title}</h3>
         <div className={styles.dialogBody}>{children}</div>
         <div className={styles.dialogFooter}>{footer}</div>

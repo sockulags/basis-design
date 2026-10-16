@@ -32,7 +32,7 @@ export function Tabs({ items, value, onChange, variant, label }: TabsProps) {
   };
 
   return (
-    <div ref={list} className={styles.list} role="tablist" aria-label={label} data-variant={variant} onKeyDown={onKeyDown}>
+    <div ref={list} className={styles.list} data-ds="tabs" role="tablist" aria-label={label} data-variant={variant} onKeyDown={onKeyDown}>
       {items.map((item) => {
         const selected = item.id === value;
         return (
@@ -41,6 +41,7 @@ export function Tabs({ items, value, onChange, variant, label }: TabsProps) {
             type="button"
             role="tab"
             className={styles.tab}
+            data-ds="tab"
             data-tab={item.id}
             data-force={item.force}
             aria-selected={selected}
