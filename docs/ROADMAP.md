@@ -1,0 +1,95 @@
+# Roadmap: product repos, views and quality checks
+
+The plan a `/loop` works through, one step per round. Each round picks the first unchecked step, builds it,
+verifies it, ticks it here, and commits and pushes. Decisions made along the way go in the log at the end, so
+the next round (and Lucas) can see why.
+
+## Goal
+
+Basis becomes a quick way into design and prototyping for the products Lucas works on: link a product repo,
+let the agent bring in its design system, and build views of a feature from the patterns, with checks that
+keep quality up while the agent works alone.
+
+## Decisions from Lucas (2026-10-18)
+
+- **Linking:** a project points at a product repo. The agent may read it, never write to it; the Basis
+  workspace stays in its own folder under `BASIS_HOME`. Syncing changes forward into the repo is a later,
+  separate step and not part of this plan.
+- **Bringing in the design system:** tokens go into `design-system.json`, and the components and patterns are
+  restyled to resemble the repo's. An inventory of the repo's own components is kept as reference for the agent.
+- **Views:** a **New view** button, like New component: describe the feature or paste the ticket text. The
+  agent builds the screens from the workspace's patterns with realistic made-up data, linked into a clickable
+  flow.
+- **Quality checks** in the fix loop are a given.
+- **Autonomy:** commit and push each verified step, and make the decisions yourself while the app is early.
+  Polish comes later.
+
+## How each round works
+
+1. Read this file and `docs/DEVELOPMENT.md`; take the first unchecked step.
+2. Build it with narrow diffs that match the surrounding code. Add tests for server and parsing logic.
+3. `npx prettier --write src server test shared template` and `npm run check` must pass.
+4. Verify in the browser on a throwaway instance, never on Lucas' workspace or project list:
+   `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`, or
+   `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts` for anything about projects. Use a
+   real agent turn when the step changes what the agent does. For a product repo, use a small fixture repo
+   under `$TEMP` (Tailwind config, CSS variables and a few components), never one of Lucas' real repos.
+5. Update README and `docs/DEVELOPMENT.md` where the step changes behaviour or architecture.
+6. Tick the step, add decisions to the log, then commit (message explains why, body lists the changes, no AI
+   attribution) and push. Stop the test instance.
+7. If a step turns out bigger than one round, split it here into smaller steps first and do the first one.
+
+Stop the loop when every step is ticked, or when something needs Lucas: a decision that would change the
+product's direction, data that could be lost, or a failure you cannot get past.
+
+## Steps
+
+### Quality checks
+
+- [ ] **Contrast check.** Validate the colour roles pairwise in both themes (text on its surfaces, text on
+      primary and the other filled roles, borders where they carry meaning) against WCAG AA, as problems in the
+      fix loop phrased so the agent can act. Pure function in `shared/`, with tests; report from the server
+      with the other design problems.
+- [ ] **Accessibility check of the live gallery.** Run axe-core in the preview on the sections the user sees
+      (live side only, never past versions), report serious and critical violations as problems with the
+      section and selector. Keep it cheap: run after renders settle, not on every update.
+- [ ] **Contracts for patterns.** The starter patterns get a baseline contract like `shared/contracts.ts`;
+      patterns the agent adds get theirs in `patterns/contracts.ts`. Type-checked like components, and the
+      template must satisfy them (`template/contract-check.ts`).
+
+### Product repos
+
+- [ ] **Link a repo to a project.** A project entry can name a product repo folder (project menu: link,
+      change, unlink). Reads and searches inside the repo are approved automatically; writes there are
+      refused like any path outside the workspace. Every turn tells the agent the repo exists and is
+      read-only.
+- [ ] **Bring in its design system.** A guided turn, started from the project menu after linking (and offered
+      right after): the agent surveys the repo (Tailwind config, CSS variables, theme files, component
+      library), writes the tokens, restyles components and patterns to match, writes a component inventory
+      to a new agent-editable file (`product.md`) and opens a review of the key specimens.
+- [ ] **Create a project from a repo.** The create dialog can start from a product repo: it links the repo and
+      runs the step above in one go.
+- [ ] **Repo context in every turn.** The brief and per-turn context point the agent at `product.md` and the
+      repo, so requests about the product's features use its real terms and structure.
+
+### Views
+
+- [ ] **Views page.** A third page, `views/`, for whole screens. A view file defines a flow of screens; each
+      screen renders full width and gets a `go(screenId)` prop so buttons and links move through the flow. The
+      gallery shows one screen at a time with a strip to jump between them, and Show at widths apply. Starter
+      template: one small example view built from the starter patterns. Views are not part of the export.
+- [ ] **New view.** A sidebar button on the Views page asks for a name and the feature (or ticket text) and
+      starts a guided turn: the agent builds the flow from the workspace's patterns with realistic made-up
+      data, consistent across screens, and opens a review of it.
+- [ ] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
+      for specimens.
+
+### Later (not in this loop)
+
+- Syncing tokens and components forward into the linked repo.
+- Visual comparison of the whole gallery between two history entries.
+
+## Decision log
+
+- 2026-10-18: Order is quality checks first (small, and every later step benefits from them), then repos,
+  then views (views read best once a project looks like the product).
