@@ -7,6 +7,7 @@ import { clearProblems, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 import { findSpecimen } from "./narrow.ts";
+import { onReveal, useProgressiveCount } from "./progressive.ts";
 import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
 
 /** Introductions under the title of every page but the design system page, which has its own hero. */
@@ -42,6 +43,17 @@ export function Preview({ view, post }: PreviewProps) {
   // more would put their named radio groups in the document three times).
   const shown = new Set((review?.targets ?? []).map((target) => findSpecimen(specimens, target.specimen)?.id ?? ""));
   const problemsKey = problems.map((problem) => `${problem.file}: ${problem.message}`).join("\n");
+  // Large pages render their first screen at once and the rest in steps (see progressive.ts).
+  const [rendered, reveal] = useProgressiveCount(onPage.length, page);
+  const pageIds = onPage.map((specimen) => specimen.id).join(",");
+  useEffect(
+    () =>
+      onReveal((id) => {
+        const index = pageIds.split(",").indexOf(id);
+        if (index !== -1) reveal(index);
+      }),
+    [pageIds, reveal],
+  );
 
   useEffect(() => {
     post({
@@ -72,7 +84,9 @@ export function Preview({ view, post }: PreviewProps) {
             {review.baseline && (
               <Impact
                 baseline={review.baseline}
-                specimens={specimens.filter((specimen) => !shown.has(specimen.id))}
+                specimens={specimens.filter(
+                  (specimen) => !shown.has(specimen.id) && (!review.reach || review.reach.includes(specimen.file)),
+                )}
                 design={design}
                 theme={theme}
                 onImpact={onImpact}
@@ -100,9 +114,15 @@ export function Preview({ view, post }: PreviewProps) {
                 {INTROS[page] && <p className={styles.description}>{INTROS[page]}</p>}
               </header>
             )}
-            {onPage.map((specimen) => (
-              <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} />
-            ))}
+            {onPage.map((specimen, index) =>
+              index < rendered ? (
+                <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} />
+              ) : (
+                <section key={specimen.id} id={specimen.id} className={styles.pending} aria-busy="true">
+                  <h2>{specimen.title}</h2>
+                </section>
+              ),
+            )}
             {problems.map((problem) => (
               <div key={problem.file + problem.message} className="section-error" role="alert">
                 <strong>{problem.file} could not be shown</strong>

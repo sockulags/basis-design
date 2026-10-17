@@ -54,7 +54,8 @@ component source, patterns and the gallery specimens.
   `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel and composer.
 - `src/preview/` (iframe): `main.tsx` (messaging, picker, scroll spy, errors, link guard), `Preview.tsx`
   (foundations and specimen sections, or the review), `specimens.tsx` (glob and validation of
-  `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed").
+  `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed"),
+  `progressive.ts` (rendering large pages in steps).
 - `template/components` and `template/patterns`: starter source with specimens; `template/contract-check.ts`
   proves the template satisfies the contracts.
 
@@ -71,8 +72,20 @@ The agent opens a review by writing `review.json` (title and up to four targets:
 columns). While it is open, every turn and hand edit is recorded as an iteration on `refs/basis/review` instead
 of history; Approve makes one history entry, Discard restores the starting commit. The preview shows each target
 before and after: the before side imports the snapshot copy of the starting point, or today's specimen on the
-starting point's components when the block is new. `Impact.tsx` renders every other section before and after
-offscreen and compares structure and computed styles for "Also changed".
+starting point's components when the block is new. `Impact.tsx` renders the other sections before and after
+offscreen and compares structure and computed styles for "Also changed", but only the sections the review can
+reach: `server/reach.ts` follows changed files and changed CSS variables (with the tokens that refer to them)
+through the workspace's imports, by name through barrels, and stores the result on each iteration as `reach`.
+A change to a variable every component inherits from the gallery root (font, text colour, background, size,
+leading) reaches everything.
+
+### Large galleries
+
+A page renders its first six sections at once and the rest six per task (`src/preview/progressive.ts`), with a
+placeholder of roughly a section's height for each one still waiting. Nothing is unmounted, so every section
+still reports render errors to the fix loop. A hidden tab renders everything in one go, and scrolling to a
+section renders everything above it first. Measured with 86 component sections (2,356 components): the first
+commit went from about 440 ms of blocking render to about 65 ms, with the rest done within three seconds.
 
 ## Run and check
 
@@ -127,6 +140,10 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   only logs a React warning in the iframe console.
 - **Impact fingerprints** skip ids and normalise `url(#...)` in computed styles, since `useId` values differ
   between copies.
+- **Smooth scrolling gets cancelled** by the layout changes of progressive rendering, so scrolling to a section
+  jumps while sections are still being added and is smooth once the page is complete.
+- **Section ids** must stay under 80 characters: the chrome truncates longer ones from the preview. Repeated ids
+  become `id-2`, `id-3` (they used to grow as `id-2-2-2`, which broke navigation with many duplicates).
 
 ## Working agreement with Lucas
 
@@ -150,11 +167,10 @@ Lucas is rolling out a larger idea in steps:
 6. Projects: a project menu to switch, create (blank or a copy) and open workspace folders; one project open at
    a time, each with its own agent session: done. This is the base for linking Basis to real projects (reading
    a product repo's context, designing views for one of its features).
+7. Scaling the preview: pages render progressively, and "also changed" checks only the sections a review can
+   reach: done. Specimen modules still load up front; at 230 ms for 86 sections that was not the bottleneck.
 
-Next, agreed with Lucas: the rest of expansion.
-- **Scaling the preview.** Every specimen loads up front, and a review renders every section twice more
-  offscreen. Fine at 20 components, not at 100: load pages on their own and limit impact checks to sections a
-  change can reach.
+Expansion as agreed is done; the next step is Lucas' call.
 
 Ideas discussed for later: pattern states (declared data states plus automatic widths and themes), several
 alternatives side by side, blink/overlay mode for subtle differences, contracts for patterns, automatic
@@ -167,6 +183,8 @@ accessibility checks (axe) in the problems loop.
   `.basis/snapshots/`, and inspect could reuse that.
 - **Impact noise:** a specimen whose demo changes on its own (timers, random data) would always show under
   "Also changed". None of the starter specimens do.
+- **Reach is static.** A specimen that reads token values from its `design` prop in JavaScript, rather than
+  through CSS variables, is not found by `reach.ts`; its section is then left out of "Also changed".
 - **Undo** sits on Basis' own migration entries ("Basis added starter patterns") right after an upgrade, so
   pressing it removes the seeded files. They can be restored from history.
 - **Patterns have no contracts.** Base components added by the agent get one in `components/contracts.ts`,

@@ -42,6 +42,11 @@ export interface ReviewState extends ReviewRequest {
   steps: ReviewStep[];
   /** Source files that differ from the baseline in the latest step. */
   files: string[];
+  /**
+   * The specimen files the review's changes can reach (`components/Badge.specimen.tsx`), which bounds the
+   * "also changed" check; null when they can reach everything, absent until the first iteration.
+   */
+  reach?: string[] | null;
 }
 
 function labels(value: unknown, field: string, errors: string[]): string[] | undefined {

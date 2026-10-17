@@ -58,6 +58,8 @@ export interface ReviewView {
   layout: CompareLayout;
   /** The starting point, or null while it is being prepared. */
   baseline: { design: Design; base: string } | null;
+  /** Specimen files the changes can reach; "also changed" checks only these (all, when absent or null). */
+  reach?: string[] | null;
 }
 
 /**

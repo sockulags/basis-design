@@ -56,3 +56,17 @@
     padding-inline: var(--space-4);
   }
 }
+
+/* A section waiting for its turn to render (see progressive.ts); roughly a section's height, so the page does not jump. */
+.pending {
+  min-height: 420px;
+  padding-block: var(--space-12);
+  border-top: var(--border-thin) solid var(--color-border);
+}
+
+.pending h2 {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+}

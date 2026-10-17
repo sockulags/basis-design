@@ -4,6 +4,7 @@ import type { Annotation } from "../../shared/annotations.ts";
 import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
 import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
+import { requestReveal, stillRendering } from "./progressive.ts";
 import type { Preview as PreviewComponent } from "./Preview.tsx";
 import "./preview.css";
 
@@ -126,8 +127,13 @@ function PreviewApp() {
           return;
         }
         case "scroll-to": {
-          const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-          document.getElementById(message.id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+          // A section further down may not be rendered yet; render everything up to it first, so it lands right.
+          requestReveal(message.id);
+          // While sections are still being added, a smooth scroll gets cancelled by the layout changes; jump instead.
+          const instant = stillRendering() || matchMedia("(prefers-reduced-motion: reduce)").matches;
+          document
+            .getElementById(message.id)
+            ?.scrollIntoView({ behavior: instant ? "auto" : "smooth", block: "start" });
           return;
         }
         case "picking":

@@ -89,6 +89,13 @@ export class Reviews {
     return true;
   }
 
+  /** Records which specimens the review's changes can reach (null: all of them). */
+  async setReach(reach: string[] | null): Promise<void> {
+    if (!this.state) return;
+    this.state = { ...this.state, reach };
+    await this.save();
+  }
+
   /** Puts the working tree back to a commit: the starting point, or one of the iterations. */
   async restore(commit: string): Promise<void> {
     await git(this.dir, ["add", "-A"]);

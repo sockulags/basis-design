@@ -104,8 +104,10 @@ function readModule(
       problems.push({ file, message: `"${raw.title}": ${broken}` });
       continue;
     }
-    let id = raw.id && /^[a-z0-9-]+$/.test(raw.id) ? raw.id : slug(raw.title) || "section";
-    while (seen.has(id)) id = `${id}-2`;
+    const base = raw.id && /^[a-z0-9-]+$/.test(raw.id) ? raw.id : slug(raw.title) || "section";
+    // Repeats become base-2, base-3 ...: short enough for the chrome's 80-character limit on section ids.
+    let id = base;
+    for (let n = 2; seen.has(id); n++) id = `${base}-${n}`;
     seen.add(id);
     specimens.push({
       ...raw,

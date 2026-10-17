@@ -8,6 +8,7 @@ import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
 import { git, lines, typecheck } from "./exec.ts";
 import { commitToHistory, describeSource, loadHistory, type EntryMeta, type Source } from "./history.ts";
 import { DESIGN_FILE, isSourcePath, SOURCE_DIRS } from "./paths.ts";
+import { reachedSpecimens } from "./reach.ts";
 import { Reviews } from "./reviews.ts";
 import { seedWorkspace, writeGeneratedFiles } from "./setup.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -286,7 +287,19 @@ export class Workspace extends EventEmitter<Events> {
   }
 
   private async recordStep(label: string): Promise<void> {
-    if (await this.reviews.recordStep(label)) this.emit("review", this.reviews.state);
+    if (!(await this.reviews.recordStep(label))) return;
+    // Which sections the review's changes can reach, for the "also changed" check (see reach.ts).
+    const review = this.reviews.state;
+    if (review) {
+      const before = parseDesignText(
+        await git(this.dir, ["show", `${review.baseline}:${DESIGN_FILE}`]).catch(() => ""),
+      );
+      const reach = before.ok
+        ? await reachedSpecimens(this.dir, review.files, before.design, this.design).catch(() => null)
+        : null;
+      await this.reviews.setReach(reach);
+    }
+    this.emit("review", this.reviews.state);
   }
 
   private async endReview(): Promise<void> {

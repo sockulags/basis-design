@@ -55,6 +55,7 @@ export function useReview(
             targets: [...review.show, ...peeks.map((id) => ({ specimen: id, peek: true }))],
             layout,
             baseline: baseline ? { design: baseline.design, base: baseline.base } : null,
+            reach: review.reach,
           }
         : null,
     [review, hidden, peeks, layout, baseline],
