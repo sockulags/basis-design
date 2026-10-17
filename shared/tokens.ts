@@ -1,15 +1,14 @@
-import { COLOR_ROLES, type Design } from "./design.ts";
+import { COLOR_ROLES, componentTokens, globalTokenGroups, kebab, type Design } from "./design.ts";
 
 /**
  * Maps a design document to CSS custom properties. The JSON path → variable
- * rules here are the contract described to the agent in its brief.
+ * rules here (with design.ts, which also checks that no two tokens share a
+ * variable) are the contract described to the agent in its brief.
  */
 
-export type CssVar = readonly [name: string, value: string];
+export { kebab };
 
-export function kebab(key: string): string {
-  return key.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
-}
+export type CssVar = readonly [name: string, value: string];
 
 function entries(prefix: string, record: Record<string, string>): CssVar[] {
   return Object.entries(record).map(([key, value]) => [`--${prefix}-${kebab(key)}`, value] as const);
@@ -20,31 +19,12 @@ export function colorVars(design: Design, theme: "light" | "dark"): CssVar[] {
   return COLOR_ROLES.map((role) => [`--color-${kebab(role)}`, set[role]] as const);
 }
 
-/** Theme-independent variables: typography, space, shape, motion and component tokens. */
+/** Theme-independent variables: typography, space, shape, motion, and the tokens of every component. */
 export function baseVars(design: Design): CssVar[] {
-  const { typography: type, components } = design;
-  const vars: CssVar[] = [
-    ...entries("font", type.family),
-    ...entries("text", type.size),
-    ...entries("weight", type.weight),
-    ...entries("leading", type.leading),
-    ...entries("tracking", type.tracking),
-    ...entries("space", design.space),
-    ...entries("radius", design.radius),
-    ...entries("border", design.border),
-    ...entries("shadow", design.shadow),
-    ...entries("duration", design.motion.duration),
-    ...entries("ease", design.motion.ease),
-    ...entries("focus", design.focus),
-    ...entries("opacity", design.opacity),
+  return [
+    ...globalTokenGroups(design).flatMap(([prefix, tokens]) => entries(prefix, tokens)),
+    ...componentTokens(design).map((token) => [token.cssVar, token.value] as const),
   ];
-  for (const [component, tokens] of Object.entries(components)) {
-    for (const [key, value] of Object.entries(tokens)) {
-      if (component === "tabs" && key === "variant") continue;
-      vars.push([`--${component}-${kebab(key)}`, value]);
-    }
-  }
-  return vars;
 }
 
 function block(selector: string, vars: CssVar[], indent = ""): string {

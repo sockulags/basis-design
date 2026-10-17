@@ -35,6 +35,11 @@ The result becomes the starting point of real projects, so treat the components 
 - Hover/active colours step darker in light mode and usually lighter in dark mode.
 - Custom fonts: add the stylesheet URL to \`typography.fontImports\` (only https://fonts.googleapis.com/ or
   https://fonts.bunny.net/) and put the family first in the \`typography.family\` stack with fallbacks.
+- \`components\` is the one place that takes new keys: every component the design system adds gets a token group
+  there, named after the component in camelCase (\`StarRating\` → \`components.starRating\`). Its tokens become CSS
+  variables like the baseline ones (\`components.starRating.iconSize\` → \`--star-rating-icon-size\`), show up in
+  the review's token changes and are exported with the rest. Basis rejects a group whose name is one letter off a
+  baseline group, and two tokens that would become the same variable.
 
 ## Rules for components
 
@@ -47,8 +52,10 @@ The result becomes the starting point of real projects, so treat the components 
   contract before changing a component's props. You may add optional props and variants freely; change or
   remove an existing contract entry only when the user asks for a different API.
 - Style with the CSS custom properties from the token map (\`var(--color-primary)\`, \`var(--button-radius)\` ...),
-  never hard-coded colours, so tokens stay the single source of truth. For a knob the token schema lacks, use a
-  local custom property inside the module (for example \`--_lift: -2px\`).
+  never hard-coded colours, so tokens stay the single source of truth. Anything a designer would want to tune on
+  a component you added (sizes, spacing, radius, its own colours, motion) belongs in its token group in
+  \`design-system.json\`, with values that reference global tokens where they can. Use a local custom property
+  inside the module (for example \`--_lift: -2px\`) only for internal mechanics nobody would tune.
 - Keep the gallery hooks: each component's root element carries \`data-ds="<name>"\`; style \`data-force="hover"\`,
   \`"focus"\` and \`"active"\` exactly like the real pseudo-classes (\`.button:hover, .button[data-force="hover"]\`);
   keep \`data-variant\` where it exists and \`data-state-label\` on Field.
@@ -99,9 +106,12 @@ Whether the user asks in chat or through Basis' "New component" and "New pattern
    accessibility.
 4. For a base component, add its contract to \`components/contracts.ts\`: a props interface and an entry in
    \`AddedContracts\`. Basis rejects exports without a contract.
-5. Export it from the folder's \`index.ts\` and write its specimen in the same turn, showing every variant and
+5. Give a base component its own token group in \`design-system.json\` (\`components.<camelCaseName>\`) for what a
+   designer would tune, and style it with those variables. A pattern usually needs none: it inherits the tokens
+   of the components it is built from.
+6. Export it from the folder's \`index.ts\` and write its specimen in the same turn, showing every variant and
    state, with a group and an \`order\` that place it next to its relatives.
-6. Reply with what you built, its main props, and one or two refinements worth asking for next.
+7. Reply with what you built, its main props and tokens, and one or two refinements worth asking for next.
 
 ## Reviews: show what you changed
 
@@ -156,6 +166,7 @@ this folder:
 | focus.ringWidth | --focus-ring-width |
 | opacity.disabled | --opacity-disabled |
 | components.button.heightMd | --button-height-md |
+| components.starRating.iconSize (an added component) | --star-rating-icon-size |
 
 camelCase keys become kebab-case. Component tokens may reference global ones, e.g.
 \`"radius": "var(--radius-lg)"\`, which keeps the system coherent: prefer references over raw values in components.

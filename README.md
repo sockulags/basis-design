@@ -42,7 +42,7 @@ workspace/
   tsconfig.json, .basis/ type-check setup and contracts (generated), the open review, its snapshot, the chat
 ```
 
-The agent may edit `design-system.json`, `review.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
+The agent may edit `design-system.json`, `review.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour. A component the agent adds gets a token group of its own under `components` in `design-system.json` (`components.starRating.iconSize` becomes `--star-rating-icon-size`), so it is tuned, reviewed and exported like the baseline ones.
 
 Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar entry. A specimen lists blocks: a `matrix` of variants × states, a `grid` of labelled examples, or free `row` and `block` content for live demos (the format is in `components/specimen.ts`). The agent writes specimens alongside components, so a new component or variant shows up in the gallery as soon as it exists. Basis owns only the foundation sections: colour, type, shape and motion.
 

@@ -4,6 +4,8 @@ import { z } from "zod";
  * The design system document the agent edits (`design-system.json`).
  * Every leaf is a CSS value string except a few enums. Missing keys fall back
  * to DEFAULT_DESIGN; unknown keys are rejected so typos surface immediately.
+ * The one open place is `components`: besides the baseline groups it takes a
+ * group of tokens for every component the design system adds.
  */
 
 // Values are injected into stylesheets, so characters that could end a declaration or block are refused.
@@ -122,7 +124,11 @@ const componentsSchema = z
     dialog: group(["radius", "padding", "shadow", "width", "overlayBlur"]),
     progress: group(["height", "radius"]),
   })
-  .strict();
+  // Tokens of components the design system adds; their group names are checked in validateDesign.
+  .catchall(z.record(z.string(), cssValue));
+
+/** Component token groups every design system has; added components get groups of their own next to them. */
+export const BASELINE_COMPONENTS = Object.keys(componentsSchema.shape) as (keyof typeof componentsSchema.shape)[];
 
 export const designSchema = z
   .object({
@@ -434,12 +440,105 @@ export type DesignValidation = { ok: true; design: Design } | { ok: false; error
 
 export function validateDesign(raw: unknown): DesignValidation {
   const parsed = designSchema.safeParse(mergeDefaults(DEFAULT_DESIGN, raw));
-  if (parsed.success) return { ok: true, design: parsed.data };
-  const errors = parsed.error.issues.map((issue) => {
-    const path = issue.path.join(".");
-    return path ? `${path}: ${issue.message}` : issue.message;
-  });
-  return { ok: false, errors };
+  if (!parsed.success) {
+    const errors = parsed.error.issues.map((issue) => {
+      const path = issue.path.join(".");
+      return path ? `${path}: ${issue.message}` : issue.message;
+    });
+    return { ok: false, errors };
+  }
+  const errors = componentProblems(parsed.data);
+  return errors.length ? { ok: false, errors } : { ok: true, design: parsed.data };
+}
+
+/** camelCase to kebab-case, as JSON paths become CSS variable names: `heightMd` → `height-md`. */
+export function kebab(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+}
+
+/** The theme-independent token groups and the CSS variable prefix of each (`space.4` → `--space-4`). */
+export function globalTokenGroups(design: Design): [prefix: string, tokens: Record<string, string>][] {
+  const type = design.typography;
+  return [
+    ["font", type.family],
+    ["text", type.size],
+    ["weight", type.weight],
+    ["leading", type.leading],
+    ["tracking", type.tracking],
+    ["space", design.space],
+    ["radius", design.radius],
+    ["border", design.border],
+    ["shadow", design.shadow],
+    ["duration", design.motion.duration],
+    ["ease", design.motion.ease],
+    ["focus", design.focus],
+    ["opacity", design.opacity],
+  ];
+}
+
+export interface ComponentToken {
+  component: string;
+  key: string;
+  value: string;
+  /** `components.starRating.iconSize` → `--star-rating-icon-size`. */
+  cssVar: string;
+}
+
+/** Every component token that becomes a CSS variable (the tabs variant is a switch, not a value). */
+export function componentTokens(design: Design): ComponentToken[] {
+  return Object.entries(design.components).flatMap(([component, tokens]) =>
+    Object.entries(tokens as Record<string, string>)
+      .filter(([key]) => !(component === "tabs" && key === "variant"))
+      .map(([key, value]) => ({ component, key, value, cssVar: `--${kebab(component)}-${kebab(key)}` })),
+  );
+}
+
+const CAMEL_CASE = /^[a-z][a-zA-Z0-9]*$/;
+
+/** True when one insertion, deletion or substitution turns one name into the other: a likely typo. */
+function oneEditApart(a: string, b: string): boolean {
+  if (a === b || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  return a.slice(i + 1) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i) || a.slice(i) === b.slice(i + 1);
+}
+
+/**
+ * Checks the groups of added components: a camelCase name, not a likely typo
+ * of a baseline group, and CSS variables no other token already has.
+ */
+function componentProblems(design: Design): string[] {
+  const problems: string[] = [];
+  const baseline = new Set<string>(BASELINE_COMPONENTS);
+  for (const name of Object.keys(design.components)) {
+    if (baseline.has(name)) continue;
+    if (!CAMEL_CASE.test(name)) {
+      problems.push(`components.${name}: name an added component's token group in camelCase after it, like starRating`);
+      continue;
+    }
+    for (const key of Object.keys(design.components[name] ?? {})) {
+      if (!CAMEL_CASE.test(key)) problems.push(`components.${name}.${key}: token names are camelCase, like iconSize`);
+    }
+    // Short names are left alone: a Cart component is not a typo of card.
+    const near = BASELINE_COMPONENTS.find((group) => group.length >= 5 && oneEditApart(name, group));
+    if (near) {
+      problems.push(
+        `components.${name}: did you mean "${near}"? An added component's group needs a name that is not one letter off a baseline group`,
+      );
+    }
+  }
+  const owners = new Map<string, string>();
+  for (const [prefix, tokens] of globalTokenGroups(design)) {
+    for (const key of Object.keys(tokens)) owners.set(`--${prefix}-${kebab(key)}`, `the global token ${prefix}.${key}`);
+  }
+  for (const token of componentTokens(design)) {
+    const path = `components.${token.component}.${token.key}`;
+    const owner = owners.get(token.cssVar);
+    if (owner)
+      problems.push(`${path}: becomes ${token.cssVar}, which ${owner} already uses; rename the group or the token`);
+    else owners.set(token.cssVar, path);
+  }
+  return problems;
 }
 
 export function parseDesignText(text: string): DesignValidation {

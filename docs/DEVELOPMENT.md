@@ -137,12 +137,10 @@ Lucas is rolling out a larger idea in steps:
 3. Reviews, replacing a manual "Compare" view Lucas rejected: done.
 4. Groundwork: tests, oxlint and Prettier, the workspace split into modules, one preview view model, App split
    into hooks, the chat and agent session surviving restarts: done.
+5. Tokens for added components: `components` takes a group per added component next to the strict baseline
+   groups; `shared/design.ts` checks the names and that no two tokens share a CSS variable: done.
 
-Next, agreed with Lucas: expansion.
-
-- **Tokens for added components.** The token schema is strict and lists only the 20 baseline components, so a
-  component the agent adds cannot have tokens, cannot be tuned as tokens, and is missing from `tokens.css` and
-  the Tailwind export.
+Next, agreed with Lucas: the rest of expansion.
 - **Several workspaces (projects).** `server/index.ts` creates one workspace and one agent as singletons; the
   vision of linking Basis to real projects needs a project concept.
 - **Scaling the preview.** Every specimen loads up front, and a review renders every section twice more

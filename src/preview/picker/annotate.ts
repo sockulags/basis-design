@@ -61,9 +61,12 @@ function tokensFor(el: HTMLElement, design: Design): Pick<Annotation, "tokenPath
       .reduce<unknown>((node, key) => (node as Record<string, unknown> | undefined)?.[key], design);
     return { tokenPath: token, tokens: { value: typeof value === "string" ? value : JSON.stringify(value) } };
   }
-  const group = COMPONENT_GROUP[el.dataset.ds ?? ""];
-  if (!group) return { tokens: {} };
-  return { tokenPath: `components.${group}`, tokens: { ...design.components[group] } as Record<string, string> };
+  // Baseline components map to their shared group; an added one's group is its data-ds name in camelCase.
+  const name = el.dataset.ds ?? "";
+  const group = COMPONENT_GROUP[name] ?? name.replace(/-([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+  const tokens = design.components[group];
+  if (!tokens) return { tokens: {} };
+  return { tokenPath: `components.${group}`, tokens: { ...tokens } as Record<string, string> };
 }
 
 export function annotate(el: HTMLElement, design: Design): Annotation {
