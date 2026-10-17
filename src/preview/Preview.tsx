@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
 import { contrastFailures } from "../../shared/contrast.ts";
+import { scheduleAccessibilityCheck } from "./a11y.ts";
 import { useResolvedColors } from "./color.ts";
-import { clearProblems, setFindings, setProblem } from "./errors.ts";
+import { clearProblems, onHotUpdate, setFindings, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 import { findSpecimen } from "./narrow.ts";
@@ -78,6 +79,14 @@ export function Preview({ view, post }: PreviewProps) {
     for (const problem of problems) setProblem(`Specimen ${problem.file}`, problem.message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [problemsKey]);
+
+  // Anything that changes what the live demos render asks for an accessibility check once things settle.
+  const [hotVersion, setHotVersion] = useState(0);
+  useEffect(() => onHotUpdate(() => setHotVersion((value) => value + 1)), []);
+  useEffect(
+    () => scheduleAccessibilityCheck(),
+    [design, theme, page, review, rendered, frames, sectionsKey, hotVersion],
+  );
 
   const props = { design, onAsk };
   return (

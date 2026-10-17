@@ -77,13 +77,14 @@ export function Card({ interactive, selected, force, className, ...rest }: CardP
   );
 }
 
-export function Progress({ value }: { value?: number }) {
+export function Progress({ value, label = "Progress" }: { value?: number; label?: string }) {
   const indeterminate = value === undefined;
   return (
     <div
       className={styles.progress}
       data-ds="progress"
       role="progressbar"
+      aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={value}

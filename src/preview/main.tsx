@@ -155,7 +155,7 @@ function PreviewApp() {
     window.addEventListener("message", onMessage);
     post({ type: "ready" });
     const stop = onProblems((errors) => post({ type: "errors", errors }));
-    const stopChecks = onFindings((checks) => post({ type: "checks", checks }));
+    const stopChecks = onFindings((checks, running) => post({ type: "checks", checks, running }));
     return () => {
       window.removeEventListener("message", onMessage);
       stop();

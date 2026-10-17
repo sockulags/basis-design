@@ -84,6 +84,8 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export interface ProgressProps {
   /** Omitted means indeterminate. */
   value?: number;
+  /** What is progressing, for assistive technology. */
+  label?: string;
 }
 
 export interface SpinnerProps {

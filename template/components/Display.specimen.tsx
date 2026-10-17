@@ -134,7 +134,7 @@ export default defineSpecimen([
             label: "progress 35%",
             render: () => (
               <div style={{ width: "100%" }}>
-                <Progress value={35} />
+                <Progress value={35} label="Upload" />
               </div>
             ),
           },
@@ -142,7 +142,7 @@ export default defineSpecimen([
             label: "progress 80%",
             render: () => (
               <div style={{ width: "100%" }}>
-                <Progress value={80} />
+                <Progress value={80} label="Upload" />
               </div>
             ),
           },
@@ -150,7 +150,7 @@ export default defineSpecimen([
             label: "indeterminate",
             render: () => (
               <div style={{ width: "100%" }}>
-                <Progress />
+                <Progress label="Loading" />
               </div>
             ),
           },

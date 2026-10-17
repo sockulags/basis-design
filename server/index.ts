@@ -167,7 +167,7 @@ sockets.on("connection", (ws: WebSocket) => {
   });
   ws.on("close", () => {
     previewReports.forget(ws);
-    current.agent.setPreviewErrors(previewReports.current, previewReports.checks);
+    current.agent.setPreviewErrors(previewReports.current, previewReports.checks, previewReports.checking);
   });
 });
 
@@ -252,8 +252,9 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
         message.errors,
         message.visible === true,
         Array.isArray(message.checks) ? message.checks : [],
+        message.checking === true,
       );
-      agent.setPreviewErrors(previewReports.current, previewReports.checks);
+      agent.setPreviewErrors(previewReports.current, previewReports.checks, previewReports.checking);
       return;
     case "export-manifest": {
       const files = await starterKit();

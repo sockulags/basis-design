@@ -45,6 +45,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
   const [activeSection, setActiveSection] = useState<string>();
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [previewChecks, setPreviewChecks] = useState<string[]>([]);
+  const [checking, setChecking] = useState(false);
   const [sections, setSections] = useState<NavSection[]>([]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<PreviewFrameHandle>(null);
@@ -115,11 +116,17 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
   useEffect(() => {
     if (!state.connected) return;
     const report = () =>
-      send({ type: "preview-errors", errors: previewErrors, checks: previewChecks, visible: !document.hidden });
+      send({
+        type: "preview-errors",
+        errors: previewErrors,
+        checks: previewChecks,
+        checking,
+        visible: !document.hidden,
+      });
     report();
     document.addEventListener("visibilitychange", report);
     return () => document.removeEventListener("visibilitychange", report);
-  }, [previewErrors, previewChecks, state.connected, send]);
+  }, [previewErrors, previewChecks, checking, state.connected, send]);
 
   // Esc ends pick mode even when focus is outside the preview.
   useEffect(() => {
@@ -161,6 +168,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
         case "errors":
           return setPreviewErrors(message.errors);
         case "checks":
+          setChecking(message.running);
           return setPreviewChecks(message.checks);
         case "sections":
           return setSections(message.sections);

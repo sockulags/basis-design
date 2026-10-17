@@ -103,6 +103,13 @@ only the findings a turn introduced (not there when the turn started) into the f
 contrast table uses the same pairs. Text is held to 4.5:1, `textSubtle`, `primary` on `bg` and the focus ring to
 3:1; disabled text and borders are not checked.
 
+Accessibility (`src/preview/a11y.ts`) runs axe-core over elements marked `data-checked` (each specimen's
+demos and the review's live panes, never past versions, foundations or the offscreen impact copies), 600 ms
+after anything that changes them, and keeps serious and critical WCAG A/AA violations, one per demo and rule so
+the text stays stable for the comparison. Duplicate-id rules are off, since the gallery repeats demos. While a
+check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the usual
+settle time) before it decides what the turn introduced.
+
 ### Large galleries
 
 A page renders its first six sections at once and the rest six per task (`src/preview/progressive.ts`), with a

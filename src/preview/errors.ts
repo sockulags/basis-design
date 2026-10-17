@@ -36,18 +36,31 @@ export function onProblems(listener: (errors: string[]) => void): () => void {
  * sends the agent the ones its last change introduced.
  */
 const findings = new Map<string, string[]>();
-const findingListeners = new Set<(checks: string[]) => void>();
+/** Checks that are scheduled or running; the fix loop waits for them before it looks at the findings. */
+const checking = new Set<string>();
+const findingListeners = new Set<(checks: string[], running: boolean) => void>();
+
+function notifyFindings(): void {
+  const all = [...findings.entries()].flatMap(([key, items]) => items.map((item) => `${key}: ${item}`));
+  for (const listener of findingListeners) listener(all, checking.size > 0);
+}
 
 export function setFindings(check: string, list: string[]): void {
   const current = findings.get(check) ?? [];
   if (current.length === list.length && current.every((item, index) => item === list[index])) return;
   if (list.length) findings.set(check, list);
   else findings.delete(check);
-  const all = [...findings.entries()].flatMap(([key, items]) => items.map((item) => `${key}: ${item}`));
-  for (const listener of findingListeners) listener(all);
+  notifyFindings();
 }
 
-export function onFindings(listener: (checks: string[]) => void): () => void {
+export function setChecking(check: string, running: boolean): void {
+  if (running === checking.has(check)) return;
+  if (running) checking.add(check);
+  else checking.delete(check);
+  notifyFindings();
+}
+
+export function onFindings(listener: (checks: string[], running: boolean) => void): () => void {
   findingListeners.add(listener);
   return () => findingListeners.delete(listener);
 }

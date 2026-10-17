@@ -70,6 +70,8 @@ function agentEnv(): NodeJS.ProcessEnv {
 const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
 const MAX_AUTO_FIXES = 2;
 const PREVIEW_SETTLE_MS = 1500;
+/** How long the fix loop waits at most for the preview's checks to finish after it settled. */
+const CHECKS_WAIT_MS = 8000;
 
 type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-remove": [string]; "chat-reset": [] };
 type UserItem = Extract<ChatItem, { kind: "user" }>;
@@ -98,6 +100,7 @@ export class AgentHost extends EventEmitter<Events> {
   /** Findings of the preview's automatic checks, and the ones there were when the current turn started. */
   private checks: string[] = [];
   private checksBefore = new Set<string>();
+  private checking = false;
   private seq = 0;
   /** Prompts sent while a turn was running, oldest first. */
   private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
@@ -400,7 +403,7 @@ ${message}`
    * Render errors and check findings of the current tab's preview (chosen by PreviewReports); they feed the
    * auto-fix loop.
    */
-  setPreviewErrors(errors: unknown[], checks: unknown[] = []): void {
+  setPreviewErrors(errors: unknown[], checks: unknown[] = [], checking = false): void {
     const strings = (items: unknown[], limit: number, length: number) =>
       items
         .filter((item): item is string => typeof item === "string")
@@ -408,13 +411,18 @@ ${message}`
         .map((item) => item.slice(0, length));
     this.previewErrors = strings(errors, 10, 600);
     this.checks = strings(checks, 40, 400);
+    this.checking = checking;
   }
 
   /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
   private async collectProblems(): Promise<string | null> {
     const { errors, typeErrors, reviewErrors } = this.workspace.state;
     // Give the preview a moment to hot-reload the new code and report what failed to render.
-    if (!errors && !typeErrors) await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
+    if (!errors && !typeErrors) {
+      await sleep(PREVIEW_SETTLE_MS);
+      // Checks run once the preview settles; wait for them, so what the turn introduced is known.
+      for (let waited = 0; this.checking && waited < CHECKS_WAIT_MS; waited += 200) await sleep(200);
+    }
     const sections: string[] = [];
     if (reviewErrors)
       sections.push(`review.json is not valid, so no review was opened or updated:\n${list(reviewErrors)}`);
@@ -708,6 +716,10 @@ function acceptedImages(images: PromptImage[] | undefined): PromptImage[] {
         image.data.length <= MAX_IMAGE_BASE64,
     )
     .slice(0, MAX_IMAGES);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function list(items: string[]): string {

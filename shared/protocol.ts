@@ -198,7 +198,7 @@ export type ClientMessage =
    * automatic checks, and whether the tab is visible: with several tabs open, the fix loop listens to the one
    * the user looks at.
    */
-  | { type: "preview-errors"; errors: string[]; visible: boolean; checks?: string[] }
+  | { type: "preview-errors"; errors: string[]; visible: boolean; checks?: string[]; checking?: boolean }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean }
   | { type: "project-switch"; id: string }

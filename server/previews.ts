@@ -10,12 +10,13 @@ export class PreviewReports<Connection> {
   private clock = 0;
 
   /** Records what a tab's preview shows now (render errors and check findings), and whether the tab is visible. */
-  report(connection: Connection, errors: string[], visible: boolean, checks: string[] = []): void {
+  report(connection: Connection, errors: string[], visible: boolean, checks: string[] = [], checking = false): void {
     const previous = this.reports.get(connection);
     const tick = ++this.clock;
     this.reports.set(connection, {
       errors,
       checks,
+      checking,
       visible,
       // Becoming visible makes a tab the current one; staying visible keeps the moment it became so.
       visibleSince: visible ? (previous?.visible ? previous.visibleSince : tick) : 0,
@@ -38,6 +39,11 @@ export class PreviewReports<Connection> {
     return this.best()?.checks ?? [];
   }
 
+  /** Whether that tab is still running a check. */
+  get checking(): boolean {
+    return this.best()?.checking ?? false;
+  }
+
   private best(): Report | undefined {
     let best: Report | undefined;
     for (const report of this.reports.values()) if (!best || rank(report, best) > 0) best = report;
@@ -48,6 +54,7 @@ export class PreviewReports<Connection> {
 interface Report {
   errors: string[];
   checks: string[];
+  checking: boolean;
   visible: boolean;
   /** When the tab last became visible (a counter, 0 while hidden). */
   visibleSince: number;

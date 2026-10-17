@@ -4,6 +4,7 @@ import { PAGES, type PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
 import { Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
 import galleryStyles from "./Gallery.module.css";
+import { CHECKED } from "./a11y.ts";
 
 /**
  * Every `*.specimen.tsx` one folder deep in the workspace. "@workspace"
@@ -253,7 +254,7 @@ function Framed({ block, design, frames }: { block: SpecimenBlock; design: Desig
                 {width.px ? `${width.label} · ${width.px}px` : width.label}
                 {frames.bothThemes ? ` · ${theme}` : ""}
               </figcaption>
-              <div className={galleryStyles.frameScroll}>
+              <div className={galleryStyles.frameScroll} tabIndex={0}>
                 <form
                   className={`ds-root ${galleryStyles.frameBody}`}
                   data-theme={theme}
@@ -317,7 +318,10 @@ export function SpecimenSection({
 }) {
   return (
     <Section id={specimen.id} title={specimen.title} description={specimen.description ?? ""} onAsk={onAsk}>
-      <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
+      {/* What the accessibility check covers (see a11y.ts); display: contents keeps the layout as it was. */}
+      <div {...{ [CHECKED]: specimen.title }} style={{ display: "contents" }}>
+        <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
+      </div>
     </Section>
   );
 }

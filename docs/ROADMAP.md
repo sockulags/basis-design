@@ -50,7 +50,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
       primary and the other filled roles, borders where they carry meaning) against WCAG AA, as problems in the
       fix loop phrased so the agent can act. Pure function in `shared/`, with tests; report from the server
       with the other design problems.
-- [ ] **Accessibility check of the live gallery.** Run axe-core in the preview on the sections the user sees
+- [x] **Accessibility check of the live gallery.** Run axe-core in the preview on the sections the user sees
       (live side only, never past versions), report serious and critical violations as problems with the
       section and selector. Keep it cheap: run after renders settle, not on every update.
 - [ ] **Contracts for patterns.** The starter patterns get a baseline contract like `shared/contracts.ts`;
@@ -95,5 +95,10 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: axe runs in the preview over marked live demos only. Duplicate-id rules are off (the gallery
+  repeats demos on purpose), and only serious and critical violations count. The starter template had three
+  findings, now fixed: the loading button hid its label from screen readers, Progress had no accessible name
+  (new optional `label` prop, also in the contract), and the gallery's scroll areas were not keyboard
+  reachable.
 - 2026-10-18: Order is quality checks first (small, and every later step benefits from them), then repos,
   then views (views read best once a project looks like the product).

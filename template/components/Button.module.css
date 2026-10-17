@@ -114,8 +114,9 @@
   cursor: progress;
 }
 
+/* Transparent rather than hidden, so screen readers still announce what the button does. */
 .button[data-loading] .label {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .spinner {

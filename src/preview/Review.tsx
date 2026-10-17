@@ -6,6 +6,7 @@ import { previewCss } from "../../shared/tokens.ts";
 import { describe, onHotUpdate, setProblem } from "./errors.ts";
 import styles from "./Review.module.css";
 import { SectionBoundary } from "./SectionBoundary.tsx";
+import { CHECKED } from "./a11y.ts";
 import { findSpecimen, narrowSpecimen } from "./narrow.ts";
 import {
   loadPastSpecimen,
@@ -283,11 +284,14 @@ function Target({ index, target, specimens, sides, design, theme, onAsk, showing
                     {source.note && <span className={styles.paneNote}>{source.note}</span>}
                   </p>
                   <SectionBoundary name={label} onAsk={onAsk}>
-                    <SpecimenBlocks
-                      specimen={narrowed.specimen}
-                      design={design}
-                      frames={framesFor(target, theme, side.key)}
-                    />
+                    {/* The live side is what the accessibility check covers (see a11y.ts). */}
+                    <div {...{ [CHECKED]: label }} style={{ display: "contents" }}>
+                      <SpecimenBlocks
+                        specimen={narrowed.specimen}
+                        design={design}
+                        frames={framesFor(target, theme, side.key)}
+                      />
+                    </div>
                   </SectionBoundary>
                 </div>
               );

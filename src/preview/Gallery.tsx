@@ -56,7 +56,8 @@ interface MatrixProps<R extends string, C extends string> {
 /** Rows × states grid. Each cell renders the component pinned to that state. */
 export function Matrix<R extends string, C extends string>({ rows, cols, render, minCol = 110 }: MatrixProps<R, C>) {
   return (
-    <div className={styles.matrixScroll}>
+    // Focusable, so a matrix wider than its column can be scrolled from the keyboard.
+    <div className={styles.matrixScroll} tabIndex={0}>
       <div
         className={styles.matrix}
         style={{ gridTemplateColumns: `minmax(84px, max-content) repeat(${cols.length}, minmax(${minCol}px, 1fr))` }}
