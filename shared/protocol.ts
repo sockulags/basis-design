@@ -1,6 +1,7 @@
 import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
 import type { PageId } from "./frame.ts";
+import type { ReviewState } from "./review.ts";
 
 /** Messages between the browser and the Basis server over the /bridge WebSocket. */
 
@@ -52,6 +53,8 @@ export type ChatItem =
       images?: string[];
       /** Labels of attached annotations, in order. */
       annotations?: string[];
+      /** Sent while the agent was busy; runs when the current turn ends. */
+      queued?: boolean;
     }
   | { kind: "agent"; id: string; text: string }
   | { kind: "thought"; id: string; text: string }
@@ -70,7 +73,7 @@ export type ChatItem =
 export interface HistoryEntry {
   id: string;
   at: number;
-  source: "init" | "agent" | "revert" | "external";
+  source: "init" | "agent" | "revert" | "external" | "review";
   name: string;
   /** The prompt behind an agent change, or what a restore went back to. */
   label?: string;
@@ -114,7 +117,17 @@ export interface DesignState {
   errors: string[] | null;
   /** Type errors in the source folders (including broken or missing contracts); null when clean. */
   typeErrors: string[] | null;
+  /** Problems with review.json; null when it is valid or absent. */
+  reviewErrors: string[] | null;
   workspace: string;
+}
+
+/** A past version materialised for a review: its tokens, and where the preview can import its source. */
+export interface Baseline {
+  id: string;
+  design: Design;
+  /** URL path on the preview origin of the folder holding that version's components/ and patterns/. */
+  base: string;
 }
 
 export type ServerMessage =
@@ -126,12 +139,16 @@ export type ServerMessage =
       history: HistoryEntry[];
       agent: AgentState;
       chat: ChatItem[];
+      review: ReviewState | null;
     }
+  | { type: "review"; review: ReviewState | null }
+  | { type: "baseline"; baseline: Baseline }
   | { type: "design"; design: DesignState }
   | { type: "history"; history: HistoryEntry[] }
   | { type: "agent"; agent: AgentState }
   | { type: "chat-upsert"; item: ChatItem }
   | { type: "chat-reset" }
+  | { type: "chat-remove"; id: string }
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "export-manifest"; folder: string; files: { path: string; bytes: number }[] }
   | { type: "export-result"; result: ExportWriteResult };
@@ -146,6 +163,15 @@ export type ClientMessage =
   | { type: "switch-agent"; agent: AgentId }
   | { type: "revert"; historyId: string }
   | { type: "snapshot-get"; id: string }
+  | { type: "baseline-get"; id: string }
+  /** Ends the open review with one history entry for everything it changed. */
+  | { type: "review-approve" }
+  /** Ends the open review and puts everything back as it was when it started. */
+  | { type: "review-discard" }
+  /** Goes back to an earlier iteration of the open review (recorded as a new iteration). */
+  | { type: "review-step"; id: string }
+  /** Removes a queued prompt before it runs. */
+  | { type: "unqueue"; id: string }
   /** Render errors the preview currently shows (empty when it renders cleanly). */
   | { type: "preview-errors"; errors: string[] }
   | { type: "export-manifest" }

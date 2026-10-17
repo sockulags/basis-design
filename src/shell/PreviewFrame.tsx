@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { Design } from "../../shared/design.ts";
-import { parseFromPreview, type NavSection, type PageId, type ToPreview } from "../../shared/frame.ts";
+import { parseFromPreview, type NavSection, type PageId, type ReviewView, type ToPreview } from "../../shared/frame.ts";
 import styles from "./Shell.module.css";
 
 export interface PreviewFrameHandle {
@@ -15,11 +15,13 @@ interface PreviewFrameProps {
   design: Design;
   theme: "light" | "dark";
   page: PageId;
+  review: ReviewView | null;
   picking: boolean;
   inspecting: boolean;
   onPicks: (annotations: Annotation[]) => void;
   onPickingEnd: () => void;
   onAsk: (prefix: string) => void;
+  onImpact: (ids: string[]) => void;
   onActiveSection: (id: string) => void;
   onErrors: (errors: string[]) => void;
   onSections: (sections: NavSection[]) => void;
@@ -31,7 +33,7 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  { port, design, theme, page, picking, inspecting, onPicks, onPickingEnd, onAsk, onActiveSection, onErrors, onSections },
+  { port, design, theme, page, review, picking, inspecting, onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -49,8 +51,8 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
   }));
 
   // Latest callbacks without re-subscribing the listener on every render.
-  const handlers = useRef({ onPicks, onPickingEnd, onAsk, onActiveSection, onErrors, onSections });
-  handlers.current = { onPicks, onPickingEnd, onAsk, onActiveSection, onErrors, onSections };
+  const handlers = useRef({ onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections });
+  handlers.current = { onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections };
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -68,6 +70,8 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
           return h.onActiveSection(message.id);
         case "ask":
           return h.onAsk(message.prefix);
+        case "impact":
+          return h.onImpact(message.ids);
         case "picks":
           return h.onPicks(message.annotations);
         case "picking":
@@ -84,8 +88,8 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
   }, [previewOrigin]);
 
   useEffect(() => {
-    if (generation > 0) post({ type: "render", design, theme, page });
-  }, [generation, design, theme, page]);
+    if (generation > 0) post({ type: "render", design, theme, page, review });
+  }, [generation, design, theme, page, review]);
 
   useEffect(() => {
     if (generation > 0) post({ type: "picking", on: picking });

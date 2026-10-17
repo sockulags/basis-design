@@ -1,0 +1,144 @@
+.review {
+  display: grid;
+  align-content: start;
+  gap: var(--space-10);
+  /* A short review still fills the frame with the design's background. */
+  min-height: 100vh;
+  padding: var(--space-10) var(--space-6) var(--space-16);
+}
+
+.header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.kicker {
+  margin: 0;
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.target {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.targetHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.targetTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.peek {
+  color: var(--color-text-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.review[data-layout="stacked"] .panes {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Each pane is its own design system root, so the "before" side shows its own tokens. */
+.pane {
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+  min-width: 0;
+  /* .ds-root fills the viewport as the page root; a pane only needs its content. */
+  min-height: 0;
+  padding: var(--space-5);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+.paneLabel {
+  margin: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-thin) solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.notice {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* Offscreen copies of every section, rendered only to find out which ones changed. */
+.impact {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  width: 1100px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.impact *,
+.impact *::before,
+.impact *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (max-width: 720px) {
+  .review {
+    padding-inline: var(--space-4);
+  }
+
+  .panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.paneNote {
+  margin-left: var(--space-2);
+  color: var(--color-text-subtle);
+  font-weight: var(--weight-regular);
+  letter-spacing: normal;
+  text-transform: none;
+}

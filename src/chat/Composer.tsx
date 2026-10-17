@@ -7,6 +7,10 @@ import { imageAttachment, type Attachment } from "./images.ts";
 interface ComposerProps {
   ready: boolean;
   busy: boolean;
+  /** Earlier prompts, oldest first, for recalling with the arrow keys. */
+  sent: string[];
+  /** True while a review is open; every message is part of it. */
+  reviewing: boolean;
   supportsImages: boolean;
   draft: string;
   onDraft: (text: string) => void;
@@ -23,6 +27,8 @@ interface ComposerProps {
 export function Composer({
   ready,
   busy,
+  sent,
+  reviewing,
   supportsImages,
   draft,
   onDraft,
@@ -39,7 +45,11 @@ export function Composer({
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  /** Position in `sent` while recalling earlier prompts; null while typing a new one. */
+  const recall = useRef<number | null>(null);
   const hasContent = Boolean(draft.trim() || images.length || annotations.length);
+  // While the agent works, a message is queued and runs when the current turn ends.
+  const canSend = (ready || busy) && hasContent;
 
   useEffect(() => {
     const el = composerRef.current;
@@ -66,7 +76,8 @@ export function Composer({
   };
 
   const submit = () => {
-    if (!hasContent || !ready) return;
+    if (!canSend) return;
+    recall.current = null;
     send({
       type: "prompt",
       text: draft.trim(),
@@ -84,6 +95,22 @@ export function Composer({
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       submit();
+      return;
+    }
+    // Up and Down walk through earlier prompts, like a shell, when the composer is empty or showing one.
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.shiftKey && !event.altKey && sent.length > 0) {
+      const index = recall.current;
+      const showingRecalled = index !== null && draft === sent[index];
+      if (draft && !showingRecalled) return;
+      const next = event.key === "ArrowUp" ? Math.max(0, (index ?? sent.length) - 1) : index === null ? null : index + 1;
+      event.preventDefault();
+      if (next === null || next >= sent.length) {
+        recall.current = null;
+        onDraft("");
+      } else {
+        recall.current = next;
+        onDraft(sent[next]!);
+      }
     }
   };
 
@@ -151,7 +178,11 @@ export function Composer({
           ready || busy
             ? annotations.length
               ? "What should change? Refer to picks as [1], [2]…"
-              : "Describe a change, paste a screenshot, or pick an element…"
+              : reviewing
+                ? "Tell the agent what to change in this review…"
+                : busy
+                  ? "Type the next step; it runs when the agent is done…"
+                  : "Describe a change, paste a screenshot, or pick an element…"
             : "Waiting for the agent…"
         }
         rows={2}
@@ -198,15 +229,18 @@ export function Composer({
             }}
           />
         </div>
-        {busy ? (
-          <button type="button" className={styles.stop} onClick={() => send({ type: "cancel" })}>
-            Stop
-          </button>
-        ) : (
-          <button type="submit" className={styles.send} disabled={!ready || !hasContent}>
-            Send
-          </button>
-        )}
+        <div className={styles.sendGroup}>
+          {busy && (
+            <button type="button" className={styles.stop} onClick={() => send({ type: "cancel" })} title="Stop the agent and drop queued messages">
+              Stop
+            </button>
+          )}
+          {(!busy || hasContent) && (
+            <button type="submit" className={styles.send} disabled={!canSend} title={busy ? "Runs when the agent is done" : undefined}>
+              {busy ? "Queue" : "Send"}
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

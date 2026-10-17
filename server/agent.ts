@@ -17,6 +17,7 @@ import {
   type PromptImage,
   type ToolStatus,
 } from "../shared/protocol.ts";
+import { describeTarget } from "../shared/review.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -68,7 +69,8 @@ const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
 const MAX_AUTO_FIXES = 2;
 const PREVIEW_SETTLE_MS = 1500;
 
-type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-reset": [] };
+type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-remove": [string]; "chat-reset": [] };
+type UserItem = Extract<ChatItem, { kind: "user" }>;
 
 /**
  * Runs one ACP agent as a subprocess and acts as its client: streams session
@@ -89,6 +91,8 @@ export class AgentHost extends EventEmitter<Events> {
   private autoFixes = 0;
   private previewErrors: string[] = [];
   private seq = 0;
+  /** Prompts sent while a turn was running, oldest first. */
+  private queued: { id: string; text: string; attachments: Attachments }[] = [];
 
   constructor(
     private readonly workspace: Workspace,
@@ -179,6 +183,7 @@ export class AgentHost extends EventEmitter<Events> {
 
   async newSession(): Promise<void> {
     if (this.state.status === "busy") await this.cancel();
+    this.queued = [];
     this.transcript = [];
     this.openText = undefined;
     this.emit("chat-reset");
@@ -191,29 +196,32 @@ export class AgentHost extends EventEmitter<Events> {
     }
   }
 
-  async prompt(text: string, attachments: Attachments = {}, auto = false): Promise<void> {
+  /**
+   * Runs a turn. A prompt sent while a turn runs is queued and runs when the
+   * agent is free again; `queuedId` is the chat item it was queued as.
+   */
+  async prompt(text: string, attachments: Attachments = {}, auto = false, queuedId?: string): Promise<void> {
     const connection = this.connection;
     const sessionId = this.sessionId;
-    if (!connection || !sessionId || this.state.status !== "ready") return;
+    if (!connection || !sessionId) return;
+    if (!auto && this.state.status === "busy") return this.enqueue(text, attachments);
+    if (this.state.status !== "ready") return;
     if (!auto) this.autoFixes = 0;
     const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
     const annotations = attachments.annotations ?? [];
-    this.push({
-      kind: "user",
-      id: this.nextId("user"),
-      text,
-      auto,
-      images: images.length ? images.map((image) => `data:${image.mimeType};base64,${image.data}`) : undefined,
-      annotations: annotations.length ? annotations.map(annotationLabel) : undefined,
-    });
+    this.push(this.userItem(queuedId ?? this.nextId("user"), text, images, annotations, auto));
     this.setState({ ...this.state, status: "busy", detail: undefined });
-    await this.workspace.beginTurn(text || annotations.map(annotationLabel).join(", ") || "Image prompt");
+    // Fix-up turns are labelled as such in history and reviews, not with the whole problem report.
+    const label = auto ? "Fixed reported problems" : text || annotations.map(annotationLabel).join(", ") || "Image prompt";
+    await this.workspace.beginTurn(label);
     const message = text || "See the attached context.";
     const body = this.needsPreamble ? `${FIRST_PROMPT_PREAMBLE}
 
 ${message}` : message;
     this.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
+    const context = this.reviewContext();
+    if (context) blocks.push({ type: "text", text: context });
     if (attachments.instruction) blocks.push({ type: "text", text: attachments.instruction });
     if (annotations.length) blocks.push({ type: "text", text: formatAnnotations(annotations) });
     for (const image of images) blocks.push({ type: "image", mimeType: image.mimeType, data: image.data });
@@ -239,6 +247,57 @@ ${message}` : message;
       this.autoFixes += 1;
       await this.prompt(problems, {}, true);
     }
+    // Fixes first, then whatever the user queued meanwhile.
+    if (!auto) await this.runQueued();
+  }
+
+  /** Removes a queued prompt before it runs. */
+  unqueue(id: string): void {
+    const before = this.queued.length;
+    this.queued = this.queued.filter((item) => item.id !== id);
+    if (this.queued.length !== before) this.remove(id);
+  }
+
+  private enqueue(text: string, attachments: Attachments): void {
+    const id = this.nextId("user");
+    const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
+    this.push({ ...this.userItem(id, text, images, attachments.annotations ?? [], false), queued: true });
+    this.queued.push({ id, text, attachments });
+  }
+
+  private async runQueued(): Promise<void> {
+    const next = this.queued.shift();
+    if (!next) return;
+    // The message moves from where it was queued to the end of the conversation, where its turn starts.
+    this.remove(next.id);
+    await this.prompt(next.text, next.attachments, false, next.id);
+  }
+
+  private clearQueue(): void {
+    for (const item of this.queued) this.remove(item.id);
+    this.queued = [];
+  }
+
+  private userItem(id: string, text: string, images: PromptImage[], annotations: Annotation[], auto: boolean): UserItem {
+    return {
+      kind: "user",
+      id,
+      text,
+      auto,
+      images: images.length ? images.map((image) => `data:${image.mimeType};base64,${image.data}`) : undefined,
+      annotations: annotations.length ? annotations.map(annotationLabel) : undefined,
+    };
+  }
+
+  /** Tells the agent about the open review on every turn, so its changes stay about what the review shows. */
+  private reviewContext(): string | null {
+    const review = this.workspace.review;
+    if (!review) return null;
+    return [
+      `A review is open in Basis: "${review.title}", showing ${review.show.map(describeTarget).join("; ")}.`,
+      "Everything you change now belongs to this review until the user approves or discards it in Basis.",
+      "Keep review.json pointing at what the user is asking about, and update it when the focus moves.",
+    ].join(" ");
   }
 
   /** The preview reports render errors it currently shows; they feed the auto-fix loop. */
@@ -251,10 +310,11 @@ ${message}` : message;
 
   /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
   private async collectProblems(): Promise<string | null> {
-    const { errors, typeErrors } = this.workspace.state;
+    const { errors, typeErrors, reviewErrors } = this.workspace.state;
     // Give the preview a moment to hot-reload the new code and report what failed to render.
     if (!errors && !typeErrors) await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
     const sections: string[] = [];
+    if (reviewErrors) sections.push(`review.json is not valid, so no review was opened or updated:\n${list(reviewErrors)}`);
     if (errors) sections.push(`design-system.json does not validate, so the preview still shows the previous version:\n${list(errors)}`);
     if (typeErrors) {
       sections.push(
@@ -265,7 +325,9 @@ ${message}` : message;
     return sections.length ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}` : null;
   }
 
+  /** Stops the running turn; prompts queued behind it are dropped too, since Stop means stop. */
   async cancel(): Promise<void> {
+    this.clearQueue();
     this.cancelPermissions();
     if (this.connection && this.sessionId) {
       await this.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: this.sessionId });
@@ -378,7 +440,7 @@ ${message}` : message;
 
   private async writeTextFile(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
     if (!this.workspace.isEditable(params.path)) {
-      throw new Error("Basis only lets the agent write design-system.json and files under components/ or patterns/ in its workspace.");
+      throw new Error("Basis only lets the agent write design-system.json, review.json and files under components/ or patterns/ in its workspace.");
     }
     await mkdir(path.dirname(params.path), { recursive: true });
     await writeFile(params.path, params.content);
@@ -404,6 +466,11 @@ ${message}` : message;
     if (index === -1) this.transcript.push(item);
     else this.transcript[index] = item;
     this.emit("chat", item);
+  }
+
+  private remove(id: string): void {
+    this.transcript = this.transcript.filter((item) => item.id !== id);
+    this.emit("chat-remove", id);
   }
 
   private notice(text: string, tone: "info" | "error"): void {

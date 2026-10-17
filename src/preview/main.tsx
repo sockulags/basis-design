@@ -1,7 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
-import type { FromPreview, NavSection, PageId, ToPreview } from "../../shared/frame.ts";
+import type { FromPreview, NavSection, PageId, ReviewView, ToPreview } from "../../shared/frame.ts";
 import type { Design } from "../../shared/design.ts";
 import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
@@ -45,12 +45,13 @@ interface View {
   design: Design;
   theme: "light" | "dark";
   page: PageId;
+  review: ReviewView | null;
 }
 
-/** Reports the section nearest the top of the viewport; `page` restarts it when the page changes. */
-function useScrollSpy(page: PageId | null): void {
+/** Reports the section nearest the top of the viewport; a new `view` key (page, or the review opening or closing) restarts it. */
+function useScrollSpy(view: string | null): void {
   useEffect(() => {
-    if (page === null) return;
+    if (view === null) return;
     let raf = 0;
     let last = "";
     const measure = () => {
@@ -78,7 +79,7 @@ function useScrollSpy(page: PageId | null): void {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [page]);
+  }, [view]);
 }
 
 type PreviewType = typeof PreviewComponent;
@@ -107,6 +108,14 @@ function usePreviewModule(): ComponentType<Parameters<PreviewType>[0]> | null {
 }
 
 const postSections = (sections: NavSection[]) => post({ type: "sections", sections });
+let lastImpact = "";
+/** Reports the sections that changed outside the review, only when the list does. */
+const postImpact = (ids: string[]) => {
+  const key = ids.join(",");
+  if (key === lastImpact) return;
+  lastImpact = key;
+  post({ type: "impact", ids });
+};
 
 function PreviewApp() {
   const [view, setView] = useState<View | null>(null);
@@ -121,10 +130,13 @@ function PreviewApp() {
       const message = event.data;
       switch (message?.type) {
         case "render":
+          // The chrome forgets the impact list when a review ends, so the next review reports afresh.
+          if (!message.review) lastImpact = "";
           setView((current) => {
-            // A new page starts at the top.
-            if (current && current.page !== message.page) requestAnimationFrame(() => window.scrollTo(0, 0));
-            return { design: message.design, theme: message.theme, page: message.page };
+            // A new page, or a review opening or closing, starts at the top.
+            const moved = current && (current.page !== message.page || Boolean(current.review) !== Boolean(message.review));
+            if (moved) requestAnimationFrame(() => window.scrollTo(0, 0));
+            return { design: message.design, theme: message.theme, page: message.page, review: message.review };
           });
           return;
         case "scroll-to": {
@@ -162,7 +174,7 @@ function PreviewApp() {
     if (ds) document.body.style.background = getComputedStyle(ds).backgroundColor;
   }, [view]);
 
-  useScrollSpy(view && Preview ? view.page : null);
+  useScrollSpy(view && Preview ? `${view.page}|${view.review ? "review" : ""}` : null);
 
   const toggle = useCallback((annotation: Annotation, element: HTMLElement) => {
     setPicks((current) =>
@@ -185,7 +197,9 @@ function PreviewApp() {
           design={view.design}
           theme={view.theme}
           page={view.page}
+          review={view.review}
           onAsk={(prefix) => post({ type: "ask", prefix })}
+          onImpact={postImpact}
           onSections={postSections}
         />
       </div>

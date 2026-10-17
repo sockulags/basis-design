@@ -7,6 +7,7 @@ import { createInstruction } from "./brief.ts";
 import { AGENT_IDS, type AgentId, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
+import { rebasePlugin } from "./rebase.ts";
 import { Workspace } from "./workspace.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -88,6 +89,7 @@ const previewVite = await createVite({
   appType: "mpa",
   cacheDir: "node_modules/.vite/preview",
   optimizeDeps: { entries: ["preview.html"] },
+  plugins: [rebasePlugin(root, workspaceDir)],
   resolve: {
     alias: {
       "@ds": path.join(workspaceDir, "components", "index.ts"),
@@ -106,6 +108,13 @@ const previewVite = await createVite({
 });
 // New specimen files must be noticed even when the workspace lives outside this repo.
 previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(workspaceDir, folder)));
+/** The URL path under which the preview's Vite server serves a file or folder on disk. */
+function previewPath(target: string): string {
+  const relative = path.relative(root, target);
+  const posix = (value: string) => value.split(path.sep).join("/");
+  return relative.startsWith("..") || path.isAbsolute(relative) ? `/@fs/${posix(target)}` : `/${posix(relative)}`;
+}
+
 const previewGuard = guard((url) => url === "/" || url === "/index.html");
 previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
 
@@ -130,9 +139,11 @@ function broadcast(message: ServerMessage): void {
 
 workspace.on("design", (design) => broadcast({ type: "design", design }));
 workspace.on("history", (history) => broadcast({ type: "history", history }));
+workspace.on("review", (review) => broadcast({ type: "review", review }));
 agent.on("agent", (state) => broadcast({ type: "agent", agent: state }));
 agent.on("chat", (item) => broadcast({ type: "chat-upsert", item }));
 agent.on("chat-reset", () => broadcast({ type: "chat-reset" }));
+agent.on("chat-remove", (id) => broadcast({ type: "chat-remove", id }));
 
 sockets.on("connection", (ws: WebSocket) => {
   send(ws, {
@@ -142,6 +153,7 @@ sockets.on("connection", (ws: WebSocket) => {
     history: workspace.entries,
     agent: agent.agent,
     chat: agent.chat,
+    review: workspace.review,
   });
   ws.on("message", (data) => {
     let message: ClientMessage;
@@ -182,6 +194,25 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return;
     case "revert":
       return workspace.revert(message.historyId);
+    case "review-approve": {
+      // Approving takes the review as it is: not mid-turn, and not with known problems in it.
+      const { errors, typeErrors } = workspace.state;
+      if (agent.agent.status === "busy" || errors || typeErrors) return;
+      return workspace.approveReview();
+    }
+    case "review-discard":
+      if (agent.agent.status === "busy") await agent.cancel();
+      return workspace.discardReview();
+    case "review-step":
+      if (agent.agent.status === "busy") return;
+      return workspace.reviewStep(String(message.id ?? ""));
+    case "unqueue":
+      return agent.unqueue(String(message.id ?? ""));
+    case "baseline-get": {
+      const baseline = await workspace.baseline(String(message.id ?? ""));
+      if (baseline) send(socket, { type: "baseline", baseline: { id: baseline.id, design: baseline.design, base: previewPath(baseline.dir) } });
+      return;
+    }
     case "snapshot-get": {
       const snapshot = await workspace.snapshot(message.id);
       if (snapshot) send(socket, { type: "snapshot", snapshot });

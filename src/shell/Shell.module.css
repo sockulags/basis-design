@@ -800,3 +800,61 @@ a.primaryButton {
   border-color: color-mix(in srgb, var(--app-signal) 55%, var(--app-line));
   outline: none;
 }
+
+.versionSelect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.versionSelect select {
+  max-width: 320px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: var(--app-ink-2);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.reviewImpact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 10px;
+  font-size: 12px;
+}
+
+.reviewChip {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--app-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.reviewChip:hover {
+  color: var(--app-text);
+}
+
+.reviewChip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--app-signal) 50%, var(--app-line));
+  background: color-mix(in srgb, var(--app-signal) 12%, transparent);
+  color: var(--app-text);
+}
+
+.chromeButton[data-confirming] {
+  border-color: color-mix(in srgb, var(--app-danger) 60%, var(--app-line));
+  color: var(--app-danger);
+}

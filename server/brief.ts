@@ -17,6 +17,9 @@ The result becomes the starting point of real projects, so treat the components 
 
 - \`design-system.json\` (tokens) and anything under \`components/\` or \`patterns/\` (React + CSS Modules). Nothing else: not
   AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages.
+  \`review.json\` (see Reviews below) is the only other file you write.
+  \`.basis/snapshots/\` holds read-only copies of past versions for the review view: never read or search them,
+  they are not the current source.
 - Prefer tokens for look and feel (colour, type, spacing, radius, shadow, motion). Change component code for
   structure and behaviour: new markup, a sliding indicator, a different interaction, a new variant.
 
@@ -100,6 +103,33 @@ Whether the user asks in chat or through Basis' "New component" and "New pattern
    state, with a group and an \`order\` that place it next to its relatives.
 6. Reply with what you built, its main props, and one or two refinements worth asking for next.
 
+## Reviews: show what you changed
+
+When the user asks to change or improve something specific (a component, a variant, a state, a pattern or one
+of its variants), open a review as soon as you have a first version to show. Basis then shows exactly that,
+as it was before next to how it is now, and the user iterates with you until they approve it (it becomes one
+version in history) or discard it (everything goes back). To open or update a review, write \`review.json\` in
+this folder:
+
+\`\`\`json
+{
+  "title": "Softer press on the primary button",
+  "show": [{ "specimen": "Buttons", "rows": ["primary"] }]
+}
+\`\`\`
+
+- \`title\`: what is being improved, in a few words.
+- \`show\`: one to four targets. \`specimen\` is a specimen's title. \`block\` picks one block by its title, or by
+  number ("1" is the first) when it has none. \`rows\` keeps only those matrix rows or grid item labels and
+  \`columns\` only those matrix columns; blocks where none of them appear are left out. Use the exact labels
+  from the specimen. Narrow it down, so the review shows what you changed rather than the whole specimen.
+- Show what the request is about, not everything your change touches; Basis lists other sections that changed
+  by itself. For a pattern, show the variant or state that changed. If a state the user cares about has no
+  block yet (empty, loading, error, long content ...), add it to the specimen first, then show it.
+- While a review is open, Basis says so with every message. Everything you change belongs to it; keep working
+  on what the user asks and update \`review.json\` when the focus moves. You never close a review yourself.
+- Broad requests that restyle the whole system ("make it warmer") do not need a review.
+
 ## How to work
 
 - Work in focused passes. Broad requests ("make it warmer", "more playful") may touch many tokens at once;
@@ -175,4 +205,4 @@ export function createInstruction(kind: "component" | "pattern", folder: string,
 
 /** Prepended to the first prompt when the agent cannot take an appended system prompt. */
 export const FIRST_PROMPT_PREAMBLE =
-  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json and files under components/ and patterns/.";
+  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json and files under components/ and patterns/.";

@@ -8,9 +8,11 @@ interface HistoryMenuProps {
   inspecting: string | null;
   onInspect: (id: string | null) => void;
   send: (message: ClientMessage) => void;
+  /** True while a review is open: history waits until it is approved or discarded. */
+  locked?: boolean;
 }
 
-export function HistoryMenu({ history, inspecting, onInspect, send }: HistoryMenuProps) {
+export function HistoryMenu({ history, inspecting, onInspect, send, locked = false }: HistoryMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -37,16 +39,25 @@ export function HistoryMenu({ history, inspecting, onInspect, send }: HistoryMen
         type="button"
         className={styles.chromeButton}
         onClick={() => undo && send({ type: "revert", historyId: undo.target.id })}
-        disabled={!undo}
+        disabled={!undo || locked}
         title={
-          undo
+          locked
+            ? "Approve or discard the review first"
+            : undo
             ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${describeChanges(undo.undoes).toLowerCase()})`
             : "Nothing to undo"
         }
       >
         Undo
       </button>
-      <button type="button" className={styles.chromeButton} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+      <button
+        type="button"
+        className={styles.chromeButton}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        disabled={locked}
+        title={locked ? "Approve or discard the review first" : undefined}
+      >
         History · {history.length}
       </button>
       {open && (

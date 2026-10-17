@@ -36,12 +36,13 @@ workspace/
     *.specimen.tsx       how the gallery shows each component: one section per specimen
     contracts.ts         the API of every component added beyond the Basis baseline
   patterns/              larger building blocks composed from components/ (seeded from template/)
-  .git/                  history: one commit per agent turn, restore or hand edit
+  review.json            written by the agent to open or update a review (not in history)
+  .git/                  history: one commit per agent turn, approved review, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
-  tsconfig.json, .basis/ type-check setup and gallery contracts (generated)
+  tsconfig.json, .basis/ type-check setup and gallery contracts (generated), the open review and its snapshot
 ```
 
-The agent may edit `design-system.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
+The agent may edit `design-system.json`, `review.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
 
 Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar entry. A specimen lists blocks: a `matrix` of variants × states, a `grid` of labelled examples, or free `row` and `block` content for live demos (the format is in `components/specimen.ts`). The agent writes specimens alongside components, so a new component or variant shows up in the gallery as soon as it exists. Basis owns only the foundation sections: colour, type, shape and motion.
 
@@ -56,7 +57,14 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 - **Live preview:** the gallery runs on its own origin (`BASIS_PREVIEW_PORT`) in a sandboxed iframe, because it executes code the agent writes. That code cannot reach the bridge to the agent or the Basis UI. Vite compiles `components/` on the fly, so saved edits hot-reload in place, and token changes arrive over `postMessage`.
 - **Problems loop:** after every turn Basis validates the tokens, type-checks `components/` and `patterns/`, checks the components against their contracts, and collects render errors and malformed specimens from the preview. A broken section shows its error instead of taking down the gallery. Anything wrong is sent back to the agent automatically, at most twice per turn, and is listed above the composer.
 - **History:** the workspace is a git repository. Each agent turn becomes one commit, labelled with its prompt and with the tokens and files it changed. Click an entry to inspect it. The preview shows that version's tokens, and a banner lists the token and component-code differences from now. You can step through versions or restore one; restoring brings back tokens and code alike. Undo walks back through the steps instead of toggling between two of them.
+- **Reviews:** ask for something specific ("make the danger button feel more urgent") and the agent opens a review once it has a first version, by writing `review.json`. The preview then shows just that, narrowed to a block and its rows or columns, as it was when the review started next to how it is now. You keep iterating in the chat until you **Approve** (everything becomes one history entry) or **Discard** (everything goes back).
+  - While a review is open, every agent turn and hand edit becomes an iteration of it, not a history entry. Iterations live on a git ref outside the history, so you can go back to an earlier one, and the review survives a restart. Undo and History wait until the review ends.
+  - The "before" side runs the starting point's own component code with its own tokens, from a read-only copy in `.basis/snapshots/`. If the agent adds a block to show a new state, the before side runs today's demo on the starting point's components, so it still compares old with new.
+  - **Also changed** lists other sections that now look different, found by rendering every section before and after offscreen and comparing structure and computed styles. Tokens are global, so this is where you see what else a change reached; click one to add it to the review.
+  - Approve waits while the agent works or while there are problems. Errors on the before side are shown in place and never sent to the agent, and Pick only attaches components from the live side.
 - **Composer:**
+  - Messages sent while the agent works are queued and run, in order, when it is done; remove one with its ×. Stop drops the queue too.
+  - Up and Down recall earlier messages, and an unsent message survives a reload.
   - Paste, drop or attach images. They are sent as ACP image blocks when the agent supports them.
   - Press **Pick** and click components in the preview. Each pick is attached as a numbered annotation carrying its variant, state, theme, driving tokens and computed styles, so "make [1] softer" is unambiguous. Pick mode stays on until Done or Esc, and you can click a component again to remove it.
 - **Layout:**

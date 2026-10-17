@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
-import { isPageId, PAGES, type NavSection, type PageId } from "../shared/frame.ts";
+import { isPageId, PAGES, type CompareLayout, type NavSection, type PageId, type ReviewView } from "../shared/frame.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
@@ -9,6 +9,7 @@ import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
 import { PreviewFrame, type PreviewFrameHandle } from "./shell/PreviewFrame.tsx";
+import { ReviewBar } from "./shell/ReviewBar.tsx";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import styles from "./shell/Shell.module.css";
 
@@ -46,12 +47,21 @@ export function App() {
     const stored = readPref("page");
     return isPageId(stored) ? stored : "system";
   });
-  const [draft, setDraft] = useState("");
+  // The unsent message survives a reload.
+  const [draft, setDraft] = useState(() => readPref("draft") ?? "");
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [picking, setPicking] = useState(false);
   const [inspectId, setInspectId] = useState<string | null>(null);
+  const [reviewLayout, setReviewLayout] = useState<CompareLayout>(() =>
+    readPref("review-layout") === "stacked" ? "stacked" : "split",
+  );
+  /** True while the user looks at the gallery instead of the open review. */
+  const [reviewHidden, setReviewHidden] = useState(false);
+  /** Sections outside the review that changed, as the preview reports them, and the ones the user opened. */
+  const [impact, setImpact] = useState<string[]>([]);
+  const [peeks, setPeeks] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState<string>();
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [sections, setSections] = useState<NavSection[]>([]);
@@ -70,6 +80,11 @@ export function App() {
   useEffect(() => writePref("chat-hidden", String(chatHidden)), [chatHidden]);
   useEffect(() => writePref("sidebar-collapsed", String(sidebarCollapsed)), [sidebarCollapsed]);
   useEffect(() => writePref("page", page), [page]);
+  useEffect(() => writePref("review-layout", reviewLayout), [reviewLayout]);
+  useEffect(() => {
+    const timer = setTimeout(() => writePref("draft", draft), 300);
+    return () => clearTimeout(timer);
+  }, [draft]);
 
   // Keep the stored width valid when the window shrinks.
   useEffect(() => {
@@ -99,6 +114,43 @@ export function App() {
   useEffect(() => {
     if (inspectId && !state.snapshots[inspectId]) send({ type: "snapshot-get", id: inspectId });
   }, [inspectId, state.snapshots, send]);
+
+  // The open review: its starting point is fetched once, and the review comes into view whenever the agent
+  // opens it or records a new iteration, since that is when it has something to show.
+  const review = state.review;
+  const baselineId = review?.baseline;
+  const baseline = baselineId ? state.baselines[baselineId] : undefined;
+  useEffect(() => {
+    if (baselineId && !baseline) send({ type: "baseline-get", id: baselineId });
+  }, [baselineId, baseline, send]);
+
+  const stepCount = review?.steps.length ?? 0;
+  useEffect(() => {
+    if (!baselineId) return;
+    setReviewHidden(false);
+    setInspectId(null);
+  }, [baselineId, stepCount]);
+
+  useEffect(() => {
+    setImpact([]);
+    setPeeks([]);
+  }, [baselineId]);
+
+  const reviewView = useMemo<ReviewView | null>(
+    () =>
+      review && !reviewHidden
+        ? {
+            title: review.title,
+            targets: [...review.show, ...peeks.map((id) => ({ specimen: id, peek: true }))],
+            layout: reviewLayout,
+            baseline: baseline ? { design: baseline.design, base: baseline.base } : null,
+          }
+        : null,
+    [review, reviewHidden, peeks, reviewLayout, baseline],
+  );
+  // Opened sections stay listed: the preview stops checking what the review already shows.
+  const listed = new Set([...impact, ...peeks]);
+  const impactSections = sections.filter((section) => listed.has(section.id));
 
   // Stop inspecting if the entry is pruned from history.
   useEffect(() => {
@@ -139,6 +191,7 @@ export function App() {
   const problems = [
     ...(state.design?.errors ?? []).map((error) => `design-system.json: ${error}`),
     ...(state.design?.typeErrors ?? []),
+    ...(state.design?.reviewErrors ?? []),
     ...previewErrors,
   ];
 
@@ -172,6 +225,7 @@ export function App() {
         onClearAnnotations={() => frame.current?.clearPicks()}
         picking={picking}
         onTogglePick={() => (picking ? finishPicking() : setPicking(true))}
+        reviewing={Boolean(review)}
       />
       {!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
       <main className={styles.main}>
@@ -203,6 +257,7 @@ export function App() {
                 aria-current={page === item.id ? "page" : undefined}
                 onClick={() => {
                   setPage(item.id);
+                  if (review) setReviewHidden(true);
                   setActiveSection(undefined);
                   window.history.replaceState(null, "", " ");
                 }}
@@ -219,7 +274,7 @@ export function App() {
                 </button>
               ))}
             </div>
-            <HistoryMenu history={history} inspecting={inspectId} onInspect={setInspectId} send={send} />
+            <HistoryMenu history={history} inspecting={inspectId} onInspect={setInspectId} send={send} locked={Boolean(review)} />
             <button type="button" className={styles.primaryButton} onClick={() => setExporting(true)} disabled={!live}>
               Export
             </button>
@@ -240,14 +295,39 @@ export function App() {
             onExit={() => setInspectId(null)}
           />
         )}
+        {review && live && (
+          <ReviewBar
+            review={review}
+            baselineDesign={baseline?.design}
+            current={live}
+            busy={state.agent?.status === "busy"}
+            problems={problems.length}
+            impact={impactSections}
+            peeks={peeks}
+            onTogglePeek={(id) => {
+              setPeeks((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+              setReviewHidden(false);
+            }}
+            layout={reviewLayout}
+            onLayout={setReviewLayout}
+            showing={!reviewHidden}
+            onShowing={(showing) => setReviewHidden(!showing)}
+            onStep={(id) => send({ type: "review-step", id })}
+            onApprove={() => send({ type: "review-approve" })}
+            onDiscard={() => send({ type: "review-discard" })}
+          />
+        )}
         <div className={styles.stage}>
           <Sidebar
             active={activeSection}
             sections={sections}
             page={page}
             onNavigate={(id) => {
-              frame.current?.scrollTo(id);
               window.history.replaceState(null, "", `#${id}`);
+              if (!reviewView) return frame.current?.scrollTo(id);
+              // The sidebar navigates the gallery: leave the review view, then scroll once the page is back.
+              setReviewHidden(true);
+              setTimeout(() => frame.current?.scrollTo(id), 120);
             }}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
@@ -260,11 +340,13 @@ export function App() {
               design={design}
               theme={theme}
               page={page}
+              review={reviewView}
               picking={picking}
               inspecting={Boolean(inspectEntry)}
               onPicks={setAnnotations}
               onPickingEnd={finishPicking}
               onAsk={ask}
+              onImpact={setImpact}
               onActiveSection={setActiveSection}
               onErrors={setPreviewErrors}
               onSections={setSections}

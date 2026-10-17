@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type {
   AgentState,
+  Baseline,
   ChatItem,
   ClientMessage,
   DesignState,
@@ -9,6 +10,7 @@ import type {
   ServerMessage,
   Snapshot,
 } from "../shared/protocol.ts";
+import type { ReviewState } from "../shared/review.ts";
 
 export interface BridgeState {
   connected: boolean;
@@ -18,6 +20,10 @@ export interface BridgeState {
   chat: ChatItem[];
   /** History snapshots fetched for inspection, by entry id. */
   snapshots: Record<string, Snapshot>;
+  /** The open review, if any. */
+  review: ReviewState | null;
+  /** Past versions materialised for reviews, by commit id. */
+  baselines: Record<string, Baseline>;
   /** Port of the sandboxed preview origin, from the server. */
   previewPort: number | null;
   exportManifest: { folder: string; files: { path: string; bytes: number }[] } | null;
@@ -31,6 +37,8 @@ const initial: BridgeState = {
   agent: null,
   chat: [],
   snapshots: {},
+  review: null,
+  baselines: {},
   previewPort: null,
   exportManifest: null,
   exportResult: null,
@@ -51,6 +59,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         history: action.history,
         agent: action.agent,
         chat: action.chat,
+        review: action.review,
       };
     case "design":
       return { ...state, design: action.design };
@@ -71,6 +80,12 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, exportManifest: { folder: action.folder, files: action.files } };
     case "export-result":
       return { ...state, exportResult: action.result };
+    case "review":
+      return { ...state, review: action.review };
+    case "chat-remove":
+      return { ...state, chat: state.chat.filter((item) => item.id !== action.id) };
+    case "baseline":
+      return { ...state, baselines: { ...state.baselines, [action.baseline.id]: action.baseline } };
     case "snapshot":
       return { ...state, snapshots: { ...state.snapshots, [action.snapshot.id]: action.snapshot } };
   }

@@ -634,3 +634,38 @@
     opacity: 0.35;
   }
 }
+
+.sendGroup {
+  display: flex;
+  gap: 6px;
+}
+
+.user[data-queued] {
+  border: 1px dashed var(--app-line);
+  background: transparent;
+  color: var(--app-muted);
+}
+
+.queuedLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--app-subtle);
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+}
+
+.queuedLabel button {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--app-subtle);
+  font: inherit;
+  cursor: pointer;
+}
+
+.queuedLabel button:hover {
+  color: var(--app-text);
+}

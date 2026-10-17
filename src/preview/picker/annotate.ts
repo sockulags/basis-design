@@ -42,7 +42,8 @@ const BORING = new Set(["none", "normal", "0px", "rgba(0, 0, 0, 0)", "auto"]);
 export function pickable(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) return null;
   const el = target.closest<HTMLElement>("[data-ds]");
-  return el?.closest(".ds-root") ? el : null;
+  // The "before" side of a review is history: annotating it would describe code the agent no longer has.
+  return el?.closest(".ds-root") && !el.closest('[data-side="baseline"]') ? el : null;
 }
 
 function tokensFor(el: HTMLElement, design: Design): Pick<Annotation, "tokenPath" | "tokens"> {

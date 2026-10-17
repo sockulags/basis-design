@@ -18,7 +18,8 @@ interface InspectBannerProps {
 
 const LIST_LIMIT = 80;
 
-function Value({ path, value }: { path: string; value: string | undefined }) {
+/** A token value in a diff, with a swatch for colours. */
+export function Value({ path, value }: { path: string; value: string | undefined }) {
   if (value === undefined) return <span className={styles.diffMissing}>—</span>;
   return (
     <span className={styles.diffValue}>

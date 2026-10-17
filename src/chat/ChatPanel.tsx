@@ -27,6 +27,8 @@ interface ChatPanelProps {
   onClearAnnotations: () => void;
   picking: boolean;
   onTogglePick: () => void;
+  /** True while a review is open. */
+  reviewing: boolean;
 }
 
 const STATUS_TEXT: Record<AgentState["status"], string> = {
@@ -52,6 +54,7 @@ export function ChatPanel({
   const pinned = useRef(true);
   const busy = agent?.status === "busy";
   const ready = connected && agent?.status === "ready";
+  const sent = chat.flatMap((item) => (item.kind === "user" && !item.auto && item.text ? [item.text] : []));
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -131,9 +134,13 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          chat.map((item) => <ChatEntry key={item.id} item={item} send={send} />)
+          chat.filter((item) => !isQueued(item)).map((item) => <ChatEntry key={item.id} item={item} send={send} />)
         )}
         {busy && <div className={styles.working}>Working on it…</div>}
+        {/* Queued messages wait below the running turn, in the order they will run. */}
+        {chat.filter(isQueued).map((item) => (
+          <ChatEntry key={item.id} item={item} send={send} />
+        ))}
       </div>
 
       {problems.length > 0 && (
@@ -155,6 +162,7 @@ export function ChatPanel({
       <Composer
         ready={ready}
         busy={busy}
+        sent={sent}
         supportsImages={Boolean(agent?.supportsImages)}
         draft={draft}
         onDraft={onDraft}
@@ -169,6 +177,8 @@ export function ChatPanel({
   );
 }
 
+const isQueued = (item: ChatItem) => item.kind === "user" && item.queued === true;
+
 const TOOL_ICON: Record<string, string> = {
   pending: "○",
   in_progress: "◌",
@@ -180,8 +190,16 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
   switch (item.kind) {
     case "user":
       return (
-        <div className={styles.user} data-auto={item.auto || undefined}>
+        <div className={styles.user} data-auto={item.auto || undefined} data-queued={item.queued || undefined}>
           {item.auto && <span className={styles.autoLabel}>Basis → agent</span>}
+          {item.queued && (
+            <span className={styles.queuedLabel}>
+              Queued · runs when the agent is done
+              <button type="button" aria-label="Remove from queue" onClick={() => send({ type: "unqueue", id: item.id })}>
+                ×
+              </button>
+            </span>
+          )}
           {item.annotations && (
             <span className={styles.userAttachments}>
               {item.annotations.map((label, index) => (

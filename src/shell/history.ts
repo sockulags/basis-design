@@ -5,6 +5,7 @@ export const SOURCE_LABEL: Record<HistoryEntry["source"], string> = {
   agent: "Agent change",
   revert: "Restored",
   external: "Edited on disk",
+  review: "Approved review",
 };
 
 const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });

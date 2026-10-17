@@ -1,5 +1,6 @@
 import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
+import type { ReviewTarget } from "./review.ts";
 
 /**
  * postMessage protocol between the chrome and the sandboxed preview iframe.
@@ -45,8 +46,22 @@ export interface NavSection {
   page: PageId;
 }
 
+export type CompareLayout = "split" | "stacked";
+
+/** A review target as the preview shows it; peeks are sections the user opened from "Also changed". */
+export type ReviewViewTarget = ReviewTarget & { peek?: boolean };
+
+/** The review view: what the review shows, before (the review's starting point) next to now. */
+export interface ReviewView {
+  title: string;
+  targets: ReviewViewTarget[];
+  layout: CompareLayout;
+  /** The starting point, or null while it is being prepared. */
+  baseline: { design: Design; base: string } | null;
+}
+
 export type ToPreview =
-  | { type: "render"; design: Design; theme: "light" | "dark"; page: PageId }
+  | { type: "render"; design: Design; theme: "light" | "dark"; page: PageId; review: ReviewView | null }
   | { type: "scroll-to"; id: string }
   | { type: "picking"; on: boolean }
   | { type: "picks-remove"; index: number }
@@ -56,6 +71,8 @@ export type FromPreview =
   | { type: "ready" }
   | { type: "active-section"; id: string }
   | { type: "ask"; prefix: string }
+  /** Sections outside the review's targets that look different from the review's starting point. */
+  | { type: "impact"; ids: string[] }
   | { type: "picks"; annotations: Annotation[] }
   | { type: "picking"; on: boolean }
   | { type: "errors"; errors: string[] }
@@ -106,6 +123,16 @@ export function parseFromPreview(data: unknown): FromPreview | null {
       const prefix = text(raw.prefix, 200);
       return prefix ? { type: "ask", prefix } : null;
     }
+    case "impact":
+      return Array.isArray(raw.ids)
+        ? {
+            type: "impact",
+            ids: raw.ids
+              .slice(0, 80)
+              .map((id) => text(id, 80))
+              .filter((id): id is string => id !== null && /^[a-z0-9-]+$/.test(id)),
+          }
+        : null;
     case "picks":
       return Array.isArray(raw.annotations)
         ? {

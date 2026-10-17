@@ -4,6 +4,8 @@ import { describe, onHotUpdate, setProblem } from "./errors.ts";
 interface Props {
   name: string;
   onAsk: (prefix: string) => void;
+  /** False for content the agent cannot fix (a past version): its errors show here but are not reported. */
+  report?: boolean;
   children: ReactNode;
 }
 
@@ -37,10 +39,11 @@ export class SectionBoundary extends Component<Props, { error: unknown }> {
 
   componentWillUnmount() {
     this.stopListening?.();
-    setProblem(`${this.props.name} section`, null);
+    if (this.props.report !== false) setProblem(`${this.props.name} section`, null);
   }
 
   private report() {
+    if (this.props.report === false) return;
     setProblem(`${this.props.name} section`, this.state.error ? describe(this.state.error) : null);
   }
 
@@ -52,9 +55,15 @@ export class SectionBoundary extends Component<Props, { error: unknown }> {
       <div className="section-error" role="alert">
         <strong>{this.props.name} failed to render</strong>
         <code>{message}</code>
-        <button type="button" className="ask-button" onClick={() => this.props.onAsk(`The ${this.props.name} section fails to render (${message}). Fix it. `)}>
-          Ask agent to fix
-        </button>
+        {this.props.report !== false && (
+          <button
+            type="button"
+            className="ask-button"
+            onClick={() => this.props.onAsk(`The ${this.props.name} section fails to render (${message}). Fix it. `)}
+          >
+            Ask agent to fix
+          </button>
+        )}
       </div>
     );
   }
