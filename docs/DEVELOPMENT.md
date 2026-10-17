@@ -27,7 +27,9 @@ component source, patterns and the gallery specimens.
     fails otherwise).
   - It auto-approves reads inside the workspace and edits to the files the agent may change.
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,
-    render errors reported by the preview) and sends them back to the agent, at most twice.
+    render errors reported by the preview) and sends them back to the agent, at most twice. Every open tab
+    reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
+    looked at last), so a stale or second tab cannot send the agent after problems that are not there.
   - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
     (`server/chatlog.ts`) and the agent session is resumed after a restart where the agent supports
     `session/resume` (Claude Code does).

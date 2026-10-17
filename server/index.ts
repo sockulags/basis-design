@@ -6,6 +6,7 @@ import { isComponentName, isPageId, pageById, SOURCE_FOLDERS } from "../shared/f
 import { createInstruction } from "./brief.ts";
 import { AGENT_IDS, type AgentId, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
+import { PreviewReports } from "./previews.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { rebasePlugin } from "./rebase.ts";
 import { Workspace } from "./workspace.ts";
@@ -24,6 +25,8 @@ const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 const workspace = new Workspace(workspaceDir);
 await workspace.init();
 const agent = new AgentHost(workspace, initialAgent);
+/** Render problems per open tab; the fix loop gets the current tab's (see PreviewReports). */
+const previewReports = new PreviewReports<WebSocket>();
 await agent.restore();
 
 /** Answers 404 for page entries that do not belong on this origin; everything else falls through to Vite. */
@@ -165,6 +168,10 @@ sockets.on("connection", (ws: WebSocket) => {
     }
     void handle(message, ws).catch((error: unknown) => console.error("[basis]", error));
   });
+  ws.on("close", () => {
+    previewReports.forget(ws);
+    agent.setPreviewErrors(previewReports.current);
+  });
 });
 
 async function handle(message: ClientMessage, socket: WebSocket): Promise<void> {
@@ -227,7 +234,9 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return;
     }
     case "preview-errors":
-      if (Array.isArray(message.errors)) agent.setPreviewErrors(message.errors);
+      if (!Array.isArray(message.errors)) return;
+      previewReports.report(socket, message.errors, message.visible === true);
+      agent.setPreviewErrors(previewReports.current);
       return;
     case "export-manifest": {
       const files = await starterKit();

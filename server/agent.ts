@@ -329,7 +329,7 @@ ${message}`
     ].join(" ");
   }
 
-  /** The preview reports render errors it currently shows; they feed the auto-fix loop. */
+  /** Render errors of the current tab's preview (chosen by PreviewReports); they feed the auto-fix loop. */
   setPreviewErrors(errors: unknown[]): void {
     this.previewErrors = errors
       .filter((error): error is string => typeof error === "string")

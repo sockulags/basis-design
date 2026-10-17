@@ -107,9 +107,14 @@ export function App() {
     [focusComposer, setDraft],
   );
 
-  // The server folds what the preview fails to render into the agent's fix loop.
+  // The server folds what the preview fails to render into the agent's fix loop. It also needs to know whether
+  // this tab is visible, so a stale or second tab does not speak for the one the user looks at.
   useEffect(() => {
-    if (state.connected) send({ type: "preview-errors", errors: previewErrors });
+    if (!state.connected) return;
+    const report = () => send({ type: "preview-errors", errors: previewErrors, visible: !document.hidden });
+    report();
+    document.addEventListener("visibilitychange", report);
+    return () => document.removeEventListener("visibilitychange", report);
   }, [previewErrors, state.connected, send]);
 
   // Esc ends pick mode even when focus is outside the preview.

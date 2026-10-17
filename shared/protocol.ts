@@ -172,7 +172,10 @@ export type ClientMessage =
   | { type: "review-step"; id: string }
   /** Removes a queued prompt before it runs. */
   | { type: "unqueue"; id: string }
-  /** Render errors the preview currently shows (empty when it renders cleanly). */
-  | { type: "preview-errors"; errors: string[] }
+  /**
+   * Render errors this tab's preview currently shows (empty when it renders cleanly), and whether the tab is
+   * visible: with several tabs open, the fix loop listens to the one the user looks at.
+   */
+  | { type: "preview-errors"; errors: string[]; visible: boolean }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean };
