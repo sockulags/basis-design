@@ -41,7 +41,13 @@ export function StatusIcon({ tone }: { tone: StatusTone }) {
 
 export function Alert({ tone, title, children }: { tone: StatusTone; title: string; children: ReactNode }) {
   return (
-    <div className={styles.alert} data-ds="alert" data-variant={tone} data-color={tone} role={tone === "danger" ? "alert" : "status"}>
+    <div
+      className={styles.alert}
+      data-ds="alert"
+      data-variant={tone}
+      data-color={tone}
+      role={tone === "danger" ? "alert" : "status"}
+    >
       <StatusIcon tone={tone} />
       <div>
         <p className={styles.alertTitle}>{title}</p>
@@ -89,11 +95,25 @@ export function Progress({ value }: { value?: number }) {
 }
 
 export function Spinner({ size = 20 }: { size?: number }) {
-  return <span className={styles.spinner} data-ds="spinner" style={{ width: size, height: size }} role="status" aria-label="Loading" />;
+  return (
+    <span
+      className={styles.spinner}
+      data-ds="spinner"
+      style={{ width: size, height: size }}
+      role="status"
+      aria-label="Loading"
+    />
+  );
 }
 
 export function Skeleton({ width, height = 12, round }: { width: number | string; height?: number; round?: boolean }) {
-  return <span className={styles.skeleton} data-ds="skeleton" style={{ width, height, borderRadius: round ? "50%" : undefined }} />;
+  return (
+    <span
+      className={styles.skeleton}
+      data-ds="skeleton"
+      style={{ width, height, borderRadius: round ? "50%" : undefined }}
+    />
+  );
 }
 
 export function Avatar({ initials, tone = "primary" }: { initials: string; tone?: Tone }) {

@@ -383,7 +383,8 @@ export const DEFAULT_DESIGN: Design = {
       indicatorHeight: "2px",
       indicatorTransition:
         "transform var(--duration-slow) var(--ease-emphasized), width var(--duration-slow) var(--ease-emphasized), height var(--duration-slow) var(--ease-emphasized)",
-      transition: "color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard)",
+      transition:
+        "color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard)",
     },
     alert: {
       radius: "var(--radius-md)",

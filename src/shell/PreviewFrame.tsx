@@ -33,7 +33,22 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  { port, design, theme, page, review, picking, inspecting, onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections },
+  {
+    port,
+    design,
+    theme,
+    page,
+    review,
+    picking,
+    inspecting,
+    onPicks,
+    onPickingEnd,
+    onAsk,
+    onImpact,
+    onActiveSection,
+    onErrors,
+    onSections,
+  },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);

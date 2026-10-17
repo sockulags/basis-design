@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { annotationLabel, type Annotation } from "../../shared/annotations.ts";
 import { MAX_IMAGES, type ClientMessage } from "../../shared/protocol.ts";
 import styles from "./ChatPanel.module.css";
@@ -102,7 +110,8 @@ export function Composer({
       const index = recall.current;
       const showingRecalled = index !== null && draft === sent[index];
       if (draft && !showingRecalled) return;
-      const next = event.key === "ArrowUp" ? Math.max(0, (index ?? sent.length) - 1) : index === null ? null : index + 1;
+      const next =
+        event.key === "ArrowUp" ? Math.max(0, (index ?? sent.length) - 1) : index === null ? null : index + 1;
       event.preventDefault();
       if (next === null || next >= sent.length) {
         recall.current = null;
@@ -149,7 +158,11 @@ export function Composer({
             <span key={index} className={styles.chip} title={annotation.tokenPath ?? annotation.section}>
               <span className={styles.chipIndex}>{index + 1}</span>
               {annotationLabel(annotation)}
-              <button type="button" aria-label={`Remove ${annotationLabel(annotation)}`} onClick={() => onRemoveAnnotation(index)}>
+              <button
+                type="button"
+                aria-label={`Remove ${annotationLabel(annotation)}`}
+                onClick={() => onRemoveAnnotation(index)}
+              >
                 ×
               </button>
             </span>
@@ -231,12 +244,22 @@ export function Composer({
         </div>
         <div className={styles.sendGroup}>
           {busy && (
-            <button type="button" className={styles.stop} onClick={() => send({ type: "cancel" })} title="Stop the agent and drop queued messages">
+            <button
+              type="button"
+              className={styles.stop}
+              onClick={() => send({ type: "cancel" })}
+              title="Stop the agent and drop queued messages"
+            >
               Stop
             </button>
           )}
           {(!busy || hasContent) && (
-            <button type="submit" className={styles.send} disabled={!canSend} title={busy ? "Runs when the agent is done" : undefined}>
+            <button
+              type="submit"
+              className={styles.send}
+              disabled={!canSend}
+              title={busy ? "Runs when the agent is done" : undefined}
+            >
               {busy ? "Queue" : "Send"}
             </button>
           )}

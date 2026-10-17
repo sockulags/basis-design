@@ -14,7 +14,12 @@
   --app-bar-height: 52px;
 
   color-scheme: dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -62,11 +67,18 @@ body {
   border-radius: 6px;
   background: transparent;
   color: inherit;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   font-size: 12px;
   opacity: 0.65;
   cursor: pointer;
-  transition: opacity 120ms ease, border-color 120ms ease;
+  transition:
+    opacity 120ms ease,
+    border-color 120ms ease;
 }
 
 .ask-button:focus-visible {

@@ -17,7 +17,14 @@ export function Checkbox({ label, force, indeterminate = false, ...rest }: Contr
       <input ref={ref} type="checkbox" className={styles.native} {...rest} />
       <span className={styles.box}>
         <svg className={styles.check} viewBox="0 0 16 16" aria-hidden>
-          <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M3.5 8.5l3 3 6-7"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         <svg className={styles.dash} viewBox="0 0 16 16" aria-hidden>
           <path d="M4 8h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

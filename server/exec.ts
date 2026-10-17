@@ -24,7 +24,17 @@ function run(command: string, args: string[], cwd: string): Promise<RunResult> {
 export async function git(cwd: string, args: string[]): Promise<string> {
   const result = await run(
     "git",
-    ["-c", "user.name=Basis", "-c", "user.email=basis@localhost", "-c", "core.autocrlf=false", "-c", "commit.gpgsign=false", ...args],
+    [
+      "-c",
+      "user.name=Basis",
+      "-c",
+      "user.email=basis@localhost",
+      "-c",
+      "core.autocrlf=false",
+      "-c",
+      "commit.gpgsign=false",
+      ...args,
+    ],
     cwd,
   );
   if (result.code !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr.trim() || result.stdout.trim()}`);
@@ -39,7 +49,11 @@ function tscEntry(): string {
 
 /** Type-checks a project and returns its diagnostics as single-line strings, paths relative to the project. */
 export async function typecheck(projectDir: string): Promise<string[]> {
-  const result = await run(process.execPath, [tscEntry(), "-p", "tsconfig.json", "--noEmit", "--pretty", "false"], projectDir);
+  const result = await run(
+    process.execPath,
+    [tscEntry(), "-p", "tsconfig.json", "--noEmit", "--pretty", "false"],
+    projectDir,
+  );
   if (result.code === 0) return [];
   const lines = `${result.stdout}\n${result.stderr}`
     .split(/\r?\n/)

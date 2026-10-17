@@ -26,7 +26,9 @@ const COLUMNS: DataTableColumn<Member>[] = [
     key: "status",
     header: "Status",
     cell: (member) => (
-      <Badge color={member.status === "Active" ? "success" : member.status === "Invited" ? "info" : "danger"}>{member.status}</Badge>
+      <Badge color={member.status === "Active" ? "success" : member.status === "Invited" ? "info" : "danger"}>
+        {member.status}
+      </Badge>
     ),
   },
   { key: "projects", header: "Projects", align: "end", cell: (member) => member.projects },
@@ -81,7 +83,13 @@ export default defineSpecimen({
                     </Button>
                   }
                 />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "var(--space-4)" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "var(--space-4)",
+                  }}
+                >
                   <StatCard label="Members" value="7" delta={{ value: "2", direction: "up" }} hint="this month" />
                   <StatCard label="Pending invites" value="1" delta={{ value: "0", direction: "flat" }} />
                   <StatCard label="Active today" value="5" trend={[2, 3, 3, 4, 3, 5, 5]} />

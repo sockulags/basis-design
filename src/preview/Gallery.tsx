@@ -92,7 +92,11 @@ export function Specimen({ label, children }: { label: string; children: ReactNo
 }
 
 export function Row({ children, wrap = true }: { children: ReactNode; wrap?: boolean }) {
-  return <div className={styles.row} data-wrap={wrap || undefined}>{children}</div>;
+  return (
+    <div className={styles.row} data-wrap={wrap || undefined}>
+      {children}
+    </div>
+  );
 }
 
 export function Grid({ children, min = 220 }: { children: ReactNode; min?: number }) {

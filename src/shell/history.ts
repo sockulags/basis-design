@@ -13,7 +13,9 @@ const day = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" 
 
 export function when(at: number): string {
   const date = new Date(at);
-  return date.toDateString() === new Date().toDateString() ? time.format(date) : `${day.format(date)} ${time.format(date)}`;
+  return date.toDateString() === new Date().toDateString()
+    ? time.format(date)
+    : `${day.format(date)} ${time.format(date)}`;
 }
 
 /**
@@ -40,7 +42,6 @@ export function undoStep(history: HistoryEntry[]): { undoes: HistoryEntry; targe
   const target = history[history.indexOf(undoes) - 1];
   return target ? { undoes, target } : null;
 }
-
 
 /** "3 tokens · 2 files changed", or "No changes". */
 export function describeChanges(entry: HistoryEntry): string {

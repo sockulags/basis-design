@@ -16,7 +16,13 @@ const brand = (
   <>
     <span
       aria-hidden
-      style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", display: "inline-block" }}
+      style={{
+        width: 22,
+        height: 22,
+        borderRadius: "var(--radius-sm)",
+        background: "var(--color-primary)",
+        display: "inline-block",
+      }}
     />
     Northwind
   </>
@@ -68,7 +74,10 @@ export default defineSpecimen({
         <div style={frame}>
           <Navbar
             brand={brand}
-            links={NAV_LINKS.map((link, index) => ({ ...link, force: index === 1 ? "hover" : index === 2 ? "focus" : undefined }))}
+            links={NAV_LINKS.map((link, index) => ({
+              ...link,
+              force: index === 1 ? "hover" : index === 2 ? "focus" : undefined,
+            }))}
             active="overview"
             user={{ initials: "AL", name: "Ada Lovelace" }}
           />
@@ -80,7 +89,13 @@ export default defineSpecimen({
       title: "Elevated · after the page scrolls under it",
       render: () => (
         <div style={{ ...frame, paddingBottom: "var(--space-6)" }}>
-          <Navbar brand={brand} links={NAV_LINKS} active="team" elevated user={{ initials: "AL", name: "Ada Lovelace" }} />
+          <Navbar
+            brand={brand}
+            links={NAV_LINKS}
+            active="team"
+            elevated
+            user={{ initials: "AL", name: "Ada Lovelace" }}
+          />
         </div>
       ),
     },

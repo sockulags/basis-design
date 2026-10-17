@@ -36,7 +36,9 @@ export function Preview({ design, theme, page, review, onAsk, onImpact, onSectio
   const css = useMemo(() => previewCss(design, ".ds-root"), [design]);
   // Cheap, and re-evaluated after every hot update of a specimen file.
   const { specimens, problems } = loadSpecimens();
-  const sectionsKey = specimens.map((specimen) => `${specimen.id}|${specimen.title}|${specimen.group}|${specimen.page}`).join(",");
+  const sectionsKey = specimens
+    .map((specimen) => `${specimen.id}|${specimen.title}|${specimen.group}|${specimen.page}`)
+    .join(",");
   const onPage = specimens.filter((specimen) => specimen.page === page);
   // Sections the review already shows are not checked again for "also changed" (and rendering them twice
   // more would put their named radio groups in the document three times).

@@ -125,7 +125,9 @@ export function Impact({ baseline, specimens, design, theme, onImpact }: ImpactP
     let current = true;
     setPast(null);
     void Promise.all(
-      specimens.map(async (specimen) => [specimen.id, await loadPastSpecimen(baseline.base, specimen).catch(() => null)] as const),
+      specimens.map(
+        async (specimen) => [specimen.id, await loadPastSpecimen(baseline.base, specimen).catch(() => null)] as const,
+      ),
     ).then((entries) => current && setPast(new Map(entries)));
     return () => {
       current = false;

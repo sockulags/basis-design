@@ -33,7 +33,15 @@ export interface SidebarNavProps {
 }
 
 /** Side navigation for an application: grouped links with icons, counts and a collapsed rail. */
-export function SidebarNav({ sections, active, onNavigate, header, footer, collapsed = false, label = "Sections" }: SidebarNavProps) {
+export function SidebarNav({
+  sections,
+  active,
+  onNavigate,
+  header,
+  footer,
+  collapsed = false,
+  label = "Sections",
+}: SidebarNavProps) {
   return (
     <nav className={styles.sidebar} data-ds="sidebar" data-collapsed={collapsed || undefined} aria-label={label}>
       {header && <div className={styles.header}>{header}</div>}

@@ -44,8 +44,8 @@ export function HistoryMenu({ history, inspecting, onInspect, send, locked = fal
           locked
             ? "Approve or discard the review first"
             : undo
-            ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${describeChanges(undo.undoes).toLowerCase()})`
-            : "Nothing to undo"
+              ? `Undo ${undo.undoes.label ? `“${undo.undoes.label}”` : SOURCE_LABEL[undo.undoes.source].toLowerCase()} (${describeChanges(undo.undoes).toLowerCase()})`
+              : "Nothing to undo"
         }
       >
         Undo

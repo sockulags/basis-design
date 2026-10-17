@@ -4,8 +4,10 @@ import styles from "./ChatPanel.module.css";
 /** Inline `code` and **bold**. */
 function inline(text: string): ReactNode[] {
   return text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g).map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) return <code key={index}>{part.slice(1, -1)}</code>;
-    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <strong key={index}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2)
+      return <code key={index}>{part.slice(1, -1)}</code>;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4)
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
     return <Fragment key={index}>{part}</Fragment>;
   });
 }
@@ -43,7 +45,11 @@ export function Markdown({ text }: { text: string }) {
       continue;
     }
     if (/^#{1,4}\s/.test(line)) {
-      blocks.push(<p key={blocks.length} className={styles.mdHeading}>{inline(line.replace(/^#+\s/, ""))}</p>);
+      blocks.push(
+        <p key={blocks.length} className={styles.mdHeading}>
+          {inline(line.replace(/^#+\s/, ""))}
+        </p>,
+      );
       i += 1;
       continue;
     }

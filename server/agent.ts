@@ -58,7 +58,8 @@ function agentEnv(): NodeJS.ProcessEnv {
   if (!process.env.CLAUDECODE) return process.env;
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (key === "CLAUDECODE" || key === "ANTHROPIC_BASE_URL" || key === "BAGGAGE" || key.startsWith("CLAUDE_")) continue;
+    if (key === "CLAUDECODE" || key === "ANTHROPIC_BASE_URL" || key === "BAGGAGE" || key.startsWith("CLAUDE_"))
+      continue;
     env[key] = value;
   }
   return env;
@@ -175,7 +176,8 @@ export class AgentHost extends EventEmitter<Events> {
     this.connection = undefined;
     this.sessionId = undefined;
     if (proc?.pid && proc.exitCode === null) {
-      if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true });
+      if (process.platform === "win32")
+        spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true });
       else proc.kill();
     }
     this.setState({ ...this.state, status: "stopped", detail: undefined });
@@ -212,12 +214,16 @@ export class AgentHost extends EventEmitter<Events> {
     this.push(this.userItem(queuedId ?? this.nextId("user"), text, images, annotations, auto));
     this.setState({ ...this.state, status: "busy", detail: undefined });
     // Fix-up turns are labelled as such in history and reviews, not with the whole problem report.
-    const label = auto ? "Fixed reported problems" : text || annotations.map(annotationLabel).join(", ") || "Image prompt";
+    const label = auto
+      ? "Fixed reported problems"
+      : text || annotations.map(annotationLabel).join(", ") || "Image prompt";
     await this.workspace.beginTurn(label);
     const message = text || "See the attached context.";
-    const body = this.needsPreamble ? `${FIRST_PROMPT_PREAMBLE}
+    const body = this.needsPreamble
+      ? `${FIRST_PROMPT_PREAMBLE}
 
-${message}` : message;
+${message}`
+      : message;
     this.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
     const context = this.reviewContext();
@@ -232,7 +238,8 @@ ${message}` : message;
         prompt: blocks,
       });
       if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
-      else if (result.stopReason !== "end_turn") this.notice(`The agent stopped early (${result.stopReason}).`, "error");
+      else if (result.stopReason !== "end_turn")
+        this.notice(`The agent stopped early (${result.stopReason}).`, "error");
     } catch (error) {
       if (this.connection === connection) this.notice(describeError(error), "error");
     } finally {
@@ -278,7 +285,13 @@ ${message}` : message;
     this.queued = [];
   }
 
-  private userItem(id: string, text: string, images: PromptImage[], annotations: Annotation[], auto: boolean): UserItem {
+  private userItem(
+    id: string,
+    text: string,
+    images: PromptImage[],
+    annotations: Annotation[],
+    auto: boolean,
+  ): UserItem {
     return {
       kind: "user",
       id,
@@ -314,15 +327,21 @@ ${message}` : message;
     // Give the preview a moment to hot-reload the new code and report what failed to render.
     if (!errors && !typeErrors) await new Promise((resolve) => setTimeout(resolve, PREVIEW_SETTLE_MS));
     const sections: string[] = [];
-    if (reviewErrors) sections.push(`review.json is not valid, so no review was opened or updated:\n${list(reviewErrors)}`);
-    if (errors) sections.push(`design-system.json does not validate, so the preview still shows the previous version:\n${list(errors)}`);
+    if (reviewErrors)
+      sections.push(`review.json is not valid, so no review was opened or updated:\n${list(reviewErrors)}`);
+    if (errors)
+      sections.push(
+        `design-system.json does not validate, so the preview still shows the previous version:\n${list(errors)}`,
+      );
     if (typeErrors) {
       sections.push(
         `The source does not type-check, or no longer satisfies the contracts (.basis/contracts.ts and components/contracts.ts):\n${list(typeErrors)}`,
       );
     }
     if (this.previewErrors.length) sections.push(`The preview fails to render:\n${list(this.previewErrors)}`);
-    return sections.length ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}` : null;
+    return sections.length
+      ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}`
+      : null;
   }
 
   /** Stops the running turn; prompts queued behind it are dropped too, since Stop means stop. */
@@ -440,7 +459,9 @@ ${message}` : message;
 
   private async writeTextFile(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
     if (!this.workspace.isEditable(params.path)) {
-      throw new Error("Basis only lets the agent write design-system.json, review.json and files under components/ or patterns/ in its workspace.");
+      throw new Error(
+        "Basis only lets the agent write design-system.json, review.json and files under components/ or patterns/ in its workspace.",
+      );
     }
     await mkdir(path.dirname(params.path), { recursive: true });
     await writeFile(params.path, params.content);

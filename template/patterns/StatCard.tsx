@@ -19,7 +19,9 @@ function sparkPath(values: number[], width: number, height: number): { line: str
   const max = Math.max(...values);
   const range = max - min || 1;
   const step = values.length > 1 ? width / (values.length - 1) : width;
-  const points = values.map((value, index) => [index * step, height - 2 - ((value - min) / range) * (height - 4)] as const);
+  const points = values.map(
+    (value, index) => [index * step, height - 2 - ((value - min) / range) * (height - 4)] as const,
+  );
   const line = points.map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
   return { line, area: `${line} L${width} ${height} L0 ${height} Z` };
 }
@@ -27,7 +29,8 @@ function sparkPath(values: number[], width: number, height: number): { line: str
 /** One number that matters, with its change and recent trend. */
 export function StatCard({ label, value, delta, hint, trend, loading = false }: StatCardProps) {
   const gradient = useId();
-  const tone = !delta || delta.direction === "flat" ? "neutral" : (delta.good ?? delta.direction === "up") ? "good" : "bad";
+  const tone =
+    !delta || delta.direction === "flat" ? "neutral" : (delta.good ?? delta.direction === "up") ? "good" : "bad";
   const spark = trend && trend.length > 1 ? sparkPath(trend, 120, 36) : null;
 
   return (
@@ -51,14 +54,23 @@ export function StatCard({ label, value, delta, hint, trend, loading = false }: 
                   </linearGradient>
                 </defs>
                 <path d={spark.area} fill={`url(#${gradient})`} />
-                <path d={spark.line} fill="none" stroke="currentColor" strokeWidth="1.75" vectorEffect="non-scaling-stroke" />
+                <path
+                  d={spark.line}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  vectorEffect="non-scaling-stroke"
+                />
               </svg>
             )}
           </div>
           <div className={styles.foot}>
             {delta && (
               <span className={styles.delta} data-tone={tone}>
-                <Icon name={delta.direction === "up" ? "arrow-up" : delta.direction === "down" ? "arrow-down" : "minus"} size={12} />
+                <Icon
+                  name={delta.direction === "up" ? "arrow-up" : delta.direction === "down" ? "arrow-down" : "minus"}
+                  size={12}
+                />
                 {delta.value}
               </span>
             )}

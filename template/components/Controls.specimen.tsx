@@ -38,7 +38,11 @@ export default defineSpecimen({
         const [plan, setPlan] = useState("monthly");
         return (
           <div style={row}>
-            <Switch label="Email notifications" checked={notify} onChange={(event) => setNotify(event.target.checked)} />
+            <Switch
+              label="Email notifications"
+              checked={notify}
+              onChange={(event) => setNotify(event.target.checked)}
+            />
             <Checkbox label="Remember me" defaultChecked />
             <Radio label="Monthly" name="plan" checked={plan === "monthly"} onChange={() => setPlan("monthly")} />
             <Radio label="Yearly" name="plan" checked={plan === "yearly"} onChange={() => setPlan("yearly")} />

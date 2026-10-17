@@ -151,9 +151,7 @@
   padding: var(--space-6);
   overflow: hidden;
   border-radius: var(--radius-lg);
-  background:
-    repeating-linear-gradient(135deg, transparent 0 14px, var(--color-border) 14px 15px),
-    var(--color-bg);
+  background: repeating-linear-gradient(135deg, transparent 0 14px, var(--color-border) 14px 15px), var(--color-bg);
 }
 
 .scrim {

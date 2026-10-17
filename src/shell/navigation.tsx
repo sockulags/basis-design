@@ -40,7 +40,11 @@ const FOUNDATIONS: NavGroup = {
         </>,
       ),
     },
-    { id: "typography", label: "Typography", icon: icon(<path d="M2.5 13 6 3.5 9.5 13M3.7 10h4.6M11 8.5h2.5M12.25 7v6" />) },
+    {
+      id: "typography",
+      label: "Typography",
+      icon: icon(<path d="M2.5 13 6 3.5 9.5 13M3.7 10h4.6M11 8.5h2.5M12.25 7v6" />),
+    },
     { id: "shape", label: "Space & shape", icon: icon(<path d="M2.5 13.5V7a4.5 4.5 0 0 1 4.5-4.5h6.5" />) },
     { id: "motion", label: "Motion", icon: icon(<path d="M2 13.5c5 0 5-11 12-11" />) },
   ],

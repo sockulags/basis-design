@@ -48,7 +48,12 @@ export default defineSpecimen({
             />
           ),
         },
-        { label: "flat", render: () => <StatCard label="Open tickets" value="27" delta={{ value: "0", direction: "flat" }} hint="no change" /> },
+        {
+          label: "flat",
+          render: () => (
+            <StatCard label="Open tickets" value="27" delta={{ value: "0", direction: "flat" }} hint="no change" />
+          ),
+        },
         { label: "loading", render: () => <StatCard label="Conversion" value="" loading /> },
       ],
     },

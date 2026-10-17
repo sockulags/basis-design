@@ -36,7 +36,10 @@ export function ReviewBar(props: ReviewBarProps) {
   const { review, baselineDesign, current, busy, problems, impact, peeks, layout, showing } = props;
   const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const changes = useMemo(() => (baselineDesign ? diffDesigns(baselineDesign, current) : []), [baselineDesign, current]);
+  const changes = useMemo(
+    () => (baselineDesign ? diffDesigns(baselineDesign, current) : []),
+    [baselineDesign, current],
+  );
   const steps = review.steps;
   const latest = steps.at(-1);
 
@@ -124,7 +127,13 @@ export function ReviewBar(props: ReviewBarProps) {
         >
           {confirming ? "Discard all changes?" : "Discard"}
         </button>
-        <button type="button" className={styles.primaryButton} onClick={props.onApprove} disabled={blocked !== null} title={blocked ?? "Save this as one version in history"}>
+        <button
+          type="button"
+          className={styles.primaryButton}
+          onClick={props.onApprove}
+          disabled={blocked !== null}
+          title={blocked ?? "Save this as one version in history"}
+        >
           Approve
         </button>
       </div>
@@ -159,7 +168,9 @@ export function ReviewBar(props: ReviewBarProps) {
                   <Value path={change.path} value={change.after} />
                 </div>
               ))}
-              {changes.length > LIST_LIMIT && <span className={styles.muted}>and {changes.length - LIST_LIMIT} more</span>}
+              {changes.length > LIST_LIMIT && (
+                <span className={styles.muted}>and {changes.length - LIST_LIMIT} more</span>
+              )}
             </>
           )}
           {review.files.length > 0 && (

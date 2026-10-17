@@ -54,7 +54,9 @@ function labels(value: unknown, field: string, errors: string[]): string[] | und
 }
 
 /** Validates review.json; every problem is phrased so the agent can fix it. */
-export function parseReviewRequest(text: string): { ok: true; request: ReviewRequest } | { ok: false; errors: string[] } {
+export function parseReviewRequest(
+  text: string,
+): { ok: true; request: ReviewRequest } | { ok: false; errors: string[] } {
   let raw: unknown;
   try {
     raw = JSON.parse(text);

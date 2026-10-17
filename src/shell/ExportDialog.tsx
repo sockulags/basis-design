@@ -35,7 +35,12 @@ function formatBytes(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} kB`;
 }
 
-function StarterKit({ problems, manifest, result: latest, send }: Pick<ExportDialogProps, "problems" | "manifest" | "result" | "send">) {
+function StarterKit({
+  problems,
+  manifest,
+  result: latest,
+  send,
+}: Pick<ExportDialogProps, "problems" | "manifest" | "result" | "send">) {
   const [target, setTarget] = useState(readTarget);
   const [pending, setPending] = useState(false);
   // Only show results of writes made while this dialog is open.
@@ -64,8 +69,8 @@ function StarterKit({ problems, manifest, result: latest, send }: Pick<ExportDia
     <div className={styles.kit}>
       <p className={styles.kitIntro}>
         Everything a new project needs: the components with their CSS Modules, the tokens as CSS variables and as a
-        Tailwind v4 theme, the source JSON, and a README on wiring it up. It needs React and a bundler with CSS
-        Modules, nothing else.
+        Tailwind v4 theme, the source JSON, and a README on wiring it up. It needs React and a bundler with CSS Modules,
+        nothing else.
       </p>
       {problems > 0 && (
         <p className={styles.kitWarning}>
@@ -115,8 +120,8 @@ function StarterKit({ problems, manifest, result: latest, send }: Pick<ExportDia
         {conflicts && (
           <div className={styles.kitConflicts}>
             <p>
-              {conflicts.conflicts.length} {conflicts.conflicts.length === 1 ? "file" : "files"} in <code>{conflicts.target}</code> would
-              change. Nothing has been written yet.
+              {conflicts.conflicts.length} {conflicts.conflicts.length === 1 ? "file" : "files"} in{" "}
+              <code>{conflicts.target}</code> would change. Nothing has been written yet.
             </p>
             <ul>
               {conflicts.conflicts.slice(0, 12).map((file) => (
@@ -168,7 +173,12 @@ export function ExportDialog({ design, workspace, problems, manifest, result, se
   };
 
   return (
-    <dialog ref={dialog} className={styles.dialog} onClose={onClose} onClick={(event) => event.target === dialog.current && dialog.current?.close()}>
+    <dialog
+      ref={dialog}
+      className={styles.dialog}
+      onClose={onClose}
+      onClick={(event) => event.target === dialog.current && dialog.current?.close()}
+    >
       <div className={styles.dialogInner}>
         <header className={styles.dialogHeader}>
           <div>
@@ -186,7 +196,13 @@ export function ExportDialog({ design, workspace, problems, manifest, result, se
             Starter kit
           </button>
           {FORMATS.map((item) => (
-            <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => setTab(item.id)}>
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={item.id === tab}
+              onClick={() => setTab(item.id)}
+            >
               {item.label}
             </button>
           ))}

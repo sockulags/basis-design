@@ -56,12 +56,20 @@ export default defineSpecimen({
     {
       kind: "block",
       title: "Minimal · title and one action",
-      render: () => <PageHeader title="Team" description="People with access to this workspace." actions={<Button>Invite people</Button>} />,
+      render: () => (
+        <PageHeader
+          title="Team"
+          description="People with access to this workspace."
+          actions={<Button>Invite people</Button>}
+        />
+      ),
     },
     {
       kind: "row",
       title: "Breadcrumbs",
-      render: () => <Breadcrumbs items={[{ label: "Home" }, { label: "Settings" }, { label: "Billing" }, { label: "Invoices" }]} />,
+      render: () => (
+        <Breadcrumbs items={[{ label: "Home" }, { label: "Settings" }, { label: "Billing" }, { label: "Invoices" }]} />
+      ),
     },
   ],
 });

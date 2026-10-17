@@ -63,7 +63,12 @@ export function Navbar({
   );
 
   return (
-    <header className={styles.navbar} data-ds="navbar" data-elevated={elevated || undefined} data-compact={compact || undefined}>
+    <header
+      className={styles.navbar}
+      data-ds="navbar"
+      data-elevated={elevated || undefined}
+      data-compact={compact || undefined}
+    >
       <div className={styles.bar}>
         {compact && (
           <button

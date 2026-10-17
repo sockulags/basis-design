@@ -148,10 +148,16 @@ export async function loadPastSpecimen(base: string, live: LoadedSpecimen): Prom
  * `version` changes after every hot update so an edited specimen loads afresh.
  * Resolves to null when it cannot run there (say, it imports a new component).
  */
-export async function loadRebasedSpecimen(base: string, live: LoadedSpecimen, version: number): Promise<LoadedSpecimen | null> {
+export async function loadRebasedSpecimen(
+  base: string,
+  live: LoadedSpecimen,
+  version: number,
+): Promise<LoadedSpecimen | null> {
   let module: SpecimenModule;
   try {
-    module = (await import(/* @vite-ignore */ `${base}/${live.file.replace(/\.tsx$/, ".basis-now.tsx")}?v=${version}`)) as SpecimenModule;
+    module = (await import(
+      /* @vite-ignore */ `${base}/${live.file.replace(/\.tsx$/, ".basis-now.tsx")}?v=${version}`
+    )) as SpecimenModule;
   } catch {
     return null;
   }
@@ -210,30 +216,44 @@ function blockName(block: SpecimenBlock, index: number): string {
  * columns or grid items, and drop blocks where none of them appear. Returns a
  * problem phrased for the agent when nothing matches.
  */
-export function narrowSpecimen(specimen: LoadedSpecimen, target: ReviewTarget): { specimen: LoadedSpecimen } | { problem: string } {
+export function narrowSpecimen(
+  specimen: LoadedSpecimen,
+  target: ReviewTarget,
+): { specimen: LoadedSpecimen } | { problem: string } {
   let blocks = specimen.blocks.map((block, index) => ({ block, index }));
   if (target.block) {
     const wanted = target.block;
     const number = /^\d+$/.test(wanted) ? Number(wanted) - 1 : -1;
-    blocks = blocks.filter(({ block, index }) => index === number || (block.title !== undefined && same(block.title, wanted)));
+    blocks = blocks.filter(
+      ({ block, index }) => index === number || (block.title !== undefined && same(block.title, wanted)),
+    );
     if (blocks.length === 0) {
       const names = specimen.blocks.map((block, index) => `"${blockName(block, index)}"`).join(", ");
-      return { problem: `"${specimen.title}" has no block "${wanted}". Its blocks: ${names} (untitled ones by number, "1" is the first).` };
+      return {
+        problem: `"${specimen.title}" has no block "${wanted}". Its blocks: ${names} (untitled ones by number, "1" is the first).`,
+      };
     }
   }
   const rows = target.rows ?? [];
   const columns = target.columns ?? [];
-  if (rows.length === 0 && columns.length === 0) return { specimen: { ...specimen, blocks: blocks.map(({ block }) => block) } };
-  const keep = (labels: string[], wanted: string[]) => (wanted.length ? labels.filter((label) => wanted.some((item) => same(item, label))) : labels);
+  if (rows.length === 0 && columns.length === 0)
+    return { specimen: { ...specimen, blocks: blocks.map(({ block }) => block) } };
+  const keep = (labels: string[], wanted: string[]) =>
+    wanted.length ? labels.filter((label) => wanted.some((item) => same(item, label))) : labels;
   const narrowed: SpecimenBlock[] = [];
   const available: string[] = [];
   for (const { block, index } of blocks) {
     if (block.kind === "matrix") {
       const next = { ...block, rows: keep(block.rows, rows), columns: keep(block.columns, columns) };
       if (next.rows.length && next.columns.length) narrowed.push(next);
-      else available.push(`"${blockName(block, index)}" has rows ${quoted(block.rows)} and columns ${quoted(block.columns)}`);
+      else
+        available.push(
+          `"${blockName(block, index)}" has rows ${quoted(block.rows)} and columns ${quoted(block.columns)}`,
+        );
     } else if (block.kind === "grid") {
-      const items = rows.length ? block.items.filter((item) => rows.some((label) => same(label, item.label))) : block.items;
+      const items = rows.length
+        ? block.items.filter((item) => rows.some((label) => same(label, item.label)))
+        : block.items;
       if (items.length && columns.length === 0) narrowed.push({ ...block, items });
       else available.push(`"${blockName(block, index)}" has items ${quoted(block.items.map((item) => item.label))}`);
     } else if (target.block) {
@@ -264,7 +284,15 @@ export function SpecimenBlocks({ specimen, design }: { specimen: LoadedSpecimen;
   );
 }
 
-export function SpecimenSection({ specimen, design, onAsk }: { specimen: LoadedSpecimen; design: Design; onAsk: (prefix: string) => void }) {
+export function SpecimenSection({
+  specimen,
+  design,
+  onAsk,
+}: {
+  specimen: LoadedSpecimen;
+  design: Design;
+  onAsk: (prefix: string) => void;
+}) {
   return (
     <Section id={specimen.id} title={specimen.title} description={specimen.description ?? ""} onAsk={onAsk}>
       <SpecimenBlocks specimen={specimen} design={design} />

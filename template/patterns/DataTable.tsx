@@ -98,9 +98,17 @@ export function DataTable<T>({
                     aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : undefined}
                   >
                     {column.sortable ? (
-                      <button type="button" className={styles.sort} data-active={sorted ? true : undefined} onClick={() => sortBy(column.key)}>
+                      <button
+                        type="button"
+                        className={styles.sort}
+                        data-active={sorted ? true : undefined}
+                        onClick={() => sortBy(column.key)}
+                      >
                         {column.header}
-                        <Icon name={sorted === "asc" ? "sort-up" : sorted === "desc" ? "sort-down" : "sort"} size={14} />
+                        <Icon
+                          name={sorted === "asc" ? "sort-up" : sorted === "desc" ? "sort-down" : "sort"}
+                          size={14}
+                        />
                       </button>
                     ) : (
                       column.header
@@ -138,7 +146,11 @@ export function DataTable<T>({
                 const key = rowKey(row);
                 const isSelected = selected.includes(key);
                 return (
-                  <tr key={key} data-selected={isSelected || undefined} data-force={forceHover === key ? "hover" : undefined}>
+                  <tr
+                    key={key}
+                    data-selected={isSelected || undefined}
+                    data-force={forceHover === key ? "hover" : undefined}
+                  >
                     {selectable && (
                       <td className={styles.check}>
                         <Checkbox aria-label={`Select row ${key}`} checked={isSelected} onChange={() => toggle(key)} />
@@ -187,7 +199,13 @@ export function Pagination({ page, pageCount, onPageChange, summary }: Paginatio
     <nav className={styles.pagination} aria-label="Pagination" data-ds="pagination">
       {summary && <span className={styles.summary}>{summary}</span>}
       <div className={styles.pages}>
-        <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => onPageChange?.(page - 1)} aria-label="Previous page">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={page <= 1}
+          onClick={() => onPageChange?.(page - 1)}
+          aria-label="Previous page"
+        >
           <Icon name="chevron-left" size={14} />
         </Button>
         {pageList(page, pageCount).map((item, index) =>
@@ -208,7 +226,13 @@ export function Pagination({ page, pageCount, onPageChange, summary }: Paginatio
             </button>
           ),
         )}
-        <Button size="sm" variant="ghost" disabled={page >= pageCount} onClick={() => onPageChange?.(page + 1)} aria-label="Next page">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={page >= pageCount}
+          onClick={() => onPageChange?.(page + 1)}
+          aria-label="Next page"
+        >
           <Icon name="chevron-right" size={14} />
         </Button>
       </div>

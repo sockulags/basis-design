@@ -16,7 +16,8 @@ export const REBASE_SUFFIX = ".basis-now.tsx";
 export function rebasePlugin(root: string, workspaceDir: string): Plugin {
   // Vite works with forward-slash ids, also on Windows.
   const snapshots = `${normalizePath(path.join(workspaceDir, ".basis", "snapshots"))}/`;
-  const toFile = (url: string) => normalizePath(url.startsWith("/@fs/") ? path.resolve(url.slice("/@fs/".length)) : path.join(root, url));
+  const toFile = (url: string) =>
+    normalizePath(url.startsWith("/@fs/") ? path.resolve(url.slice("/@fs/".length)) : path.join(root, url));
   const split = (id: string) => {
     const index = id.indexOf("?");
     return index === -1 ? [id, ""] : [id.slice(0, index), id.slice(index)];

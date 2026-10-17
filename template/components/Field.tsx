@@ -25,7 +25,9 @@ interface Forceable {
 }
 
 export function TextInput({ force, invalid, ...rest }: InputHTMLAttributes<HTMLInputElement> & Forceable) {
-  return <input className={styles.input} data-ds="input" data-force={force} aria-invalid={invalid || undefined} {...rest} />;
+  return (
+    <input className={styles.input} data-ds="input" data-force={force} aria-invalid={invalid || undefined} {...rest} />
+  );
 }
 
 export function Textarea({ force, invalid, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement> & Forceable) {
@@ -53,7 +55,14 @@ export function Select({ force, invalid, children, ...rest }: SelectHTMLAttribut
         {children}
       </select>
       <svg className={styles.chevron} viewBox="0 0 16 16" aria-hidden>
-        <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M4 6l4 4 4-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </span>
   );

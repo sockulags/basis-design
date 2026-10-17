@@ -78,8 +78,7 @@ export type FromPreview =
   | { type: "errors"; errors: string[] }
   | { type: "sections"; sections: NavSection[] };
 
-const text = (value: unknown, max: number): string | null =>
-  typeof value === "string" ? value.slice(0, max) : null;
+const text = (value: unknown, max: number): string | null => (typeof value === "string" ? value.slice(0, max) : null);
 
 function record(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object") return {};
@@ -165,7 +164,9 @@ export function parseFromPreview(data: unknown): FromPreview | null {
               const title = text(section?.title, 80);
               const group = text(section?.group, 40);
               const page = section?.page;
-              return id && /^[a-z0-9-]+$/.test(id) && title && group && isPageId(page) ? [{ id, title, group, page }] : [];
+              return id && /^[a-z0-9-]+$/.test(id) && title && group && isPageId(page)
+                ? [{ id, title, group, page }]
+                : [];
             }),
           }
         : null;

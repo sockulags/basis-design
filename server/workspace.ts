@@ -33,7 +33,11 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
  * in components/. Validates and type-checks every change, and records history
  * as git commits so undo covers tokens and code alike.
  */
-export class Workspace extends EventEmitter<{ design: [DesignState]; history: [HistoryEntry[]]; review: [ReviewState | null] }> {
+export class Workspace extends EventEmitter<{
+  design: [DesignState];
+  history: [HistoryEntry[]];
+  review: [ReviewState | null];
+}> {
   readonly file: string;
   readonly componentsDir: string;
   readonly patternsDir: string;
@@ -228,7 +232,9 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
       const files = (await git(this.dir, ["diff", "--name-only", historyId, "--", ...SOURCE_DIRS]))
         .split("\n")
         .filter(Boolean);
-      let codeDiff = files.length ? await git(this.dir, ["diff", "--no-color", "-R", historyId, "--", ...SOURCE_DIRS]) : "";
+      let codeDiff = files.length
+        ? await git(this.dir, ["diff", "--no-color", "-R", historyId, "--", ...SOURCE_DIRS])
+        : "";
       if (codeDiff.length > DIFF_LIMIT) codeDiff = `${codeDiff.slice(0, DIFF_LIMIT)}\n… diff truncated`;
       return { id: historyId, design: result.design, files, codeDiff };
     } catch {
@@ -253,7 +259,9 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
     const work = (async () => {
       if (existsSync(done)) return target;
       await rm(target, { recursive: true, force: true });
-      const names = (await git(this.dir, ["ls-tree", "-r", "-z", "--name-only", id, "--", ...SOURCE_DIRS])).split("\0").filter(Boolean);
+      const names = (await git(this.dir, ["ls-tree", "-r", "-z", "--name-only", id, "--", ...SOURCE_DIRS]))
+        .split("\0")
+        .filter(Boolean);
       await Promise.all(
         names.map(async (name) => {
           const file = path.join(target, ...name.split("/"));
@@ -303,7 +311,8 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
 
   private async applyReviewRequest(request: ReviewRequest): Promise<void> {
     const current = this.reviewState;
-    if (current && current.title === request.title && JSON.stringify(current.show) === JSON.stringify(request.show)) return;
+    if (current && current.title === request.title && JSON.stringify(current.show) === JSON.stringify(request.show))
+      return;
     // A new review starts from the last recorded version: during a turn, that is the state before the turn.
     const baseline = current?.baseline ?? (await git(this.dir, ["rev-parse", "HEAD"])).trim();
     this.reviewState = current
@@ -361,7 +370,9 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
   }
 
   private onFsEvent(filename: string | Buffer | null): void {
-    const name = String(filename ?? "").split(path.sep).join("/");
+    const name = String(filename ?? "")
+      .split(path.sep)
+      .join("/");
     if (!name || name.startsWith(".git") || name.startsWith(".basis") || name.includes("node_modules")) return;
     if (name === REVIEW_FILE) {
       clearTimeout(this.reviewTimer);
@@ -538,7 +549,10 @@ export class Workspace extends EventEmitter<{ design: [DesignState]; history: [H
       include: [...SOURCE_DIRS.map((dir) => `${dir}/**/*`), ".basis/*.ts"],
     };
     await writeFile(path.join(this.dir, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`);
-    await writeFile(path.join(this.basisDir, "contracts.ts"), await readFile(path.join(repoRoot, "shared", "contracts.ts"), "utf8"));
+    await writeFile(
+      path.join(this.basisDir, "contracts.ts"),
+      await readFile(path.join(repoRoot, "shared", "contracts.ts"), "utf8"),
+    );
     await writeFile(
       path.join(this.basisDir, "env.d.ts"),
       'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',

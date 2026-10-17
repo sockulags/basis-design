@@ -60,7 +60,17 @@ const CONTRAST_PAIRS: { fg: ColorRole; bg: ColorRole; target: number }[] = [
   { fg: "focusRing", bg: "bg", target: 3 },
 ];
 
-function Ratio({ resolved, fg, bg, target }: { resolved: ResolvedTheme; fg: ColorRole; bg: ColorRole; target: number }) {
+function Ratio({
+  resolved,
+  fg,
+  bg,
+  target,
+}: {
+  resolved: ResolvedTheme;
+  fg: ColorRole;
+  bg: ColorRole;
+  target: number;
+}) {
   const a = resolved[fg];
   const b = resolved[bg];
   if (!a || !b) return <span className={styles.ratio}>…</span>;
@@ -68,7 +78,10 @@ function Ratio({ resolved, fg, bg, target }: { resolved: ResolvedTheme; fg: Colo
   const pass = ratio >= target;
   return (
     <span className={styles.ratio} data-pass={pass}>
-      <span className={styles.ratioSample} style={{ color: `rgb(${a.slice(0, 3).join(" ")})`, background: `rgb(${b.slice(0, 3).join(" ")})` }}>
+      <span
+        className={styles.ratioSample}
+        style={{ color: `rgb(${a.slice(0, 3).join(" ")})`, background: `rgb(${b.slice(0, 3).join(" ")})` }}
+      >
         Aa
       </span>
       {ratio.toFixed(2)}
@@ -100,8 +113,16 @@ export function Colors({ design, onAsk }: FoundationProps) {
             {group.roles.map((role) => (
               <div key={role} className={styles.swatch} data-ds="color" data-token={`color.*.${role}`}>
                 <div className={styles.chips}>
-                  <span className={`ds-root ${styles.chip}`} data-theme="light" style={{ background: `var(--color-${kebab(role)})` }} />
-                  <span className={`ds-root ${styles.chip}`} data-theme="dark" style={{ background: `var(--color-${kebab(role)})` }} />
+                  <span
+                    className={`ds-root ${styles.chip}`}
+                    data-theme="light"
+                    style={{ background: `var(--color-${kebab(role)})` }}
+                  />
+                  <span
+                    className={`ds-root ${styles.chip}`}
+                    data-theme="dark"
+                    style={{ background: `var(--color-${kebab(role)})` }}
+                  />
                 </div>
                 <span className={styles.swatchName}>{role}</span>
                 <Token>{design.color.light[role]}</Token>
@@ -115,7 +136,11 @@ export function Colors({ design, onAsk }: FoundationProps) {
         title={`Contrast (WCAG 2) · ${failures.length === 0 ? "all pairs pass" : `${failures.length} failing`}`}
         actions={
           failures.length > 0 && (
-            <button type="button" className="ask-button" onClick={() => onAsk(`Fix these contrast failures: ${failures.join(", ")}. `)}>
+            <button
+              type="button"
+              className="ask-button"
+              onClick={() => onAsk(`Fix these contrast failures: ${failures.join(", ")}. `)}
+            >
               Ask agent to fix
             </button>
           )
@@ -155,7 +180,12 @@ export function Typography({ design, onAsk }: FoundationProps) {
       <Group title="Families">
         <div className={styles.families}>
           {(["display", "sans", "mono"] as const).map((family) => (
-            <div key={family} className={styles.family} data-ds="font family" data-token={`typography.family.${family}`}>
+            <div
+              key={family}
+              className={styles.family}
+              data-ds="font family"
+              data-token={`typography.family.${family}`}
+            >
               <span className={styles.familySample} style={{ fontFamily: `var(--font-${family})` }}>
                 Aa Gg 0123
               </span>
@@ -213,12 +243,14 @@ export function Typography({ design, onAsk }: FoundationProps) {
           <p className={styles.overline}>Release notes</p>
           <h1>A design system you can talk to</h1>
           <p className={styles.lede}>
-            Start with a feeling, end with tokens. Every answer from the agent lands in the preview the moment the file is saved.
+            Start with a feeling, end with tokens. Every answer from the agent lands in the preview the moment the file
+            is saved.
           </p>
           <h2>Why roles beat raw values</h2>
           <p>
-            Components never reference a hex code. They ask for <code>primary</code> or <code>textMuted</code>, so a single change to the palette
-            carries through buttons, inputs and alerts at once. Body copy sits at the normal line height; headings tighten up.
+            Components never reference a hex code. They ask for <code>primary</code> or <code>textMuted</code>, so a
+            single change to the palette carries through buttons, inputs and alerts at once. Body copy sits at the
+            normal line height; headings tighten up.
           </p>
           <h3>Leading</h3>
           <div className={styles.leading}>
@@ -305,7 +337,10 @@ function Curve({ value }: { value: string }) {
       <rect x={pad} y={pad} width={size} height={size} className={styles.curveFrame} />
       <line x1={px(0)} y1={py(0)} x2={px(x1)} y2={py(y1)} className={styles.curveHandle} />
       <line x1={px(1)} y1={py(1)} x2={px(x2)} y2={py(y2)} className={styles.curveHandle} />
-      <path d={`M${px(0)} ${py(0)} C${px(x1)} ${py(y1)} ${px(x2)} ${py(y2)} ${px(1)} ${py(1)}`} className={styles.curvePath} />
+      <path
+        d={`M${px(0)} ${py(0)} C${px(x1)} ${py(y1)} ${px(x2)} ${py(y2)} ${px(1)} ${py(1)}`}
+        className={styles.curvePath}
+      />
     </svg>
   );
 }
@@ -338,7 +373,9 @@ export function Motion({ design, onAsk }: FoundationProps) {
               <span className={styles.track}>
                 <span
                   className={styles.dot}
-                  style={{ transition: `left var(--duration-${key}) var(--ease-standard), translate var(--duration-${key}) var(--ease-standard)` }}
+                  style={{
+                    transition: `left var(--duration-${key}) var(--ease-standard), translate var(--duration-${key}) var(--ease-standard)`,
+                  }}
                 />
               </span>
             </div>
@@ -364,7 +401,9 @@ export function Motion({ design, onAsk }: FoundationProps) {
               <span className={styles.track}>
                 <span
                   className={styles.dot}
-                  style={{ transition: `left var(--duration-slow) var(--ease-${key}), translate var(--duration-slow) var(--ease-${key})` }}
+                  style={{
+                    transition: `left var(--duration-slow) var(--ease-${key}), translate var(--duration-slow) var(--ease-${key})`,
+                  }}
                 />
               </span>
             </div>

@@ -75,7 +75,15 @@ export function Tabs({ items, value, onChange, variant, label }: TabsProps) {
   };
 
   return (
-    <div ref={list} className={styles.list} data-ds="tabs" role="tablist" aria-label={label} data-variant={variant} onKeyDown={onKeyDown}>
+    <div
+      ref={list}
+      className={styles.list}
+      data-ds="tabs"
+      role="tablist"
+      aria-label={label}
+      data-variant={variant}
+      onKeyDown={onKeyDown}
+    >
       {box && (
         <span
           className={styles.indicator}

@@ -95,7 +95,12 @@ export function PickLayer({ container, design, picks, onToggle, onDone }: PickLa
       {hover && (
         <div
           className={styles.outline}
-          style={{ top: hover.rect.top - 3, left: hover.rect.left - 3, width: hover.rect.width + 6, height: hover.rect.height + 6 }}
+          style={{
+            top: hover.rect.top - 3,
+            left: hover.rect.left - 3,
+            width: hover.rect.width + 6,
+            height: hover.rect.height + 6,
+          }}
         >
           <span className={styles.tag}>{hover.label}</span>
         </div>

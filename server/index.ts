@@ -171,12 +171,15 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     case "prompt": {
       const text = message.text.trim();
       const hasAttachments = Boolean(message.images?.length || message.annotations?.length);
-      if (text || hasAttachments) await agent.prompt(text, { images: message.images, annotations: message.annotations });
+      if (text || hasAttachments)
+        await agent.prompt(text, { images: message.images, annotations: message.annotations });
       return;
     }
     case "create": {
       const name = String(message.name ?? "").trim();
-      const purpose = String(message.purpose ?? "").trim().slice(0, 2000);
+      const purpose = String(message.purpose ?? "")
+        .trim()
+        .slice(0, 2000);
       if (!isPageId(message.page) || !isComponentName(name)) return;
       const page = pageById(message.page);
       const text = `New ${page.kind}: ${name}${purpose ? `\n\n${purpose}` : ""}`;
@@ -210,7 +213,11 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return agent.unqueue(String(message.id ?? ""));
     case "baseline-get": {
       const baseline = await workspace.baseline(String(message.id ?? ""));
-      if (baseline) send(socket, { type: "baseline", baseline: { id: baseline.id, design: baseline.design, base: previewPath(baseline.dir) } });
+      if (baseline)
+        send(socket, {
+          type: "baseline",
+          baseline: { id: baseline.id, design: baseline.design, base: previewPath(baseline.dir) },
+        });
       return;
     }
     case "snapshot-get": {
@@ -231,7 +238,11 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return;
     }
     case "export-write": {
-      const result = await writeStarterKit(await starterKit(), String(message.target ?? ""), message.overwrite === true);
+      const result = await writeStarterKit(
+        await starterKit(),
+        String(message.target ?? ""),
+        message.overwrite === true,
+      );
       send(socket, { type: "export-result", result });
       return;
     }

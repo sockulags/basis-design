@@ -14,7 +14,12 @@ const BADGE_TEXT: Record<Tone, string> = {
 };
 
 const stack = { display: "grid", gap: "var(--space-3)" } as const;
-const title = { margin: 0, color: "var(--color-text)", fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)" } as const;
+const title = {
+  margin: 0,
+  color: "var(--color-text)",
+  fontSize: "var(--text-sm)",
+  fontWeight: "var(--weight-semibold)",
+} as const;
 const meta = { margin: "2px 0 0", color: "var(--color-text-muted)", fontSize: "var(--text-sm)" } as const;
 
 function PersonCard(props: { interactive?: boolean; selected?: boolean; force?: "hover" | "focus" }) {
@@ -83,7 +88,15 @@ export default defineSpecimen([
           const [key, setKey] = useState(0);
           const [phase, setPhase] = useState<"enter" | "exit" | null>(null);
           return (
-            <div style={{ display: "grid", justifyItems: "start", alignContent: "start", gap: "var(--space-3)", minHeight: 200 }}>
+            <div
+              style={{
+                display: "grid",
+                justifyItems: "start",
+                alignContent: "start",
+                gap: "var(--space-3)",
+                minHeight: 200,
+              }}
+            >
               <Button
                 size="sm"
                 variant="secondary"
@@ -98,7 +111,13 @@ export default defineSpecimen([
                 Maya will get an email with a link to join.
               </Toast>
               {phase && (
-                <Toast key={key} tone="danger" title="Couldn't save draft" animate={phase} onClose={() => setPhase("exit")}>
+                <Toast
+                  key={key}
+                  tone="danger"
+                  title="Couldn't save draft"
+                  animate={phase}
+                  onClose={() => setPhase("exit")}
+                >
                   Check your connection and try again.
                 </Toast>
               )}
@@ -111,9 +130,30 @@ export default defineSpecimen([
         title: "Loading",
         min: 200,
         items: [
-          { label: "progress 35%", render: () => <div style={{ width: "100%" }}><Progress value={35} /></div> },
-          { label: "progress 80%", render: () => <div style={{ width: "100%" }}><Progress value={80} /></div> },
-          { label: "indeterminate", render: () => <div style={{ width: "100%" }}><Progress /></div> },
+          {
+            label: "progress 35%",
+            render: () => (
+              <div style={{ width: "100%" }}>
+                <Progress value={35} />
+              </div>
+            ),
+          },
+          {
+            label: "progress 80%",
+            render: () => (
+              <div style={{ width: "100%" }}>
+                <Progress value={80} />
+              </div>
+            ),
+          },
+          {
+            label: "indeterminate",
+            render: () => (
+              <div style={{ width: "100%" }}>
+                <Progress />
+              </div>
+            ),
+          },
           {
             label: "spinner",
             render: () => (
@@ -165,7 +205,13 @@ export default defineSpecimen([
         render: function PlanPicker() {
           const [selected, setSelected] = useState("pro");
           return (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))", gap: "var(--space-5)" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))",
+                gap: "var(--space-5)",
+              }}
+            >
               {PLANS.map((plan) => (
                 <Card
                   key={plan.id}
@@ -176,7 +222,14 @@ export default defineSpecimen([
                   role="radio"
                   aria-checked={selected === plan.id}
                 >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-2)" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "var(--space-2)",
+                    }}
+                  >
                     <p style={title}>{plan.name}</p>
                     {plan.id === "pro" && (
                       <Badge color="primary" variant="soft">

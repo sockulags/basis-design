@@ -5,7 +5,8 @@ import { Tabs } from "./Tabs.tsx";
 export default defineSpecimen({
   id: "navigation",
   title: "Tabs",
-  description: "The look comes from components.tabs.variant in the tokens. Use the arrow keys in the live tabs to move focus.",
+  description:
+    "The look comes from components.tabs.variant in the tokens. Use the arrow keys in the live tabs to move focus.",
   order: 50,
   blocks: [
     {

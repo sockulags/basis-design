@@ -7,7 +7,8 @@ export default defineSpecimen({
   id: "forms",
   title: "Form sections",
   group: "Forms",
-  description: "Long forms as titled sections: the explanation beside the fields on wide screens, above them on narrow ones.",
+  description:
+    "Long forms as titled sections: the explanation beside the fields on wide screens, above them on narrow ones.",
   order: 60,
   blocks: [
     {
@@ -42,8 +43,18 @@ export default defineSpecimen({
                 </Select>
               </Field>
               <div role="radiogroup" aria-label="Visibility" style={{ display: "grid", gap: "var(--space-2)" }}>
-                <Radio label="Only invited people" name="visibility" checked={visibility === "invite"} onChange={() => setVisibility("invite")} />
-                <Radio label="Anyone in the team" name="visibility" checked={visibility === "team"} onChange={() => setVisibility("team")} />
+                <Radio
+                  label="Only invited people"
+                  name="visibility"
+                  checked={visibility === "invite"}
+                  onChange={() => setVisibility("invite")}
+                />
+                <Radio
+                  label="Anyone in the team"
+                  name="visibility"
+                  checked={visibility === "team"}
+                  onChange={() => setVisibility("team")}
+                />
               </div>
             </FormSection>
             <FormSection title="Notifications" description="Email summaries for workspace activity.">

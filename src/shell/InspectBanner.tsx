@@ -38,7 +38,16 @@ function diffKind(line: string): string | undefined {
 }
 
 /** Shown while the preview displays a past version instead of the live one. */
-export function InspectBanner({ entry, snapshot, current, hasOlder, hasNewer, onStep, onRestore, onExit }: InspectBannerProps) {
+export function InspectBanner({
+  entry,
+  snapshot,
+  current,
+  hasOlder,
+  hasNewer,
+  onStep,
+  onRestore,
+  onExit,
+}: InspectBannerProps) {
   const [expanded, setExpanded] = useState<"tokens" | "code" | null>(null);
   const changes = useMemo(() => (snapshot ? diffDesigns(current, snapshot.design) : []), [current, snapshot]);
   const files = snapshot?.files ?? [];
@@ -49,7 +58,13 @@ export function InspectBanner({ entry, snapshot, current, hasOlder, hasNewer, on
     <div className={styles.inspect}>
       <div className={styles.inspectRow}>
         <div className={styles.inspectStep}>
-          <button type="button" className={styles.chromeButton} onClick={() => onStep(-1)} disabled={!hasOlder} aria-label="Older version">
+          <button
+            type="button"
+            className={styles.chromeButton}
+            onClick={() => onStep(-1)}
+            disabled={!hasOlder}
+            aria-label="Older version"
+          >
             ←
           </button>
           <button type="button" className={styles.chromeButton} onClick={() => onStep(1)} aria-label="Newer version">
@@ -99,7 +114,8 @@ export function InspectBanner({ entry, snapshot, current, hasOlder, hasNewer, on
       {expanded === "code" && snapshot && (
         <div className={styles.codeDiff}>
           <p className={styles.muted}>
-            The preview shows this version's tokens with today's component code. Lines marked + are what restoring brings back.
+            The preview shows this version's tokens with today's component code. Lines marked + are what restoring
+            brings back.
           </p>
           <pre>
             {snapshot.codeDiff.split("\n").map((line, index) => (

@@ -1,6 +1,13 @@
 import { useLayoutEffect, useRef } from "react";
 import type { Annotation } from "../../shared/annotations.ts";
-import { AGENT_IDS, AGENT_LABELS, type AgentId, type AgentState, type ChatItem, type ClientMessage } from "../../shared/protocol.ts";
+import {
+  AGENT_IDS,
+  AGENT_LABELS,
+  type AgentId,
+  type AgentState,
+  type ChatItem,
+  type ClientMessage,
+} from "../../shared/protocol.ts";
 import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
@@ -96,7 +103,11 @@ export function ChatPanel({
       {agent?.status === "error" && (
         <div className={styles.agentError}>
           <p>{agent.detail}</p>
-          <button type="button" className={styles.iconButton} onClick={() => send({ type: "switch-agent", agent: agent.id })}>
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={() => send({ type: "switch-agent", agent: agent.id })}
+          >
             Restart agent
           </button>
         </div>
@@ -114,8 +125,8 @@ export function ChatPanel({
           <div className={styles.empty}>
             <p className={styles.emptyTitle}>Describe the feel. The agent builds the system.</p>
             <p className={styles.emptyCopy}>
-              Start broad with mood, colour and type, then go deep: "make the button press feel softer", "tighten the type
-              scale", "slower, more elegant dialog entrance".
+              Start broad with mood, colour and type, then go deep: "make the button press feel softer", "tighten the
+              type scale", "slower, more elegant dialog entrance".
             </p>
             <div className={styles.starters}>
               {STARTERS.map((starter) => (
@@ -195,7 +206,11 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
           {item.queued && (
             <span className={styles.queuedLabel}>
               Queued · runs when the agent is done
-              <button type="button" aria-label="Remove from queue" onClick={() => send({ type: "unqueue", id: item.id })}>
+              <button
+                type="button"
+                aria-label="Remove from queue"
+                onClick={() => send({ type: "unqueue", id: item.id })}
+              >
                 ×
               </button>
             </span>

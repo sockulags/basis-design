@@ -27,7 +27,14 @@ export interface CellProps extends RenderProps {
 
 export type SpecimenBlock =
   /** A grid of rows × columns, typically variants × states. */
-  | { kind: "matrix"; title?: string; rows: string[]; columns: string[]; minColumn?: number; render: ComponentType<CellProps> }
+  | {
+      kind: "matrix";
+      title?: string;
+      rows: string[];
+      columns: string[];
+      minColumn?: number;
+      render: ComponentType<CellProps>;
+    }
   /** Labelled examples in a responsive grid. */
   | { kind: "grid"; title?: string; min?: number; items: { label: string; render: ComponentType<RenderProps> }[] }
   /** Free content laid out in a wrapping row. */

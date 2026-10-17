@@ -12,8 +12,25 @@ const frame = {
 } as const;
 
 const workspace = (
-  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontWeight: "var(--weight-semibold)", fontSize: "var(--text-sm)" }}>
-    <span aria-hidden style={{ width: 24, height: 24, borderRadius: "var(--radius-sm)", background: "var(--color-primary)", flex: "none" }} />
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "var(--space-2)",
+      fontWeight: "var(--weight-semibold)",
+      fontSize: "var(--text-sm)",
+    }}
+  >
+    <span
+      aria-hidden
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: "var(--radius-sm)",
+        background: "var(--color-primary)",
+        flex: "none",
+      }}
+    />
     Northwind
   </div>
 );
@@ -44,7 +61,13 @@ export default defineSpecimen({
         return (
           <>
             <div style={frame}>
-              <SidebarNav sections={SIDEBAR_SECTIONS} active={active} onNavigate={setActive} header={workspace} footer={user} />
+              <SidebarNav
+                sections={SIDEBAR_SECTIONS}
+                active={active}
+                onNavigate={setActive}
+                header={workspace}
+                footer={user}
+              />
             </div>
             <div style={frame}>
               <SidebarNav sections={SIDEBAR_SECTIONS} active={active} onNavigate={setActive} collapsed />
@@ -55,7 +78,12 @@ export default defineSpecimen({
                   ...section,
                   items: section.items.map((item, index) => ({
                     ...item,
-                    force: sectionIndex === 0 && index === 2 ? "hover" : sectionIndex === 0 && index === 3 ? "focus" : undefined,
+                    force:
+                      sectionIndex === 0 && index === 2
+                        ? "hover"
+                        : sectionIndex === 0 && index === 3
+                          ? "focus"
+                          : undefined,
                     disabled: sectionIndex === 1 && index === 1,
                   })),
                 }))}

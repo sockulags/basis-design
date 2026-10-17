@@ -151,9 +151,7 @@
 
 .native:checked + .track .thumb {
   background: var(--color-on-primary);
-  transform: translateX(
-    calc(var(--control-switch-width) - var(--control-switch-height))
-  );
+  transform: translateX(calc(var(--control-switch-width) - var(--control-switch-height)));
 }
 
 .native:disabled + .track {

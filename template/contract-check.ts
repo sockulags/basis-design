@@ -6,4 +6,5 @@ import * as components from "./components/index.ts";
 export const templateSatisfiesContracts: Contracts & AddedContracts = components;
 
 type Uncovered = Exclude<keyof typeof components, keyof Contracts | keyof AddedContracts>;
-export const templateExportsHaveContracts: [Uncovered] extends [never] ? true : { missingContractFor: Uncovered } = true;
+export const templateExportsHaveContracts: [Uncovered] extends [never] ? true : { missingContractFor: Uncovered } =
+  true;

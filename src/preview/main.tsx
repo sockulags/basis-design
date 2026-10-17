@@ -59,7 +59,11 @@ function useScrollSpy(view: string | null): void {
       let current = sections[0]?.id ?? "";
       for (const section of sections) if (section.getBoundingClientRect().top <= 120) current = section.id;
       const root = document.scrollingElement;
-      if (root && root.scrollHeight > root.clientHeight + 2 && root.scrollTop + root.clientHeight >= root.scrollHeight - 2) {
+      if (
+        root &&
+        root.scrollHeight > root.clientHeight + 2 &&
+        root.scrollTop + root.clientHeight >= root.scrollHeight - 2
+      ) {
         current = sections.at(-1)?.id ?? current;
       }
       if (current && current !== last) {
@@ -134,7 +138,8 @@ function PreviewApp() {
           if (!message.review) lastImpact = "";
           setView((current) => {
             // A new page, or a review opening or closing, starts at the top.
-            const moved = current && (current.page !== message.page || Boolean(current.review) !== Boolean(message.review));
+            const moved =
+              current && (current.page !== message.page || Boolean(current.review) !== Boolean(message.review));
             if (moved) requestAnimationFrame(() => window.scrollTo(0, 0));
             return { design: message.design, theme: message.theme, page: message.page, review: message.review };
           });

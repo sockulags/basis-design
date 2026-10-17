@@ -7,7 +7,8 @@ const row = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var
 export default defineSpecimen({
   id: "buttons",
   title: "Buttons",
-  description: "Five variants in every interaction state. Hover, pressed and focus are pinned so you can compare them side by side.",
+  description:
+    "Five variants in every interaction state. Hover, pressed and focus are pinned so you can compare them side by side.",
   order: 10,
   blocks: [
     {

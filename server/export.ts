@@ -95,7 +95,10 @@ async function sourceFiles(workspaceDir: string, folder: SourceFolder): Promise<
     if (/\.(tsx?|jsx?)$/.test(entry)) content = stripImportExtensions(content);
     // The workspace's index.ts talks about the Basis gallery; in a project it is just the public entry point.
     if (folder === "components" && entry === "index.ts") {
-      content = content.replace(/^\/\/ Every component the Basis gallery renders\..*\n/, "// Public entry point of the design system's components.\n");
+      content = content.replace(
+        /^\/\/ Every component the Basis gallery renders\..*\n/,
+        "// Public entry point of the design system's components.\n",
+      );
     }
     files.push({ path: `${folder}/${entry}`, content });
   }
@@ -106,7 +109,13 @@ async function sourceFiles(workspaceDir: string, folder: SourceFolder): Promise<
 export async function buildStarterKit(design: Design, workspaceDir: string): Promise<ExportFile[]> {
   const files = (await Promise.all(SOURCE_FOLDERS.map((folder) => sourceFiles(workspaceDir, folder)))).flat();
   return [
-    { path: "README.md", content: readme(design, files.map((file) => file.path)) },
+    {
+      path: "README.md",
+      content: readme(
+        design,
+        files.map((file) => file.path),
+      ),
+    },
     { path: "tokens.css", content: exportCss(design) },
     { path: "theme.tailwind.css", content: exportTailwind(design) },
     { path: "design-system.json", content: exportJson(design) },
@@ -120,7 +129,9 @@ function withoutStamp(text: string): string {
 }
 
 export function zipStarterKit(files: ExportFile[], folder: string): Uint8Array {
-  return zipSync(Object.fromEntries(files.map((file) => [`${folder}/${file.path}`, strToU8(file.content)])), { level: 6 });
+  return zipSync(Object.fromEntries(files.map((file) => [`${folder}/${file.path}`, strToU8(file.content)])), {
+    level: 6,
+  });
 }
 
 /**
@@ -140,7 +151,13 @@ export async function writeStarterKit(
   const dir = path.resolve(trimmed);
   const relativeToBasis = path.relative(repoRoot, dir);
   if (!relativeToBasis.startsWith("..") && !path.isAbsolute(relativeToBasis)) {
-    return { ok: false, target: dir, written: [], conflicts: [], error: "That folder is inside Basis itself. Pick a folder in your project." };
+    return {
+      ok: false,
+      target: dir,
+      written: [],
+      conflicts: [],
+      error: "That folder is inside Basis itself. Pick a folder in your project.",
+    };
   }
   const conflicts: string[] = [];
   for (const file of files) {

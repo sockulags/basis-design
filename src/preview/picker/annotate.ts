@@ -56,7 +56,9 @@ function tokensFor(el: HTMLElement, design: Design): Pick<Annotation, "tokenPath
     };
   }
   if (token) {
-    const value = token.split(".").reduce<unknown>((node, key) => (node as Record<string, unknown> | undefined)?.[key], design);
+    const value = token
+      .split(".")
+      .reduce<unknown>((node, key) => (node as Record<string, unknown> | undefined)?.[key], design);
     return { tokenPath: token, tokens: { value: typeof value === "string" ? value : JSON.stringify(value) } };
   }
   const group = COMPONENT_GROUP[el.dataset.ds ?? ""];

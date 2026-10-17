@@ -243,7 +243,9 @@ export function App() {
               <path d="M6 3v10" />
               {chatHidden ? <path d="M9 6.5 10.5 8 9 9.5" /> : <path d="M10.5 6.5 9 8l1.5 1.5" />}
             </svg>
-            {chatHidden && state.agent?.status === "busy" && <span className={styles.chatToggleDot} aria-label="Agent is working" />}
+            {chatHidden && state.agent?.status === "busy" && (
+              <span className={styles.chatToggleDot} aria-label="Agent is working" />
+            )}
           </button>
           <span className={styles.brand}>
             <span className={styles.brandMark} aria-hidden />
@@ -274,7 +276,13 @@ export function App() {
                 </button>
               ))}
             </div>
-            <HistoryMenu history={history} inspecting={inspectId} onInspect={setInspectId} send={send} locked={Boolean(review)} />
+            <HistoryMenu
+              history={history}
+              inspecting={inspectId}
+              onInspect={setInspectId}
+              send={send}
+              locked={Boolean(review)}
+            />
             <button type="button" className={styles.primaryButton} onClick={() => setExporting(true)} disabled={!live}>
               Export
             </button>

@@ -69,7 +69,9 @@
   background: transparent;
   color: var(--app-muted);
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .chatToggle:hover {
@@ -218,7 +220,10 @@
   font-size: 12.5px;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, transform 80ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
 }
 
 .chromeButton {
@@ -841,7 +846,10 @@ a.primaryButton {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
 }
 
 .reviewChip:hover {

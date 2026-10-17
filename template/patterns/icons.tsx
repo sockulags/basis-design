@@ -43,7 +43,11 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 16, ...rest }: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
+export function Icon({
+  name,
+  size = 16,
+  ...rest
+}: { name: IconName; size?: number } & Omit<SVGProps<SVGSVGElement>, "name">) {
   return (
     <svg
       viewBox="0 0 16 16"

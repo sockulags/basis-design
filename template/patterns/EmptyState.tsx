@@ -15,7 +15,14 @@ export interface EmptyStateProps {
 }
 
 /** What to show when there is nothing to show: first use, no results, or something went wrong. */
-export function EmptyState({ icon = "inbox", title, description, actions, tone = "neutral", compact = false }: EmptyStateProps) {
+export function EmptyState({
+  icon = "inbox",
+  title,
+  description,
+  actions,
+  tone = "neutral",
+  compact = false,
+}: EmptyStateProps) {
   return (
     <div className={styles.empty} data-ds="empty-state" data-tone={tone} data-compact={compact || undefined}>
       <span className={styles.icon}>

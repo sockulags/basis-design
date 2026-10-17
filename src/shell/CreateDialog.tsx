@@ -28,7 +28,8 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
   const [purpose, setPurpose] = useState("");
   const { kind, folder } = pageById(page);
   const componentName = toComponentName(name);
-  const nameProblem = name.trim() && !isComponentName(componentName) ? "Start with a letter; use letters and digits." : null;
+  const nameProblem =
+    name.trim() && !isComponentName(componentName) ? "Start with a letter; use letters and digits." : null;
   const canCreate = agentReady && isComponentName(componentName);
 
   useEffect(() => {
@@ -81,7 +82,9 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
           <p id="create-name-hint" className={nameProblem ? styles.kitError : styles.muted}>
             {nameProblem ?? (componentName && componentName !== name.trim() ? `Created as ${componentName}` : " ")}
           </p>
-          <label htmlFor="create-purpose">What is it for? <span className={styles.muted}>Optional</span></label>
+          <label htmlFor="create-purpose">
+            What is it for? <span className={styles.muted}>Optional</span>
+          </label>
           <textarea
             id="create-purpose"
             value={purpose}
