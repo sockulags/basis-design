@@ -94,6 +94,15 @@ the others render from snapshots like the before side. `chooseAlternative` resto
 iteration (none if it is the one on show). A new iteration after the set puts it away; approve waits until one
 is chosen. The queue waits for the whole set.
 
+### Checks
+
+Automatic checks report findings, not failures: the preview sends them as a `checks` message next to its
+render `errors`, the chrome lists them apart and forwards them with `preview-errors`, and `AgentHost` puts
+only the findings a turn introduced (not there when the turn started) into the fix loop. Contrast
+(`shared/contrast.ts`) checks role pairs on colours the browser resolved, so any CSS colour works; the gallery's
+contrast table uses the same pairs. Text is held to 4.5:1, `textSubtle`, `primary` on `bg` and the focus ring to
+3:1; disabled text and borders are not checked.
+
 ### Large galleries
 
 A page renders its first six sections at once and the rest six per task (`src/preview/progressive.ts`), with a

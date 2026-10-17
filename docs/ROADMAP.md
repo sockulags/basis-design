@@ -46,7 +46,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ### Quality checks
 
-- [ ] **Contrast check.** Validate the colour roles pairwise in both themes (text on its surfaces, text on
+- [x] **Contrast check.** Validate the colour roles pairwise in both themes (text on its surfaces, text on
       primary and the other filled roles, borders where they carry meaning) against WCAG AA, as problems in the
       fix loop phrased so the agent can act. Pure function in `shared/`, with tests; report from the server
       with the other design problems.
@@ -91,5 +91,9 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Contrast runs in the preview on browser-resolved colours rather than on the server, so oklch,
+  color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
+  and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
+  not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
 - 2026-10-18: Order is quality checks first (small, and every later step benefits from them), then repos,
   then views (views read best once a project looks like the product).

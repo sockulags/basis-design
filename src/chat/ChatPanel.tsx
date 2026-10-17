@@ -25,6 +25,8 @@ interface ChatPanelProps {
   connected: boolean;
   /** Validation, type and render problems in the workspace; empty when everything is fine. */
   problems: string[];
+  /** Findings of the automatic checks (contrast, accessibility); listed apart, since they do not break anything. */
+  checks: string[];
   draft: string;
   onDraft: (text: string) => void;
   send: (message: ClientMessage) => void;
@@ -51,6 +53,7 @@ export function ChatPanel({
   chat,
   connected,
   problems,
+  checks,
   draft,
   onDraft,
   send,
@@ -167,6 +170,32 @@ export function ChatPanel({
               <li key={problem}>{problem}</li>
             ))}
           </ul>
+        </details>
+      )}
+
+      {checks.length > 0 && (
+        <details className={styles.checks}>
+          <summary>
+            <strong>
+              {checks.length} accessibility {checks.length === 1 ? "finding" : "findings"}.
+            </strong>{" "}
+            The agent hears about the ones its changes cause.
+          </summary>
+          <ul>
+            {checks.slice(0, 12).map((check) => (
+              <li key={check}>{check}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className={styles.checksAsk}
+            onClick={() => {
+              onDraft(`Fix these accessibility findings:\n${checks.map((check) => `- ${check}`).join("\n")}`);
+              composerRef.current?.focus();
+            }}
+          >
+            Ask the agent to fix them
+          </button>
         </details>
       )}
 

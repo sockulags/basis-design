@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { ColorRole, Design } from "../../shared/design.ts";
 import { kebab } from "../../shared/tokens.ts";
 import { Button } from "./ds.ts";
-import { contrast, useResolvedColors, type ResolvedTheme } from "./color.ts";
+import { contrast, contrastFailures, CONTRAST_PAIRS } from "../../shared/contrast.ts";
+import { useResolvedColors, type ResolvedTheme } from "./color.ts";
 import styles from "./Foundations.module.css";
 import { Group, Section, Token } from "./Gallery.tsx";
 
@@ -39,27 +40,6 @@ const COLOR_GROUPS: { title: string; roles: ColorRole[] }[] = [
   { title: "Utility", roles: ["focusRing", "overlay", "disabledBg", "disabledText", "selection"] },
 ];
 
-/** Pairs checked for contrast, with the WCAG target that applies to how the pair is used. */
-const CONTRAST_PAIRS: { fg: ColorRole; bg: ColorRole; target: number }[] = [
-  { fg: "text", bg: "bg", target: 4.5 },
-  { fg: "text", bg: "surface", target: 4.5 },
-  { fg: "textMuted", bg: "surface", target: 4.5 },
-  { fg: "textSubtle", bg: "surface", target: 3 },
-  { fg: "primary", bg: "bg", target: 3 },
-  { fg: "onPrimary", bg: "primary", target: 4.5 },
-  { fg: "onSecondary", bg: "secondary", target: 4.5 },
-  { fg: "onAccent", bg: "accent", target: 4.5 },
-  { fg: "onDanger", bg: "danger", target: 4.5 },
-  { fg: "onSuccess", bg: "success", target: 4.5 },
-  { fg: "onWarning", bg: "warning", target: 4.5 },
-  { fg: "onInfo", bg: "info", target: 4.5 },
-  { fg: "infoStrong", bg: "infoSubtle", target: 4.5 },
-  { fg: "successStrong", bg: "successSubtle", target: 4.5 },
-  { fg: "warningStrong", bg: "warningSubtle", target: 4.5 },
-  { fg: "dangerStrong", bg: "dangerSubtle", target: 4.5 },
-  { fg: "focusRing", bg: "bg", target: 3 },
-];
-
 function Ratio({
   resolved,
   fg,
@@ -92,13 +72,7 @@ function Ratio({
 
 export function Colors({ design, onAsk }: FoundationProps) {
   const resolved = useResolvedColors(design);
-  const failures = (["light", "dark"] as const).flatMap((theme) =>
-    CONTRAST_PAIRS.filter(({ fg, bg, target }) => {
-      const a = resolved[theme][fg];
-      const b = resolved[theme][bg];
-      return a && b && contrast(a, b) < target;
-    }).map((pair) => `${theme} ${pair.fg} on ${pair.bg}`),
-  );
+  const failures = contrastFailures(resolved);
 
   return (
     <Section
@@ -139,7 +113,7 @@ export function Colors({ design, onAsk }: FoundationProps) {
             <button
               type="button"
               className="ask-button"
-              onClick={() => onAsk(`Fix these contrast failures: ${failures.join(", ")}. `)}
+              onClick={() => onAsk(`Fix these contrast failures: ${failures.join("; ")}. `)}
             >
               Ask agent to fix
             </button>

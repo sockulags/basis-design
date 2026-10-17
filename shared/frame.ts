@@ -109,6 +109,8 @@ export type FromPreview =
   | { type: "picks"; annotations: Annotation[] }
   | { type: "picking"; on: boolean }
   | { type: "errors"; errors: string[] }
+  /** Findings of the automatic checks (contrast, accessibility); listed, but not render failures. */
+  | { type: "checks"; checks: string[] }
   | { type: "sections"; sections: NavSection[] };
 
 const text = (value: unknown, max: number): string | null => (typeof value === "string" ? value.slice(0, max) : null);
@@ -185,6 +187,16 @@ export function parseFromPreview(data: unknown): FromPreview | null {
               .slice(0, 10)
               .map((error) => text(error, 600))
               .filter((error): error is string => error !== null),
+          }
+        : null;
+    case "checks":
+      return Array.isArray(raw.checks)
+        ? {
+            type: "checks",
+            checks: raw.checks
+              .slice(0, 40)
+              .map((check) => text(check, 400))
+              .filter((check): check is string => check !== null),
           }
         : null;
     case "sections":

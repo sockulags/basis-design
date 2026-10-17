@@ -2,7 +2,7 @@ import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentTyp
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
-import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
+import { clearProblems, describe, hotUpdated, onFindings, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
 import { requestReveal, stillRendering } from "./progressive.ts";
 import type { Preview as PreviewComponent } from "./Preview.tsx";
@@ -155,9 +155,11 @@ function PreviewApp() {
     window.addEventListener("message", onMessage);
     post({ type: "ready" });
     const stop = onProblems((errors) => post({ type: "errors", errors }));
+    const stopChecks = onFindings((checks) => post({ type: "checks", checks }));
     return () => {
       window.removeEventListener("message", onMessage);
       stop();
+      stopChecks();
     };
   }, []);
 

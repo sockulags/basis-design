@@ -95,6 +95,9 @@ export class AgentHost extends EventEmitter<Events> {
   private permissions = new Map<string, (optionId: string | null) => void>();
   private stderrTail: string[] = [];
   private previewErrors: string[] = [];
+  /** Findings of the preview's automatic checks, and the ones there were when the current turn started. */
+  private checks: string[] = [];
+  private checksBefore = new Set<string>();
   private seq = 0;
   /** Prompts sent while a turn was running, oldest first. */
   private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
@@ -299,6 +302,7 @@ export class AgentHost extends EventEmitter<Events> {
     const sessionId = this.sessionId;
     if (!connection || !sessionId) return false;
     await this.workspace.beginTurn(turn.label);
+    this.checksBefore = new Set(this.checks);
     const message = turn.text || "See the attached context.";
     const body = this.needsPreamble
       ? `${FIRST_PROMPT_PREAMBLE}
@@ -392,12 +396,18 @@ ${message}`
     ].join(" ");
   }
 
-  /** Render errors of the current tab's preview (chosen by PreviewReports); they feed the auto-fix loop. */
-  setPreviewErrors(errors: unknown[]): void {
-    this.previewErrors = errors
-      .filter((error): error is string => typeof error === "string")
-      .slice(0, 10)
-      .map((error) => error.slice(0, 600));
+  /**
+   * Render errors and check findings of the current tab's preview (chosen by PreviewReports); they feed the
+   * auto-fix loop.
+   */
+  setPreviewErrors(errors: unknown[], checks: unknown[] = []): void {
+    const strings = (items: unknown[], limit: number, length: number) =>
+      items
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, limit)
+        .map((item) => item.slice(0, length));
+    this.previewErrors = strings(errors, 10, 600);
+    this.checks = strings(checks, 40, 400);
   }
 
   /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
@@ -418,6 +428,14 @@ ${message}`
       );
     }
     if (this.previewErrors.length) sections.push(`The preview fails to render:\n${list(this.previewErrors)}`);
+    // Only what this turn introduced: findings that were there before are the user's to ask about, and
+    // repeating them would send the agent after them on every turn.
+    const introduced = this.checks.filter((check) => !this.checksBefore.has(check));
+    if (introduced.length) {
+      sections.push(
+        `Your change fails these accessibility checks (WCAG 2 AA). Fix them, unless the user asked for exactly this; then say so instead:\n${list(introduced)}`,
+      );
+    }
     return sections.length
       ? `Your last change left problems. Fix them before anything else.\n\n${sections.join("\n\n")}`
       : null;

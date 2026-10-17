@@ -4,7 +4,9 @@ import { previewCss } from "../../shared/tokens.ts";
 import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
-import { clearProblems, setProblem } from "./errors.ts";
+import { contrastFailures } from "../../shared/contrast.ts";
+import { useResolvedColors } from "./color.ts";
+import { clearProblems, setFindings, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 import { findSpecimen } from "./narrow.ts";
@@ -34,6 +36,9 @@ export function Preview({ view, post }: PreviewProps) {
   const onAsk = useCallback((prefix: string) => post({ type: "ask", prefix }), [post]);
   const onImpact = useCallback((ids: string[]) => post({ type: "impact", ids }), [post]);
   const css = useMemo(() => previewCss(design, ".ds-root"), [design]);
+  // Contrast is checked on every page, since every page uses the colours.
+  const colors = useResolvedColors(design);
+  useEffect(() => setFindings("Contrast", contrastFailures(colors)), [colors]);
   // Cheap, and re-evaluated after every hot update of a specimen file.
   const { specimens, problems } = loadSpecimens();
   const sectionsKey = specimens
