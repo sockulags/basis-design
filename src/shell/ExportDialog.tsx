@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Design } from "../../shared/design.ts";
 import type { ClientMessage, ExportWriteResult } from "../../shared/protocol.ts";
 import { exportCss, exportJson, exportTailwind } from "../../shared/tokens.ts";
+import { readPref, writePref } from "./prefs.ts";
 import styles from "./Shell.module.css";
 
 const FORMATS = [
@@ -23,25 +24,21 @@ interface ExportDialogProps {
   onClose: () => void;
 }
 
-function readTarget(): string {
-  try {
-    return localStorage.getItem("basis:export-target") ?? "";
-  } catch {
-    return "";
-  }
-}
+/** The folder the kit was last written to, remembered per project so one never writes into another's. */
+const targetPref = (workspace: string) => `export-target:${workspace}`;
 
 function formatBytes(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} kB`;
 }
 
 function StarterKit({
+  workspace,
   problems,
   manifest,
   result: latest,
   send,
-}: Pick<ExportDialogProps, "problems" | "manifest" | "result" | "send">) {
-  const [target, setTarget] = useState(readTarget);
+}: Pick<ExportDialogProps, "workspace" | "problems" | "manifest" | "result" | "send">) {
+  const [target, setTarget] = useState(() => readPref(targetPref(workspace)) ?? "");
   const [pending, setPending] = useState(false);
   // Only show results of writes made while this dialog is open.
   const [stale] = useState(latest);
@@ -56,11 +53,7 @@ function StarterKit({
   useEffect(() => setPending(false), [latest]);
 
   const write = (overwrite: boolean) => {
-    try {
-      localStorage.setItem("basis:export-target", target);
-    } catch {
-      // Only a convenience for next time.
-    }
+    writePref(targetPref(workspace), target);
     setPending(true);
     send({ type: "export-write", target, overwrite });
   };
@@ -208,7 +201,7 @@ export function ExportDialog({ design, workspace, problems, manifest, result, se
           ))}
         </div>
         {tab === "kit" ? (
-          <StarterKit problems={problems} manifest={manifest} result={result} send={send} />
+          <StarterKit workspace={workspace} problems={problems} manifest={manifest} result={result} send={send} />
         ) : (
           <pre className={styles.code}>{code}</pre>
         )}

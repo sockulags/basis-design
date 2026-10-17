@@ -3,3 +3,5 @@ dist
 workspace
 .env
 *.log
+workspaces
+basis.projects.json

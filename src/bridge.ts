@@ -7,6 +7,7 @@ import type {
   DesignState,
   HistoryEntry,
   ExportWriteResult,
+  ProjectEntry,
   ServerMessage,
   Snapshot,
 } from "../shared/protocol.ts";
@@ -14,6 +15,13 @@ import type { ReviewState } from "../shared/review.ts";
 
 export interface BridgeState {
   connected: boolean;
+  /** The open project, and every project on the list. */
+  project: ProjectEntry | null;
+  projects: ProjectEntry[];
+  /** The project being opened, while Basis switches to it. */
+  switching: ProjectEntry | null;
+  /** Why the last project request failed, until the next one. */
+  projectError: string | null;
   design: DesignState | null;
   history: HistoryEntry[];
   agent: AgentState | null;
@@ -32,6 +40,10 @@ export interface BridgeState {
 
 const initial: BridgeState = {
   connected: false,
+  project: null,
+  projects: [],
+  switching: null,
+  projectError: null,
   design: null,
   history: [],
   agent: null,
@@ -50,10 +62,15 @@ function reduce(state: BridgeState, action: Action): BridgeState {
   switch (action.type) {
     case "connected":
       return { ...state, connected: action.connected };
-    case "hello":
+    case "hello": {
+      // A hello for another project replaces everything that belonged to the previous one.
+      const same = state.project?.id === action.project.id;
       return {
-        ...state,
+        ...(same ? state : { ...initial, projectError: state.projectError }),
         connected: true,
+        project: action.project,
+        projects: action.projects,
+        switching: null,
         previewPort: action.previewPort,
         design: action.design,
         history: action.history,
@@ -61,6 +78,13 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         chat: action.chat,
         review: action.review,
       };
+    }
+    case "projects":
+      return { ...state, projects: action.projects };
+    case "project-switching":
+      return { ...state, switching: action.project, projectError: null };
+    case "project-error":
+      return { ...state, projectError: action.message };
     case "design":
       return { ...state, design: action.design };
     case "history":

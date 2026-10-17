@@ -16,8 +16,11 @@ component source, patterns and the gallery specimens.
 
 ## Architecture
 
-- `server/index.ts`: two HTTP servers, each with its own Vite instance in middleware mode, and the bridge.
+- `server/index.ts`: the chrome server, the bridge, and switching between projects.
   - **Chrome** on `PORT` (5320) serves `index.html` and is the only origin allowed on the `/bridge` WebSocket.
+  - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is the
+    open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
+    the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
@@ -46,8 +49,9 @@ component source, patterns and the gallery specimens.
 - `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `tokens.ts` (CSS variables and
   exports), `protocol.ts` (bridge messages), `frame.ts` (chrome-iframe messages, pages, and the parser for
   untrusted preview input), `review.ts` (review.json format), `contracts.ts`, `annotations.ts`, `diff.ts`.
-- `src/` (chrome): `App.tsx` wires the parts; `shell/` holds the top bar, sidebar, history, inspect and review
-  bars, dialogs, `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel and composer.
+- `src/` (chrome): `App.tsx` keeps the bridge and mounts `Workbench.tsx` once per project, which wires the
+  parts; `shell/` holds the top bar and project menu, sidebar, history, inspect and review bars, dialogs,
+  `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel and composer.
 - `src/preview/` (iframe): `main.tsx` (messaging, picker, scroll spy, errors, link guard), `Preview.tsx`
   (foundations and specimen sections, or the review), `specimens.tsx` (glob and validation of
   `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed").
@@ -89,8 +93,10 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   message containing `agent.status`. The chat and an open review survive the restart.
 - **To kill the server on Windows:** `Get-NetTCPConnection -LocalPort 5320,5321 -State Listen | % { taskkill /PID $_.OwningProcess /T /F }`.
 - **Test changes that touch the agent or the workspace** in a separate instance with a throwaway workspace:
-  `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`. Stop it and delete the folder
-  afterwards.
+  `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`. `BASIS_WORKSPACE` opens just that
+  workspace and never touches the saved project list. To test projects themselves, give the instance its own
+  home instead: `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts`. Stop it and delete the
+  folder afterwards.
 - **Verify in the built-in browser.** The parent cannot read the iframe's DOM (by design), so check preview
   content with screenshots and zoom, or through what the chrome shows (sidebar, problems list, chips).
 - **Verify the export** by unzipping the kit into a temp app with a `tsconfig` whose `paths` point at Basis'
@@ -141,10 +147,11 @@ Lucas is rolling out a larger idea in steps:
    into hooks, the chat and agent session surviving restarts: done.
 5. Tokens for added components: `components` takes a group per added component next to the strict baseline
    groups; `shared/design.ts` checks the names and that no two tokens share a CSS variable: done.
+6. Projects: a project menu to switch, create (blank or a copy) and open workspace folders; one project open at
+   a time, each with its own agent session: done. This is the base for linking Basis to real projects (reading
+   a product repo's context, designing views for one of its features).
 
 Next, agreed with Lucas: the rest of expansion.
-- **Several workspaces (projects).** `server/index.ts` creates one workspace and one agent as singletons; the
-  vision of linking Basis to real projects needs a project concept.
 - **Scaling the preview.** Every specimen loads up front, and a review renders every section twice more
   offscreen. Fine at 20 components, not at 100: load pages on their own and limit impact checks to sections a
   change can reach.

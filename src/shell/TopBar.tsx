@@ -13,13 +13,15 @@ interface TopBarProps {
   onPage: (page: PageId) => void;
   theme: Theme;
   onTheme: (theme: Theme) => void;
+  /** The project menu, in the brand's place. */
+  project: ReactNode;
   /** The history menu, which owns its own state. */
   history: ReactNode;
   onExport: () => void;
   canExport: boolean;
 }
 
-/** The bar above the preview: chat toggle, pages, preview theme, history and export. */
+/** The bar above the preview: chat toggle, project, pages, preview theme, history and export. */
 export function TopBar({
   chatHidden,
   onToggleChat,
@@ -28,6 +30,7 @@ export function TopBar({
   onPage,
   theme,
   onTheme,
+  project,
   history,
   onExport,
   canExport,
@@ -49,10 +52,7 @@ export function TopBar({
         </svg>
         {chatHidden && agentBusy && <span className={styles.chatToggleDot} aria-label="Agent is working" />}
       </button>
-      <span className={styles.brand}>
-        <span className={styles.brandMark} aria-hidden />
-        Basis
-      </span>
+      {project}
       <nav className={styles.pages} aria-label="Pages">
         {PAGES.map((item) => (
           <button

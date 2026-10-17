@@ -130,17 +130,33 @@ export interface Baseline {
   base: string;
 }
 
+/** A project: one workspace folder with its own design system, history, chat and review. */
+export interface ProjectEntry {
+  id: string;
+  name: string;
+  /** Absolute path of the workspace folder. */
+  dir: string;
+}
+
 export type ServerMessage =
   | {
+      /** Everything about the open project; sent on connect and again after switching projects. */
       type: "hello";
       /** Port of the sandboxed preview origin. */
       previewPort: number;
+      project: ProjectEntry;
+      projects: ProjectEntry[];
       design: DesignState;
       history: HistoryEntry[];
       agent: AgentState;
       chat: ChatItem[];
       review: ReviewState | null;
     }
+  | { type: "projects"; projects: ProjectEntry[] }
+  /** A project is being opened; a hello for it follows. */
+  | { type: "project-switching"; project: ProjectEntry }
+  /** Why a project request could not be done, for the dialog that made it. */
+  | { type: "project-error"; message: string }
   | { type: "review"; review: ReviewState | null }
   | { type: "baseline"; baseline: Baseline }
   | { type: "design"; design: DesignState }
@@ -178,4 +194,10 @@ export type ClientMessage =
    */
   | { type: "preview-errors"; errors: string[]; visible: boolean }
   | { type: "export-manifest" }
-  | { type: "export-write"; target: string; overwrite: boolean };
+  | { type: "export-write"; target: string; overwrite: boolean }
+  | { type: "project-switch"; id: string }
+  /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */
+  | { type: "project-create"; name: string; copyCurrent: boolean }
+  /** Adds a workspace folder (or an empty or new one) to the list and opens it. */
+  | { type: "project-open"; dir: string }
+  | { type: "project-remove"; id: string };

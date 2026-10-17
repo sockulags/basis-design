@@ -22,10 +22,20 @@ Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BASIS_WORKSPACE` | `./workspace` | The design system: tokens, component source and history |
+| `BASIS_HOME` | the Basis folder | Where the project list (`basis.projects.json`) and new projects (`workspaces/`) live |
+| `BASIS_WORKSPACE` | | Opens just this workspace for one run, without touching the project list (for tests and one-off use) |
 | `BASIS_AGENT` | `claude` | Agent started on boot (`claude` or `codex`) |
 | `PORT` | `5320` | Port of the Basis app (bound to 127.0.0.1 only) |
 | `BASIS_PREVIEW_PORT` | `PORT + 1` | Port of the sandboxed preview origin |
+
+## Projects
+
+Each project is a workspace of its own: its own design system, history, chat and review. Switch, create and open projects from the menu with the project's name at the top left.
+
+- **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `workspaces/` in the Basis folder.
+- **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance. Basis refuses a folder that already has other files, so it never starts a history in someone's project.
+- Switching waits while the agent works. The agent of the project you leave stops, and coming back resumes its conversation, so it remembers where you were. The export remembers its target folder per project.
+- Removing a project from the list never deletes its folder. The `./workspace` of earlier Basis versions becomes the first project.
 
 ## The workspace
 

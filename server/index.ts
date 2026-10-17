@@ -1,53 +1,60 @@
 import http from "node:http";
 import path from "node:path";
-import { createServer as createVite, type Connect } from "vite";
+import { createServer as createVite } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
-import { isComponentName, isPageId, pageById, SOURCE_FOLDERS } from "../shared/frame.ts";
+import { isComponentName, isPageId, pageById } from "../shared/frame.ts";
+import {
+  AGENT_IDS,
+  type AgentId,
+  type ClientMessage,
+  type ProjectEntry,
+  type ServerMessage,
+} from "../shared/protocol.ts";
 import { createInstruction } from "./brief.ts";
-import { AGENT_IDS, type AgentId, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
-import { AgentHost } from "./agent.ts";
-import { PreviewReports } from "./previews.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
-import { rebasePlugin } from "./rebase.ts";
-import { Workspace } from "./workspace.ts";
+import { PreviewReports } from "./previews.ts";
+import { guard, OpenProject, type ProjectOptions } from "./project.ts";
+import { Projects } from "./projects.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 5320);
 const previewPort = Number(process.env.BASIS_PREVIEW_PORT ?? port + 1);
-const workspaceDir = path.resolve(process.env.BASIS_WORKSPACE ?? path.join(root, "workspace"));
+/** Holds the project list and the folders of new projects. */
+const home = path.resolve(process.env.BASIS_HOME ?? root);
 const initialAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as AgentId)
   ? (process.env.BASIS_AGENT as AgentId)
   : "claude";
 
 const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 
-const workspace = new Workspace(workspaceDir);
-await workspace.init();
-const agent = new AgentHost(workspace, initialAgent);
+const projects = new Projects(home);
+await projects.load({
+  only: process.env.BASIS_WORKSPACE,
+  // Basis kept a single workspace here before it had projects.
+  fallback: path.join(root, "workspace"),
+});
+
+/** Bridge connections; created first, since the project reports events while it opens. */
+const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 /** Render problems per open tab; the fix loop gets the current tab's (see PreviewReports). */
 const previewReports = new PreviewReports<WebSocket>();
-await agent.restore();
-
-/** Answers 404 for page entries that do not belong on this origin; everything else falls through to Vite. */
-function guard(blocked: (url: string) => boolean): Connect.NextHandleFunction {
-  return (req, res, next) => {
-    const url = new URL(req.url ?? "/", "http://local").pathname;
-    if (blocked(url)) {
-      res.statusCode = 404;
-      res.end("Not found");
-      return;
-    }
-    next();
-  };
-}
+const projectOptions: ProjectOptions = {
+  root,
+  host,
+  previewPort,
+  chromeOrigins,
+  agent: initialAgent,
+  broadcast: (message) => broadcast(message),
+};
+let current = await OpenProject.open(projects.active!, projectOptions);
+/** True while one project closes and the next opens; requests wait for the new hello. */
+let switching = false;
 
 /*
  * Two origins. The chrome (chat, history, controls) runs on `port` and is the
- * only page allowed on the bridge. The preview runs on `previewPort` inside a
- * sandboxed iframe, because it executes component code the agent writes; a
- * different port is a different origin, so that code cannot reach the bridge
- * or the chrome's DOM.
+ * only page allowed on the bridge. The preview of the open project runs on
+ * `previewPort` (see OpenProject).
  */
 const chromeServer = http.createServer();
 const chromeVite = await createVite({
@@ -67,12 +74,12 @@ chromeServer.on("request", (req, res) => {
 });
 
 async function starterKit() {
-  return buildStarterKit(workspace.state.design, workspace.dir);
+  return buildStarterKit(current.workspace.state.design, current.workspace.dir);
 }
 
 async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
   try {
-    const folder = slug(workspace.state.design.name);
+    const folder = slug(current.workspace.state.design.name);
     const zip = zipStarterKit(await starterKit(), folder);
     res.writeHead(200, {
       "Content-Type": "application/zip",
@@ -87,42 +94,6 @@ async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
   }
 }
 
-const previewServer = http.createServer();
-const previewVite = await createVite({
-  root,
-  appType: "mpa",
-  cacheDir: "node_modules/.vite/preview",
-  optimizeDeps: { entries: ["preview.html"] },
-  plugins: [rebasePlugin(root, workspaceDir)],
-  resolve: {
-    alias: {
-      "@ds": path.join(workspaceDir, "components", "index.ts"),
-      // The workspace itself, for discovering *.specimen.tsx files in its source folders.
-      "@workspace": workspaceDir,
-    },
-    // Workspace files may live outside this repo; React must still resolve to one copy.
-    dedupe: ["react", "react-dom"],
-  },
-  server: {
-    middlewareMode: true,
-    hmr: { server: previewServer },
-    fs: { allow: [root, workspaceDir] },
-    headers: { "Content-Security-Policy": `frame-ancestors ${chromeOrigins.join(" ")}` },
-  },
-});
-// New specimen files must be noticed even when the workspace lives outside this repo.
-previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(workspaceDir, folder)));
-/** The URL path under which the preview's Vite server serves a file or folder on disk. */
-function previewPath(target: string): string {
-  const relative = path.relative(root, target);
-  const posix = (value: string) => value.split(path.sep).join("/");
-  return relative.startsWith("..") || path.isAbsolute(relative) ? `/@fs/${posix(target)}` : `/${posix(relative)}`;
-}
-
-const previewGuard = guard((url) => url === "/" || url === "/index.html");
-previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
-
-const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 chromeServer.on("upgrade", (req, socket, head) => {
   if (req.url !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
   if (!chromeOrigins.includes(req.headers.origin ?? "")) {
@@ -141,24 +112,50 @@ function broadcast(message: ServerMessage): void {
   for (const ws of sockets.clients) send(ws, message);
 }
 
-workspace.on("design", (design) => broadcast({ type: "design", design }));
-workspace.on("history", (history) => broadcast({ type: "history", history }));
-workspace.on("review", (review) => broadcast({ type: "review", review }));
-agent.on("agent", (state) => broadcast({ type: "agent", agent: state }));
-agent.on("chat", (item) => broadcast({ type: "chat-upsert", item }));
-agent.on("chat-reset", () => broadcast({ type: "chat-reset" }));
-agent.on("chat-remove", (id) => broadcast({ type: "chat-remove", id }));
-
-sockets.on("connection", (ws: WebSocket) => {
+function hello(ws: WebSocket): void {
   send(ws, {
     type: "hello",
     previewPort,
-    design: workspace.state,
-    history: workspace.entries,
-    agent: agent.agent,
-    chat: agent.chat,
-    review: workspace.review,
+    project: current.entry,
+    projects: projects.list,
+    design: current.workspace.state,
+    history: current.workspace.entries,
+    agent: current.agent.agent,
+    chat: current.agent.chat,
+    review: current.workspace.review,
   });
+}
+
+/**
+ * Closes the open project and opens `entry`. Not while the agent works. If the
+ * new one fails to open, the previous one opens again and the error is shown.
+ */
+async function switchTo(entry: ProjectEntry, socket: WebSocket): Promise<void> {
+  if (switching || entry.id === current.entry.id) return;
+  if (current.agent.agent.status === "busy") {
+    send(socket, { type: "project-error", message: "The agent is working. Switch projects when it is done." });
+    return;
+  }
+  switching = true;
+  const previous = current.entry;
+  broadcast({ type: "project-switching", project: entry });
+  try {
+    await current.close();
+    try {
+      current = await OpenProject.open(entry, projectOptions);
+      await projects.setActive(entry.id);
+    } catch (error) {
+      send(socket, { type: "project-error", message: `Could not open ${entry.name}: ${(error as Error).message}` });
+      current = await OpenProject.open(previous, projectOptions);
+    }
+  } finally {
+    switching = false;
+    for (const ws of sockets.clients) hello(ws);
+  }
+}
+
+sockets.on("connection", (ws: WebSocket) => {
+  if (!switching) hello(ws);
   ws.on("message", (data) => {
     let message: ClientMessage;
     try {
@@ -170,11 +167,14 @@ sockets.on("connection", (ws: WebSocket) => {
   });
   ws.on("close", () => {
     previewReports.forget(ws);
-    agent.setPreviewErrors(previewReports.current);
+    current.agent.setPreviewErrors(previewReports.current);
   });
 });
 
 async function handle(message: ClientMessage, socket: WebSocket): Promise<void> {
+  // Everything below belongs to one project; while switching, the new hello tells clients what is open.
+  if (switching) return;
+  const { workspace, agent } = current;
   switch (message.type) {
     case "prompt": {
       const text = message.text.trim();
@@ -201,7 +201,10 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     case "new-session":
       return agent.newSession();
     case "switch-agent":
-      if (AGENT_IDS.includes(message.agent)) await agent.start(message.agent);
+      if (AGENT_IDS.includes(message.agent)) {
+        projectOptions.agent = message.agent;
+        await agent.start(message.agent);
+      }
       return;
     case "revert":
       return workspace.revert(message.historyId);
@@ -224,7 +227,7 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       if (baseline)
         send(socket, {
           type: "baseline",
-          baseline: { id: baseline.id, design: baseline.design, base: previewPath(baseline.dir) },
+          baseline: { id: baseline.id, design: baseline.design, base: current.previewPath(baseline.dir) },
         });
       return;
     }
@@ -256,21 +259,52 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       send(socket, { type: "export-result", result });
       return;
     }
+    case "project-switch": {
+      const entry = projects.find(String(message.id ?? ""));
+      if (entry) await switchTo(entry, socket);
+      return;
+    }
+    case "project-create": {
+      const name = String(message.name ?? "").trim();
+      if (!name) return;
+      if (agent.agent.status === "busy") {
+        send(socket, { type: "project-error", message: "The agent is working. Create the project when it is done." });
+        return;
+      }
+      const entry = await projects.create(name, message.copyCurrent === true ? current.entry : undefined);
+      broadcast({ type: "projects", projects: projects.list });
+      return switchTo(entry, socket);
+    }
+    case "project-open": {
+      if (agent.agent.status === "busy") {
+        send(socket, { type: "project-error", message: "The agent is working. Open the folder when it is done." });
+        return;
+      }
+      let entry: ProjectEntry;
+      try {
+        entry = await projects.open(String(message.dir ?? ""));
+      } catch (error) {
+        send(socket, { type: "project-error", message: (error as Error).message });
+        return;
+      }
+      broadcast({ type: "projects", projects: projects.list });
+      return switchTo(entry, socket);
+    }
+    case "project-remove":
+      await projects.remove(String(message.id ?? ""));
+      broadcast({ type: "projects", projects: projects.list });
+      return;
   }
 }
 
 chromeServer.listen(port, host, () => {
-  previewServer.listen(previewPort, host, () => {
-    console.log(`Basis is running at http://localhost:${port}`);
-    console.log(`Workspace: ${workspaceDir}`);
-    void agent.start();
-  });
+  console.log(`Basis is running at http://localhost:${port}`);
+  console.log(`Project: ${current.entry.name} (${current.entry.dir})`);
 });
 
 async function shutdown(): Promise<void> {
-  workspace.close();
-  await agent.stop();
-  await Promise.all([chromeVite.close(), previewVite.close()]);
+  await current.close();
+  await chromeVite.close();
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown());
