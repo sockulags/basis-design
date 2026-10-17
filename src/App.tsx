@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
-import { isPageId, PAGES, type CompareLayout, type NavSection, type PageId, type ReviewView } from "../shared/frame.ts";
+import { isPageId, type FromPreview, type NavSection, type PageId, type PreviewView } from "../shared/frame.ts";
 import { useBridge } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
@@ -8,66 +8,46 @@ import { CreateDialog } from "./shell/CreateDialog.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
+import { usePref } from "./shell/prefs.ts";
 import { PreviewFrame, type PreviewFrameHandle } from "./shell/PreviewFrame.tsx";
 import { ReviewBar } from "./shell/ReviewBar.tsx";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import styles from "./shell/Shell.module.css";
+import { TopBar } from "./shell/TopBar.tsx";
+import { useReview } from "./shell/useReview.ts";
 
 type Theme = "light" | "dark";
 
-/** Per-viewer UI preferences. Storage can be unavailable (private mode); the app then just uses defaults. */
-function readPref(key: string): string | null {
-  try {
-    return localStorage.getItem(`basis:${key}`);
-  } catch {
-    return null;
-  }
-}
-
-function writePref(key: string, value: string): void {
-  try {
-    localStorage.setItem(`basis:${key}`, value);
-  } catch {
-    // Preference only lasts for this visit.
-  }
-}
-
-function initialChatWidth(): number {
-  const stored = Number(readPref("chat-width"));
-  return clampChatWidth(Number.isFinite(stored) && stored > 0 ? stored : CHAT_DEFAULT_WIDTH);
-}
+const asTheme = (stored: string | null): Theme => (stored === "dark" ? "dark" : "light");
+const asFlag = (stored: string | null) => stored === "true";
+const asPage = (stored: string | null): PageId => (isPageId(stored) ? stored : "system");
+const asChatWidth = (stored: string | null) => {
+  const width = Number(stored);
+  return clampChatWidth(Number.isFinite(width) && width > 0 ? width : CHAT_DEFAULT_WIDTH);
+};
 
 export function App() {
   const { state, send } = useBridge();
-  const [theme, setTheme] = useState<Theme>(() => (readPref("theme") === "dark" ? "dark" : "light"));
-  const [chatWidth, setChatWidth] = useState(initialChatWidth);
-  const [chatHidden, setChatHidden] = useState(() => readPref("chat-hidden") === "true");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readPref("sidebar-collapsed") === "true");
-  const [page, setPage] = useState<PageId>(() => {
-    const stored = readPref("page");
-    return isPageId(stored) ? stored : "system";
-  });
+  const [theme, setTheme] = usePref("theme", asTheme);
+  const [chatWidth, setChatWidth] = usePref("chat-width", asChatWidth);
+  const [chatHidden, setChatHidden] = usePref("chat-hidden", asFlag);
+  const [sidebarCollapsed, setSidebarCollapsed] = usePref("sidebar-collapsed", asFlag);
+  const [page, setPage] = usePref("page", asPage);
   // The unsent message survives a reload.
-  const [draft, setDraft] = useState(() => readPref("draft") ?? "");
+  const [draft, setDraft] = usePref("draft", (stored) => stored ?? "", { delay: 300 });
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [picking, setPicking] = useState(false);
   const [inspectId, setInspectId] = useState<string | null>(null);
-  const [reviewLayout, setReviewLayout] = useState<CompareLayout>(() =>
-    readPref("review-layout") === "stacked" ? "stacked" : "split",
-  );
-  /** True while the user looks at the gallery instead of the open review. */
-  const [reviewHidden, setReviewHidden] = useState(false);
-  /** Sections outside the review that changed, as the preview reports them, and the ones the user opened. */
-  const [impact, setImpact] = useState<string[]>([]);
-  const [peeks, setPeeks] = useState<string[]>([]);
   const [activeSection, setActiveSection] = useState<string>();
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [sections, setSections] = useState<NavSection[]>([]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<PreviewFrameHandle>(null);
   const live = state.design?.design;
+  const reviewing = useReview(state, send, sections, () => setInspectId(null));
+  const { review } = reviewing;
 
   const history = state.history;
   const inspectIndex = inspectId ? history.findIndex((entry) => entry.id === inspectId) : -1;
@@ -75,23 +55,12 @@ export function App() {
   const snapshot = inspectId ? state.snapshots[inspectId] : undefined;
   const design = inspectEntry ? (snapshot?.design ?? live) : live;
 
-  useEffect(() => writePref("theme", theme), [theme]);
-  useEffect(() => writePref("chat-width", String(chatWidth)), [chatWidth]);
-  useEffect(() => writePref("chat-hidden", String(chatHidden)), [chatHidden]);
-  useEffect(() => writePref("sidebar-collapsed", String(sidebarCollapsed)), [sidebarCollapsed]);
-  useEffect(() => writePref("page", page), [page]);
-  useEffect(() => writePref("review-layout", reviewLayout), [reviewLayout]);
-  useEffect(() => {
-    const timer = setTimeout(() => writePref("draft", draft), 300);
-    return () => clearTimeout(timer);
-  }, [draft]);
-
   // Keep the stored width valid when the window shrinks.
   useEffect(() => {
     const onResize = () => setChatWidth((width) => clampChatWidth(width));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [setChatWidth]);
 
   // Ctrl/Cmd+B toggles the chat, like a sidebar.
   useEffect(() => {
@@ -103,54 +72,17 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setChatHidden]);
 
   // The agent is blocked until a permission is answered, so bring the chat back for it.
   const pendingPermission = state.chat.some((item) => item.kind === "permission" && !item.resolved);
   useEffect(() => {
     if (pendingPermission) setChatHidden(false);
-  }, [pendingPermission]);
+  }, [pendingPermission, setChatHidden]);
 
   useEffect(() => {
     if (inspectId && !state.snapshots[inspectId]) send({ type: "snapshot-get", id: inspectId });
   }, [inspectId, state.snapshots, send]);
-
-  // The open review: its starting point is fetched once, and the review comes into view whenever the agent
-  // opens it or records a new iteration, since that is when it has something to show.
-  const review = state.review;
-  const baselineId = review?.baseline;
-  const baseline = baselineId ? state.baselines[baselineId] : undefined;
-  useEffect(() => {
-    if (baselineId && !baseline) send({ type: "baseline-get", id: baselineId });
-  }, [baselineId, baseline, send]);
-
-  const stepCount = review?.steps.length ?? 0;
-  useEffect(() => {
-    if (!baselineId) return;
-    setReviewHidden(false);
-    setInspectId(null);
-  }, [baselineId, stepCount]);
-
-  useEffect(() => {
-    setImpact([]);
-    setPeeks([]);
-  }, [baselineId]);
-
-  const reviewView = useMemo<ReviewView | null>(
-    () =>
-      review && !reviewHidden
-        ? {
-            title: review.title,
-            targets: [...review.show, ...peeks.map((id) => ({ specimen: id, peek: true }))],
-            layout: reviewLayout,
-            baseline: baseline ? { design: baseline.design, base: baseline.base } : null,
-          }
-        : null,
-    [review, reviewHidden, peeks, reviewLayout, baseline],
-  );
-  // Opened sections stay listed: the preview stops checking what the review already shows.
-  const listed = new Set([...impact, ...peeks]);
-  const impactSections = sections.filter((section) => listed.has(section.id));
 
   // Stop inspecting if the entry is pruned from history.
   useEffect(() => {
@@ -165,14 +97,14 @@ export function App() {
       el.focus();
       el.setSelectionRange(el.value.length, el.value.length);
     });
-  }, []);
+  }, [setChatHidden]);
 
   const ask = useCallback(
     (prefix: string) => {
       setDraft((current) => (current.trim() ? `${current.trimEnd()}\n${prefix}` : prefix));
       focusComposer();
     },
-    [focusComposer],
+    [focusComposer, setDraft],
   );
 
   // The server folds what the preview fails to render into the agent's fix loop.
@@ -199,6 +131,39 @@ export function App() {
     setPicking(false);
     focusComposer();
   }, [focusComposer]);
+
+  const { setImpact } = reviewing;
+  /** Everything the preview reports, already validated by the frame. */
+  const onPreviewMessage = useCallback(
+    (message: FromPreview) => {
+      switch (message.type) {
+        case "ready":
+          // A fresh document (first load or a full reload after an edit) starts without picks.
+          return setAnnotations([]);
+        case "active-section":
+          return setActiveSection(message.id);
+        case "ask":
+          return ask(message.prefix);
+        case "picks":
+          return setAnnotations(message.annotations);
+        case "picking":
+          if (!message.on) finishPicking();
+          return;
+        case "errors":
+          return setPreviewErrors(message.errors);
+        case "sections":
+          return setSections(message.sections);
+        case "impact":
+          return setImpact(message.ids);
+      }
+    },
+    [ask, finishPicking, setImpact],
+  );
+
+  const view = useMemo<PreviewView | null>(
+    () => (design ? { design, theme, page, review: reviewing.view } : null),
+    [design, theme, page, reviewing.view],
+  );
 
   const step = (direction: -1 | 1) => {
     const next = history[inspectIndex + direction];
@@ -229,53 +194,20 @@ export function App() {
       />
       {!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
       <main className={styles.main}>
-        <header className={styles.bar}>
-          <button
-            type="button"
-            className={styles.chatToggle}
-            aria-pressed={!chatHidden}
-            aria-label={chatHidden ? "Show chat" : "Hide chat"}
-            title={`${chatHidden ? "Show" : "Hide"} chat (Ctrl+B)`}
-            onClick={() => setChatHidden((hidden) => !hidden)}
-          >
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" />
-              <path d="M6 3v10" />
-              {chatHidden ? <path d="M9 6.5 10.5 8 9 9.5" /> : <path d="M10.5 6.5 9 8l1.5 1.5" />}
-            </svg>
-            {chatHidden && state.agent?.status === "busy" && (
-              <span className={styles.chatToggleDot} aria-label="Agent is working" />
-            )}
-          </button>
-          <span className={styles.brand}>
-            <span className={styles.brandMark} aria-hidden />
-            Basis
-          </span>
-          <nav className={styles.pages} aria-label="Pages">
-            {PAGES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={page === item.id ? "page" : undefined}
-                onClick={() => {
-                  setPage(item.id);
-                  if (review) setReviewHidden(true);
-                  setActiveSection(undefined);
-                  window.history.replaceState(null, "", " ");
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div className={styles.actions}>
-            <div className={styles.themeToggle} role="group" aria-label="Preview theme">
-              {(["light", "dark"] as const).map((value) => (
-                <button key={value} type="button" aria-pressed={theme === value} onClick={() => setTheme(value)}>
-                  {value === "light" ? "Light" : "Dark"}
-                </button>
-              ))}
-            </div>
+        <TopBar
+          chatHidden={chatHidden}
+          onToggleChat={() => setChatHidden((hidden) => !hidden)}
+          agentBusy={state.agent?.status === "busy"}
+          page={page}
+          onPage={(next) => {
+            setPage(next);
+            if (review) reviewing.setHidden(true);
+            setActiveSection(undefined);
+            window.history.replaceState(null, "", " ");
+          }}
+          theme={theme}
+          onTheme={setTheme}
+          history={
             <HistoryMenu
               history={history}
               inspecting={inspectId}
@@ -283,11 +215,10 @@ export function App() {
               send={send}
               locked={Boolean(review)}
             />
-            <button type="button" className={styles.primaryButton} onClick={() => setExporting(true)} disabled={!live}>
-              Export
-            </button>
-          </div>
-        </header>
+          }
+          onExport={() => setExporting(true)}
+          canExport={Boolean(live)}
+        />
         {inspectEntry && live && (
           <InspectBanner
             entry={inspectEntry}
@@ -306,20 +237,17 @@ export function App() {
         {review && live && (
           <ReviewBar
             review={review}
-            baselineDesign={baseline?.design}
+            baselineDesign={reviewing.baseline?.design}
             current={live}
             busy={state.agent?.status === "busy"}
             problems={problems.length}
-            impact={impactSections}
-            peeks={peeks}
-            onTogglePeek={(id) => {
-              setPeeks((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
-              setReviewHidden(false);
-            }}
-            layout={reviewLayout}
-            onLayout={setReviewLayout}
-            showing={!reviewHidden}
-            onShowing={(showing) => setReviewHidden(!showing)}
+            impact={reviewing.impactSections}
+            peeks={reviewing.peeks}
+            onTogglePeek={reviewing.togglePeek}
+            layout={reviewing.layout}
+            onLayout={reviewing.setLayout}
+            showing={!reviewing.hidden}
+            onShowing={(showing) => reviewing.setHidden(!showing)}
             onStep={(id) => send({ type: "review-step", id })}
             onApprove={() => send({ type: "review-approve" })}
             onDiscard={() => send({ type: "review-discard" })}
@@ -332,32 +260,23 @@ export function App() {
             page={page}
             onNavigate={(id) => {
               window.history.replaceState(null, "", `#${id}`);
-              if (!reviewView) return frame.current?.scrollTo(id);
+              if (!reviewing.view) return frame.current?.scrollTo(id);
               // The sidebar navigates the gallery: leave the review view, then scroll once the page is back.
-              setReviewHidden(true);
+              reviewing.setHidden(true);
               setTimeout(() => frame.current?.scrollTo(id), 120);
             }}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
             onCreate={() => setCreating(true)}
           />
-          {design && state.previewPort ? (
+          {view && state.previewPort ? (
             <PreviewFrame
               ref={frame}
               port={state.previewPort}
-              design={design}
-              theme={theme}
-              page={page}
-              review={reviewView}
+              view={view}
               picking={picking}
               inspecting={Boolean(inspectEntry)}
-              onPicks={setAnnotations}
-              onPickingEnd={finishPicking}
-              onAsk={ask}
-              onImpact={setImpact}
-              onActiveSection={setActiveSection}
-              onErrors={setPreviewErrors}
-              onSections={setSections}
+              onMessage={onPreviewMessage}
             />
           ) : (
             <p className={styles.loading}>Connecting to the Basis server…</p>

@@ -18,6 +18,7 @@ import {
   type ToolStatus,
 } from "../shared/protocol.ts";
 import { describeTarget } from "../shared/review.ts";
+import { loadChat, saveChat } from "./chatlog.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -85,6 +86,10 @@ export class AgentHost extends EventEmitter<Events> {
   private connection?: acp.ClientConnection;
   private sessionId?: string;
   private supportsSystemPrompt = false;
+  private supportsResume = false;
+  /** The saved session the next start tries to resume, from the conversation saved before a restart. */
+  private resumable?: { agent: AgentId; sessionId: string };
+  private saveTimer?: NodeJS.Timeout;
   private needsPreamble = false;
   private openText?: { id: string; kind: "agent" | "thought" };
   private permissions = new Map<string, (optionId: string | null) => void>();
@@ -109,6 +114,14 @@ export class AgentHost extends EventEmitter<Events> {
 
   get chat(): ChatItem[] {
     return this.transcript;
+  }
+
+  /** Brings back the conversation saved before the last restart; the next start tries to resume its session. */
+  async restore(): Promise<void> {
+    const saved = await loadChat(this.workspace.dir);
+    if (!saved) return;
+    this.transcript = saved.chat;
+    if (saved.sessionId) this.resumable = { agent: saved.agent, sessionId: saved.sessionId };
   }
 
   async start(agentId: AgentId = this.state.id): Promise<void> {
@@ -160,8 +173,9 @@ export class AgentHost extends EventEmitter<Events> {
         clientInfo: { name: "basis", version: "0.1.0" },
       });
       this.supportsSystemPrompt = Boolean(init.agentCapabilities?.sessionCapabilities?.systemPrompt);
+      this.supportsResume = Boolean(init.agentCapabilities?.sessionCapabilities?.resume);
       const supportsImages = Boolean(init.agentCapabilities?.promptCapabilities?.image);
-      await this.openSession();
+      await this.openSession(true);
       this.setState({ id: agentId, status: "ready", supportsImages });
     } catch (error) {
       if (this.proc === proc) this.fail(describeError(error, spec.loginHint));
@@ -188,7 +202,9 @@ export class AgentHost extends EventEmitter<Events> {
     this.queued = [];
     this.transcript = [];
     this.openText = undefined;
+    this.resumable = undefined;
     this.emit("chat-reset");
+    this.scheduleSave();
     if (!this.connection) return this.start();
     try {
       await this.openSession();
@@ -357,17 +373,43 @@ ${message}`
     this.permissions.get(id)?.(optionId);
   }
 
-  private async openSession(): Promise<void> {
+  /**
+   * Opens the session turns run in. With `resume`, it first tries to pick up
+   * the saved session, so the agent remembers the conversation the transcript
+   * shows; otherwise, or when that fails, it starts a new one.
+   */
+  private async openSession(resume = false): Promise<void> {
     const connection = this.connection;
     if (!connection) throw new Error("Agent is not connected");
     const base = { cwd: this.workspace.dir, mcpServers: [] };
+    const systemPrompt = { mode: "append" as const, content: [{ type: "text" as const, text: AGENT_BRIEF }] };
+    const saved = resume ? this.resumable : undefined;
+    this.resumable = undefined;
+    if (saved && saved.agent === this.state.id && this.supportsResume) {
+      try {
+        await connection.agent.request(acp.methods.agent.session.resume, {
+          ...base,
+          sessionId: saved.sessionId,
+          ...(this.supportsSystemPrompt ? { systemPrompt } : {}),
+        });
+        this.sessionId = saved.sessionId;
+        this.needsPreamble = false;
+        this.scheduleSave();
+        return;
+      } catch {
+        // Falls through to a new session below.
+      }
+    }
+    if (saved && this.transcript.length > 0) {
+      this.notice(
+        "The agent starts a new conversation after the restart; the messages above are for reference.",
+        "info",
+      );
+    }
     let response: acp.NewSessionResponse | undefined;
     if (this.supportsSystemPrompt) {
       try {
-        response = await connection.agent.request(acp.methods.agent.session.new, {
-          ...base,
-          systemPrompt: { mode: "append", content: [{ type: "text", text: AGENT_BRIEF }] },
-        });
+        response = await connection.agent.request(acp.methods.agent.session.new, { ...base, systemPrompt });
       } catch {
         // Fall back to the preamble below; some agents advertise only "override".
       }
@@ -376,6 +418,18 @@ ${message}`
     const session = response ?? (await connection.agent.request(acp.methods.agent.session.new, base));
     if (!session?.sessionId) throw new Error("The agent did not return a session id");
     this.sessionId = session.sessionId;
+    this.scheduleSave();
+  }
+
+  /** Saves the conversation shortly after it changes; streamed text changes it many times a second. */
+  private scheduleSave(): void {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      const saved = { agent: this.state.id, sessionId: this.sessionId ?? null, chat: this.transcript };
+      saveChat(this.workspace.dir, saved).catch((error: Error) =>
+        console.error("[basis] could not save the chat:", error.message),
+      );
+    }, 400);
   }
 
   private onUpdate(params: acp.SessionNotification): void {
@@ -487,11 +541,13 @@ ${message}`
     if (index === -1) this.transcript.push(item);
     else this.transcript[index] = item;
     this.emit("chat", item);
+    this.scheduleSave();
   }
 
   private remove(id: string): void {
     this.transcript = this.transcript.filter((item) => item.id !== id);
     this.emit("chat-remove", id);
+    this.scheduleSave();
   }
 
   private notice(text: string, tone: "info" | "error"): void {

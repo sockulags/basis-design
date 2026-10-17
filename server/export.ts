@@ -30,7 +30,7 @@ function stripImportExtensions(source: string): string {
 
 function readme(design: Design, paths: string[]): string {
   const families = paths
-    .filter((file) => /\.tsx$/.test(file) && !file.includes(".specimen.") && !file.endsWith("icons.tsx"))
+    .filter((file) => file.endsWith(".tsx") && !file.includes(".specimen.") && !file.endsWith("icons.tsx"))
     .map((file) => `- \`${file}\``)
     .join("\n");
   return `# ${design.name}

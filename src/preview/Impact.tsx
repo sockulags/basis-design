@@ -12,7 +12,7 @@ interface ImpactProps {
   specimens: LoadedSpecimen[];
   design: Design;
   theme: "light" | "dark";
-  /** Called with the ids of the sections that look different from the starting point. */
+  /** Called with the ids of the sections that look different from the starting point, when that list changes. */
   onImpact: (ids: string[]) => void;
 }
 
@@ -119,6 +119,7 @@ export function Impact({ baseline, specimens, design, theme, onImpact }: ImpactP
   const [past, setPast] = useState<Map<string, LoadedSpecimen | null> | null>(null);
   const specimensKey = specimens.map((specimen) => `${specimen.file}|${specimen.id}`).join(",");
   const latest = useRef({ specimens, past, onImpact });
+  const reported = useRef<string | null>(null);
   latest.current = { specimens, past, onImpact };
 
   useEffect(() => {
@@ -153,6 +154,9 @@ export function Impact({ baseline, specimens, design, theme, onImpact }: ImpactP
           return fingerprint(before) !== fingerprint(after);
         })
         .map((specimen) => specimen.id);
+      const key = changed.join(",");
+      if (key === reported.current) return;
+      reported.current = key;
       report(changed);
     };
     // Live demos may never settle (a ticking progress bar), so measure at least every MAX_WAIT_MS.

@@ -60,8 +60,20 @@ export interface ReviewView {
   baseline: { design: Design; base: string } | null;
 }
 
+/**
+ * Everything the preview renders, sent as one value whenever any of it
+ * changes. A new preview feature adds a field here rather than a prop at
+ * every layer between the chrome and the gallery.
+ */
+export interface PreviewView {
+  design: Design;
+  theme: "light" | "dark";
+  page: PageId;
+  review: ReviewView | null;
+}
+
 export type ToPreview =
-  | { type: "render"; design: Design; theme: "light" | "dark"; page: PageId; review: ReviewView | null }
+  | { type: "render"; view: PreviewView }
   | { type: "scroll-to"; id: string }
   | { type: "picking"; on: boolean }
   | { type: "picks-remove"; index: number }

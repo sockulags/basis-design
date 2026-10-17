@@ -1,13 +1,13 @@
-import { useEffect, useMemo } from "react";
-import type { Design } from "../../shared/design.ts";
-import { pageById, type NavSection, type PageId, type ReviewView } from "../../shared/frame.ts";
+import { useCallback, useEffect, useMemo } from "react";
+import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
 import { clearProblems, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
-import { findSpecimen, loadSpecimens, SpecimenSection } from "./specimens.tsx";
+import { findSpecimen } from "./narrow.ts";
+import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
 
 /** Introductions under the title of every page but the design system page, which has its own hero. */
 const INTROS: Partial<Record<PageId, string>> = {
@@ -16,15 +16,10 @@ const INTROS: Partial<Record<PageId, string>> = {
 };
 
 interface PreviewProps {
-  design: Design;
-  theme: "light" | "dark";
-  page: PageId;
-  /** When set, the preview shows the open review instead of the page. */
-  review: ReviewView | null;
-  onAsk: (prefix: string) => void;
-  onImpact: (ids: string[]) => void;
-  /** Called with the sections of every page whenever the set of specimens changes. */
-  onSections: (sections: NavSection[]) => void;
+  /** What to show: the page, or the open review instead of it. */
+  view: PreviewView;
+  /** Sends a message to the chrome: the sections found, "ask the agent" requests, what changed in a review. */
+  post: (message: FromPreview) => void;
 }
 
 /**
@@ -32,7 +27,10 @@ interface PreviewProps {
  * section comes from a *.specimen.tsx file in the workspace. Everything inside
  * .ds-root is styled only by the generated tokens.
  */
-export function Preview({ design, theme, page, review, onAsk, onImpact, onSections }: PreviewProps) {
+export function Preview({ view, post }: PreviewProps) {
+  const { design, theme, page, review } = view;
+  const onAsk = useCallback((prefix: string) => post({ type: "ask", prefix }), [post]);
+  const onImpact = useCallback((ids: string[]) => post({ type: "impact", ids }), [post]);
   const css = useMemo(() => previewCss(design, ".ds-root"), [design]);
   // Cheap, and re-evaluated after every hot update of a specimen file.
   const { specimens, problems } = loadSpecimens();
@@ -46,10 +44,13 @@ export function Preview({ design, theme, page, review, onAsk, onImpact, onSectio
   const problemsKey = problems.map((problem) => `${problem.file}: ${problem.message}`).join("\n");
 
   useEffect(() => {
-    onSections(specimens.map(({ id, title, group, page: specimenPage }) => ({ id, title, group, page: specimenPage })));
+    post({
+      type: "sections",
+      sections: specimens.map(({ id, title, group, page: specimenPage }) => ({ id, title, group, page: specimenPage })),
+    });
     // sectionsKey captures everything the list depends on.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionsKey, onSections]);
+  }, [sectionsKey, post]);
 
   useEffect(() => {
     clearProblems("Specimen ");

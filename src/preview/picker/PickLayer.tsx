@@ -70,6 +70,8 @@ export function PickLayer({ container, design, picks, onToggle, onDone }: PickLa
     root.addEventListener("click", onClick, true);
     window.addEventListener("scroll", onScroll);
     window.addEventListener("keydown", onKey);
+    // The container is a DOM node the picker marks while active, not React state.
+    // eslint-disable-next-line react/immutability
     root.dataset.picking = "true";
     return () => {
       root.removeEventListener("pointermove", onMove);

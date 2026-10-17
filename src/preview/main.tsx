@@ -1,8 +1,7 @@
 import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
-import type { FromPreview, NavSection, PageId, ReviewView, ToPreview } from "../../shared/frame.ts";
-import type { Design } from "../../shared/design.ts";
+import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
 import { clearProblems, describe, hotUpdated, onProblems, setProblem } from "./errors.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
 import type { Preview as PreviewComponent } from "./Preview.tsx";
@@ -39,13 +38,6 @@ if (import.meta.hot) {
     clearProblems("Unhandled rejection");
     hotUpdated();
   });
-}
-
-interface View {
-  design: Design;
-  theme: "light" | "dark";
-  page: PageId;
-  review: ReviewView | null;
 }
 
 /** Reports the section nearest the top of the viewport; a new `view` key (page, or the review opening or closing) restarts it. */
@@ -111,18 +103,8 @@ function usePreviewModule(): ComponentType<Parameters<PreviewType>[0]> | null {
   return module?.Preview ?? null;
 }
 
-const postSections = (sections: NavSection[]) => post({ type: "sections", sections });
-let lastImpact = "";
-/** Reports the sections that changed outside the review, only when the list does. */
-const postImpact = (ids: string[]) => {
-  const key = ids.join(",");
-  if (key === lastImpact) return;
-  lastImpact = key;
-  post({ type: "impact", ids });
-};
-
 function PreviewApp() {
-  const [view, setView] = useState<View | null>(null);
+  const [view, setView] = useState<PreviewView | null>(null);
   const Preview = usePreviewModule();
   const [picking, setPicking] = useState(false);
   const [picks, setPicks] = useState<Pick[]>([]);
@@ -133,17 +115,16 @@ function PreviewApp() {
       if (event.source !== window.parent || event.origin !== parentOrigin) return;
       const message = event.data;
       switch (message?.type) {
-        case "render":
-          // The chrome forgets the impact list when a review ends, so the next review reports afresh.
-          if (!message.review) lastImpact = "";
+        case "render": {
+          const next = message.view;
           setView((current) => {
             // A new page, or a review opening or closing, starts at the top.
-            const moved =
-              current && (current.page !== message.page || Boolean(current.review) !== Boolean(message.review));
+            const moved = current && (current.page !== next.page || Boolean(current.review) !== Boolean(next.review));
             if (moved) requestAnimationFrame(() => window.scrollTo(0, 0));
-            return { design: message.design, theme: message.theme, page: message.page, review: message.review };
+            return next;
           });
           return;
+        }
         case "scroll-to": {
           const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
           document.getElementById(message.id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
@@ -198,15 +179,7 @@ function PreviewApp() {
   return (
     <>
       <div ref={root}>
-        <Preview
-          design={view.design}
-          theme={view.theme}
-          page={view.page}
-          review={view.review}
-          onAsk={(prefix) => post({ type: "ask", prefix })}
-          onImpact={postImpact}
-          onSections={postSections}
-        />
+        <Preview view={view} post={post} />
       </div>
       {picks.length > 0 && <PickMarkers picks={picks} />}
       {picking && <PickLayer container={root} design={view.design} picks={picks} onToggle={toggle} onDone={done} />}

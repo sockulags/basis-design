@@ -1,7 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Annotation } from "../../shared/annotations.ts";
-import type { Design } from "../../shared/design.ts";
-import { parseFromPreview, type NavSection, type PageId, type ReviewView, type ToPreview } from "../../shared/frame.ts";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { parseFromPreview, type FromPreview, type PreviewView, type ToPreview } from "../../shared/frame.ts";
 import styles from "./Shell.module.css";
 
 export interface PreviewFrameHandle {
@@ -12,19 +10,12 @@ export interface PreviewFrameHandle {
 
 interface PreviewFrameProps {
   port: number;
-  design: Design;
-  theme: "light" | "dark";
-  page: PageId;
-  review: ReviewView | null;
+  /** What the preview shows; sent again whenever it changes and to every fresh preview document. */
+  view: PreviewView;
   picking: boolean;
   inspecting: boolean;
-  onPicks: (annotations: Annotation[]) => void;
-  onPickingEnd: () => void;
-  onAsk: (prefix: string) => void;
-  onImpact: (ids: string[]) => void;
-  onActiveSection: (id: string) => void;
-  onErrors: (errors: string[]) => void;
-  onSections: (sections: NavSection[]) => void;
+  /** Every message from the preview, already validated: "ready" when a fresh document loads, then the rest. */
+  onMessage: (message: FromPreview) => void;
 }
 
 /**
@@ -33,22 +24,7 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  {
-    port,
-    design,
-    theme,
-    page,
-    review,
-    picking,
-    inspecting,
-    onPicks,
-    onPickingEnd,
-    onAsk,
-    onImpact,
-    onActiveSection,
-    onErrors,
-    onSections,
-  },
+  { port, view, picking, inspecting, onMessage },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -57,7 +33,10 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
   const previewOrigin = `${location.protocol}//${location.hostname}:${port}`;
   const src = `${previewOrigin}/preview.html?parent=${encodeURIComponent(location.origin)}`;
 
-  const post = (message: ToPreview) => frame.current?.contentWindow?.postMessage(message, previewOrigin);
+  const post = useCallback(
+    (message: ToPreview) => frame.current?.contentWindow?.postMessage(message, previewOrigin),
+    [previewOrigin],
+  );
 
   useImperativeHandle(ref, () => ({
     scrollTo: (id) => post({ type: "scroll-to", id }),
@@ -65,50 +44,31 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     clearPicks: () => post({ type: "picks-clear" }),
   }));
 
-  // Latest callbacks without re-subscribing the listener on every render.
-  const handlers = useRef({ onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections });
-  handlers.current = { onPicks, onPickingEnd, onAsk, onImpact, onActiveSection, onErrors, onSections };
+  // The latest handler without re-subscribing the listener on every render.
+  const handler = useRef(onMessage);
+  useEffect(() => {
+    handler.current = onMessage;
+  });
 
   useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
+    const listen = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== previewOrigin) return;
       const message = parseFromPreview(event.data);
       if (!message) return;
-      const h = handlers.current;
-      switch (message.type) {
-        case "ready":
-          // A fresh document (first load or a full reload after an edit) starts without picks.
-          setGeneration((value) => value + 1);
-          h.onPicks([]);
-          return;
-        case "active-section":
-          return h.onActiveSection(message.id);
-        case "ask":
-          return h.onAsk(message.prefix);
-        case "impact":
-          return h.onImpact(message.ids);
-        case "picks":
-          return h.onPicks(message.annotations);
-        case "picking":
-          if (!message.on) h.onPickingEnd();
-          return;
-        case "errors":
-          return h.onErrors(message.errors);
-        case "sections":
-          return h.onSections(message.sections);
-      }
+      if (message.type === "ready") setGeneration((value) => value + 1);
+      handler.current(message);
     };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
+    window.addEventListener("message", listen);
+    return () => window.removeEventListener("message", listen);
   }, [previewOrigin]);
 
   useEffect(() => {
-    if (generation > 0) post({ type: "render", design, theme, page, review });
-  }, [generation, design, theme, page, review]);
+    if (generation > 0) post({ type: "render", view });
+  }, [generation, view, post]);
 
   useEffect(() => {
     if (generation > 0) post({ type: "picking", on: picking });
-  }, [generation, picking]);
+  }, [generation, picking, post]);
 
   return (
     <div className={styles.canvas} data-inspecting={inspecting || undefined}>

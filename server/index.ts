@@ -24,6 +24,7 @@ const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 const workspace = new Workspace(workspaceDir);
 await workspace.init();
 const agent = new AgentHost(workspace, initialAgent);
+await agent.restore();
 
 /** Answers 404 for page entries that do not belong on this origin; everything else falls through to Vite. */
 function guard(blocked: (url: string) => boolean): Connect.NextHandleFunction {

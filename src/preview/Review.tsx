@@ -6,14 +6,8 @@ import { previewCss } from "../../shared/tokens.ts";
 import { describe, onHotUpdate, setProblem } from "./errors.ts";
 import styles from "./Review.module.css";
 import { SectionBoundary } from "./SectionBoundary.tsx";
-import {
-  findSpecimen,
-  loadPastSpecimen,
-  loadRebasedSpecimen,
-  narrowSpecimen,
-  SpecimenBlocks,
-  type LoadedSpecimen,
-} from "./specimens.tsx";
+import { findSpecimen, narrowSpecimen } from "./narrow.ts";
+import { loadPastSpecimen, loadRebasedSpecimen, SpecimenBlocks, type LoadedSpecimen } from "./specimens.tsx";
 
 interface ReviewProps {
   view: ReviewView;

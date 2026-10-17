@@ -1,0 +1,230 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, test } from "node:test";
+import { Workspace } from "../server/workspace.ts";
+
+/*
+ * The workspace's git handling end to end, in throwaway folders: history
+ * entries, reviews (iterations, approve, discard, going back, restarts) and
+ * migrations. The type check is stubbed out; it is slow and not what these
+ * tests are about.
+ */
+
+const open: Workspace[] = [];
+const folders: string[] = [];
+
+afterEach(async () => {
+  for (const workspace of open.splice(0)) workspace.close();
+  for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
+});
+
+async function folder(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "basis-test-"));
+  folders.push(dir);
+  return dir;
+}
+
+async function start(dir: string): Promise<Workspace> {
+  const workspace = new Workspace(dir, { typecheck: async () => [] });
+  await workspace.init();
+  open.push(workspace);
+  return workspace;
+}
+
+/** Runs `edit` as an agent turn, the way AgentHost does. */
+async function turn(workspace: Workspace, label: string, edit: () => Promise<void>): Promise<void> {
+  await workspace.beginTurn(label);
+  await edit();
+  await workspace.endTurn();
+}
+
+async function setToken(dir: string, value: string): Promise<void> {
+  const file = path.join(dir, "design-system.json");
+  const design = JSON.parse(await readFile(file, "utf8"));
+  design.color.light.primary = value;
+  await writeFile(file, `${JSON.stringify(design, null, 2)}\n`);
+}
+
+async function token(dir: string): Promise<string> {
+  return JSON.parse(await readFile(path.join(dir, "design-system.json"), "utf8")).color.light.primary;
+}
+
+const request = (title: string) => JSON.stringify({ title, show: [{ specimen: "Buttons", rows: ["primary"] }] });
+const openReview = (dir: string, title = "Softer primary") => writeFile(path.join(dir, "review.json"), request(title));
+const git = (dir: string, args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
+
+describe("history", () => {
+  test("a new workspace is seeded and starts with one entry", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    assert.ok(existsSync(path.join(dir, "components", "Button.tsx")));
+    assert.ok(existsSync(path.join(dir, "patterns", "Navbar.tsx")));
+    assert.ok(existsSync(path.join(dir, "components", "contracts.ts")));
+    assert.deepEqual(
+      workspace.entries.map((entry) => entry.source),
+      ["init"],
+    );
+  });
+
+  test("a turn becomes one entry with its label and changed tokens", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "Warmer primary", () => setToken(dir, "#c2410c"));
+    const last = workspace.entries.at(-1);
+    assert.equal(workspace.entries.length, 2);
+    assert.equal(last?.source, "agent");
+    assert.equal(last?.label, "Warmer primary");
+    assert.deepEqual(last?.changed, ["color.light.primary"]);
+  });
+
+  test("a turn that changes nothing adds no entry", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "Just looking", async () => {});
+    assert.equal(workspace.entries.length, 1);
+  });
+
+  test("an older workspace gets the files Basis added since", async () => {
+    const dir = await folder();
+    (await start(dir)).close();
+    // A workspace from before contracts.ts existed: the file is not in its history either.
+    git(dir, ["rm", "-q", "components/contracts.ts"]);
+    git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
+    const workspace = await start(dir);
+    assert.ok(existsSync(path.join(dir, "components", "contracts.ts")));
+    assert.equal(workspace.entries.at(-1)?.label, "Basis added component contracts");
+  });
+});
+
+describe("reviews", () => {
+  test("turns become iterations, and approving makes one history entry", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "Softer primary", async () => {
+      await setToken(dir, "#b4232a");
+      await openReview(dir);
+    });
+    assert.equal(workspace.review?.title, "Softer primary");
+    assert.equal(workspace.review?.steps.length, 1);
+    assert.equal(workspace.entries.length, 1, "history waits for the review");
+
+    await turn(workspace, "A bit darker", () => setToken(dir, "#7f1d1d"));
+    assert.deepEqual(
+      workspace.review?.steps.map((step) => step.label),
+      ["Softer primary", "A bit darker"],
+    );
+
+    await workspace.approveReview();
+    assert.equal(workspace.review, null);
+    assert.equal(workspace.entries.length, 2);
+    assert.equal(workspace.entries.at(-1)?.source, "review");
+    assert.equal(workspace.entries.at(-1)?.label, "Softer primary");
+    assert.deepEqual(workspace.entries.at(-1)?.changed, ["color.light.primary"]);
+    assert.equal(await token(dir), "#7f1d1d");
+    assert.equal(existsSync(path.join(dir, "review.json")), false);
+    assert.equal(git(dir, ["for-each-ref", "refs/basis"]), "");
+    assert.equal(git(dir, ["status", "--porcelain"]), "");
+  });
+
+  test("discarding puts everything back, including removing new files", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    const before = await token(dir);
+    await turn(workspace, "Try a new card", async () => {
+      await openReview(dir, "Try a new card");
+      await setToken(dir, "#000000");
+      await writeFile(path.join(dir, "components", "Fancy.tsx"), "export const fancy = 1;\n");
+    });
+    await workspace.discardReview();
+    assert.equal(workspace.review, null);
+    assert.equal(await token(dir), before);
+    assert.equal(existsSync(path.join(dir, "components", "Fancy.tsx")), false);
+    assert.equal(workspace.entries.length, 1);
+    assert.equal(git(dir, ["status", "--porcelain"]), "");
+  });
+
+  test("going back to an iteration restores it as a new iteration", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "First", async () => {
+      await openReview(dir);
+      await setToken(dir, "#111111");
+    });
+    await turn(workspace, "Second", async () => {
+      await setToken(dir, "#222222");
+      await writeFile(path.join(dir, "components", "Extra.tsx"), "export const extra = 1;\n");
+    });
+    const first = workspace.review!.steps[0]!.id;
+    await workspace.reviewStep(first);
+    assert.equal(await token(dir), "#111111");
+    assert.equal(existsSync(path.join(dir, "components", "Extra.tsx")), false);
+    assert.deepEqual(
+      workspace.review?.steps.map((step) => step.label),
+      ["First", "Second", "Back to iteration 1"],
+    );
+  });
+
+  test("an open review survives a restart, and edits made meanwhile land in it", async () => {
+    const dir = await folder();
+    const first = await start(dir);
+    await turn(first, "First", async () => {
+      await openReview(dir);
+      await setToken(dir, "#111111");
+    });
+    first.close();
+    await setToken(dir, "#333333");
+    const workspace = await start(dir);
+    assert.equal(workspace.review?.title, "Softer primary");
+    assert.equal(workspace.review?.steps.length, 2);
+    assert.equal(workspace.entries.length, 1);
+  });
+
+  test("history cannot be restored while a review is open", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "First", async () => {
+      await openReview(dir);
+      await setToken(dir, "#111111");
+    });
+    await workspace.revert(workspace.entries[0]!.id);
+    assert.equal(await token(dir), "#111111");
+    assert.equal(workspace.entries.length, 1);
+  });
+
+  test("an invalid review.json is reported and the turn goes to history as usual", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "Oops", async () => {
+      await writeFile(path.join(dir, "review.json"), JSON.stringify({ show: [] }));
+      await setToken(dir, "#111111");
+    });
+    assert.equal(workspace.review, null);
+    assert.ok(workspace.state.reviewErrors?.length);
+    assert.equal(workspace.entries.at(-1)?.label, "Oops");
+  });
+
+  test("updating review.json changes what the open review shows", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "First", async () => {
+      await openReview(dir);
+      await setToken(dir, "#111111");
+    });
+    const baseline = workspace.review?.baseline;
+    await turn(workspace, "Focus on tabs", async () => {
+      await writeFile(
+        path.join(dir, "review.json"),
+        JSON.stringify({ title: "Tabs instead", show: [{ specimen: "Tabs" }] }),
+      );
+    });
+    assert.equal(workspace.review?.title, "Tabs instead");
+    assert.deepEqual(workspace.review?.show, [
+      { specimen: "Tabs", block: undefined, rows: undefined, columns: undefined },
+    ]);
+    assert.equal(workspace.review?.baseline, baseline);
+  });
+});

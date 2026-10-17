@@ -41,6 +41,20 @@ export async function git(cwd: string, args: string[]): Promise<string> {
   return result.stdout;
 }
 
+/** True when `id` is a full commit id that exists in the repository at `cwd`. */
+export async function isCommit(cwd: string, id: string): Promise<boolean> {
+  if (!/^[0-9a-f]{40}$/.test(id)) return false;
+  return git(cwd, ["cat-file", "-e", `${id}^{commit}`]).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** Lines of git output that are not empty, such as the names from `diff --name-only`. */
+export function lines(output: string): string[] {
+  return output.split("\n").filter(Boolean);
+}
+
 function tscEntry(): string {
   const pkgPath = require.resolve("typescript/package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { bin: Record<string, string> };

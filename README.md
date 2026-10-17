@@ -39,7 +39,7 @@ workspace/
   review.json            written by the agent to open or update a review (not in history)
   .git/                  history: one commit per agent turn, approved review, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
-  tsconfig.json, .basis/ type-check setup and gallery contracts (generated), the open review and its snapshot
+  tsconfig.json, .basis/ type-check setup and contracts (generated), the open review, its snapshot, the chat
 ```
 
 The agent may edit `design-system.json`, `review.json` and anything under `components/` and `patterns/`, and nothing else. Components style themselves with the token CSS variables, so tokens stay the single source of truth for look and feel. Component code covers structure and behaviour.
@@ -63,6 +63,7 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
   - **Also changed** lists other sections that now look different, found by rendering every section before and after offscreen and comparing structure and computed styles. Tokens are global, so this is where you see what else a change reached; click one to add it to the review.
   - Approve waits while the agent works or while there are problems. Errors on the before side are shown in place and never sent to the agent, and Pick only attaches components from the live side.
 - **Composer:**
+  - The conversation survives a restart, and Claude Code picks up the same session, so it remembers what was said.
   - Messages sent while the agent works are queued and run, in order, when it is done; remove one with its ×. Stop drops the queue too.
   - Up and Down recall earlier messages, and an unsent message survives a reload.
   - Paste, drop or attach images. They are sent as ACP image blocks when the agent supports them.
@@ -85,5 +86,7 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 React 19 + Vite with CSS Modules and plain CSS custom properties. The server is plain Node (`server/`). It acts as an ACP client via `@agentclientprotocol/sdk` and runs two Vite instances in middleware mode, one for the app and one for the sandboxed preview. Basis always runs through Vite, because the preview compiles workspace code live.
 
 ```bash
-npm run typecheck
+npm run check
 ```
+
+`npm run check` runs the type check, oxlint, Prettier and the tests. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) covers the architecture, how to work on Basis, the gotchas and where the work stands.
