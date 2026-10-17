@@ -24,6 +24,8 @@ interface ReviewBarProps {
   showing: boolean;
   onShowing: (showing: boolean) => void;
   onStep: (id: string) => void;
+  /** Continues with one of the review's alternatives. */
+  onChoose: (label: string) => void;
   onApprove: () => void;
   onDiscard: () => void;
 }
@@ -42,6 +44,7 @@ export function ReviewBar(props: ReviewBarProps) {
   );
   const steps = review.steps;
   const latest = steps.at(-1);
+  const alternatives = review.alternatives;
 
   useEffect(() => {
     if (!confirming) return;
@@ -53,9 +56,11 @@ export function ReviewBar(props: ReviewBarProps) {
     ? "Wait until the agent is done"
     : problems > 0
       ? `Fix the ${problems === 1 ? "problem" : `${problems} problems`} first`
-      : steps.length === 0
-        ? "Nothing has changed yet"
-        : null;
+      : alternatives
+        ? "Choose an alternative first"
+        : steps.length === 0
+          ? "Nothing has changed yet"
+          : null;
   const summary = [
     changes.length ? `${changes.length} ${changes.length === 1 ? "token" : "tokens"}` : "",
     review.files.length ? `${review.files.length} ${review.files.length === 1 ? "file" : "files"}` : "",
@@ -67,11 +72,15 @@ export function ReviewBar(props: ReviewBarProps) {
         <div className={styles.inspectText}>
           <strong>Reviewing “{review.title}”</strong>
           <span className={styles.muted}>
-            {busy
-              ? "The agent is working on it…"
-              : steps.length === 0
-                ? `Started ${when(review.startedAt)}`
-                : `Iteration ${steps.length} · ${when(latest!.at)}. Keep asking in the chat, then approve.`}
+            {alternatives && !alternatives.done
+              ? `The agent is making alternative ${alternatives.options.length + 1} of ${alternatives.count}…`
+              : busy
+                ? "The agent is working on it…"
+                : alternatives
+                  ? `${alternatives.count} alternatives for “${alternatives.prompt.slice(0, 60)}”. Pick one to continue with.`
+                  : steps.length === 0
+                    ? `Started ${when(review.startedAt)}`
+                    : `Iteration ${steps.length} · ${when(latest!.at)}. Keep asking in the chat, then approve.`}
           </span>
         </div>
         {steps.length > 1 && (
@@ -107,9 +116,9 @@ export function ReviewBar(props: ReviewBarProps) {
         </div>
         {showing && (
           <div className={styles.themeToggle} role="group" aria-label="Review layout">
-            {(["split", "stacked"] as const).map((value) => (
+            {(["split", "stacked", "blink"] as const).map((value) => (
               <button key={value} type="button" aria-pressed={layout === value} onClick={() => props.onLayout(value)}>
-                {value === "split" ? "Side by side" : "Stacked"}
+                {value === "split" ? "Side by side" : value === "stacked" ? "Stacked" : "Blink"}
               </button>
             ))}
           </div>
@@ -137,6 +146,27 @@ export function ReviewBar(props: ReviewBarProps) {
           Approve
         </button>
       </div>
+      {alternatives?.done && (
+        <div className={styles.reviewImpact}>
+          <span className={styles.muted}>Continue with:</span>
+          {alternatives.options.map((option, index) => (
+            <button
+              key={option.label}
+              type="button"
+              className={styles.reviewChip}
+              onClick={() => props.onChoose(option.label)}
+              disabled={busy}
+              title={
+                index === alternatives.options.length - 1
+                  ? "The workspace holds this one now; keep it and go on from here"
+                  : `Make alternative ${option.label} the version to go on from`
+              }
+            >
+              Alternative {option.label}
+            </button>
+          ))}
+        </div>
+      )}
       {impact.length > 0 && (
         <div className={styles.reviewImpact}>
           <span className={styles.muted}>Also changed:</span>

@@ -77,6 +77,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         agent: action.agent,
         chat: action.chat,
         review: action.review,
+        // The server may have restarted and removed its copies of past versions; ask for them again.
+        baselines: {},
       };
     }
     case "projects":
@@ -105,7 +107,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
     case "export-result":
       return { ...state, exportResult: action.result };
     case "review":
-      return { ...state, review: action.review };
+      // A review that ends takes the server's copies of past versions with it.
+      return { ...state, review: action.review, baselines: action.review ? state.baselines : {} };
     case "chat-remove":
       return { ...state, chat: state.chat.filter((item) => item.id !== action.id) };
     case "baseline":

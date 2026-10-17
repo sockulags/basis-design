@@ -30,6 +30,8 @@ window.addEventListener("error", (event) => setProblem("Uncaught error", describ
 window.addEventListener("unhandledrejection", (event) => setProblem("Unhandled rejection", describe(event.reason)));
 if (import.meta.hot) {
   import.meta.hot.on("vite:error", (payload: { err?: { message?: string; id?: string } }) => {
+    // Past versions a review shows are history, not the agent's to fix (their panes do not report either).
+    if (`${payload.err?.id ?? ""} ${payload.err?.message ?? ""}`.includes("/.basis/snapshots/")) return;
     const where = payload.err?.id ? ` in ${payload.err.id.split("/components/").pop()}` : "";
     setProblem("Compile error", `${payload.err?.message?.split("\n")[0] ?? "unknown"}${where}`);
   });
@@ -144,6 +146,9 @@ function PreviewApp() {
           return;
         case "picks-clear":
           setPicks([]);
+          return;
+        case "blink-key":
+          window.dispatchEvent(new KeyboardEvent(message.down ? "keydown" : "keyup", { key: "b" }));
           return;
       }
     };

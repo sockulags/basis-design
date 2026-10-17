@@ -9,7 +9,7 @@ import { CreateDialog } from "./shell/CreateDialog.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
 import { HistoryMenu } from "./shell/HistoryMenu.tsx";
 import { InspectBanner } from "./shell/InspectBanner.tsx";
-import { usePref } from "./shell/prefs.ts";
+import { usePref, useTheme } from "./shell/prefs.ts";
 import { PreviewFrame, type PreviewFrameHandle } from "./shell/PreviewFrame.tsx";
 import { ProjectMenu } from "./shell/ProjectMenu.tsx";
 import { ReviewBar } from "./shell/ReviewBar.tsx";
@@ -18,9 +18,6 @@ import styles from "./shell/Shell.module.css";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useReview } from "./shell/useReview.ts";
 
-type Theme = "light" | "dark";
-
-const asTheme = (stored: string | null): Theme => (stored === "dark" ? "dark" : "light");
 const asFlag = (stored: string | null) => stored === "true";
 const asPage = (stored: string | null): PageId => (isPageId(stored) ? stored : "system");
 const asChatWidth = (stored: string | null) => {
@@ -33,7 +30,7 @@ const asChatWidth = (stored: string | null) => {
  * App mounts it once per project, so switching projects starts it fresh.
  */
 export function Workbench({ state, send }: { state: BridgeState; send: (message: ClientMessage) => void }) {
-  const [theme, setTheme] = usePref("theme", asTheme);
+  const [theme, setTheme] = useTheme();
   const [chatWidth, setChatWidth] = usePref("chat-width", asChatWidth);
   const [chatHidden, setChatHidden] = usePref("chat-hidden", asFlag);
   const [sidebarCollapsed, setSidebarCollapsed] = usePref("sidebar-collapsed", asFlag);
@@ -268,6 +265,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
             showing={!reviewing.hidden}
             onShowing={(showing) => reviewing.setHidden(!showing)}
             onStep={(id) => send({ type: "review-step", id })}
+            onChoose={(label) => send({ type: "review-choose", label })}
             onApprove={() => send({ type: "review-approve" })}
             onDiscard={() => send({ type: "review-discard" })}
           />

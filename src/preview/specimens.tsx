@@ -1,8 +1,9 @@
-import { createElement, type ComponentType } from "react";
+import { createElement, Fragment, type ComponentType, type FormEvent } from "react";
 import type { Design } from "../../shared/design.ts";
 import { PAGES, type PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
-import { Grid, Group, Matrix, Row, Section, Specimen as Labelled } from "./Gallery.tsx";
+import { Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
+import galleryStyles from "./Gallery.module.css";
 
 /**
  * Every `*.specimen.tsx` one folder deep in the workspace. "@workspace"
@@ -29,7 +30,7 @@ export interface SpecimenProblem {
   message: string;
 }
 
-const KINDS = new Set(["matrix", "grid", "row", "block"]);
+const KINDS = new Set(["matrix", "grid", "states", "row", "block"]);
 
 function slug(text: string): string {
   return text
@@ -46,7 +47,8 @@ function isComponent(value: unknown): value is ComponentType<never> {
 function blockProblem(block: unknown): string | null {
   if (!block || typeof block !== "object") return "a block is not an object";
   const b = block as Record<string, unknown>;
-  if (!KINDS.has(b.kind as string)) return `unknown block kind "${String(b.kind)}" (use matrix, grid, row or block)`;
+  if (!KINDS.has(b.kind as string))
+    return `unknown block kind "${String(b.kind)}" (use matrix, grid, states, row or block)`;
   if (b.kind === "matrix") {
     if (!Array.isArray(b.rows) || !Array.isArray(b.columns)) return "a matrix block needs rows and columns arrays";
     if (!isComponent(b.render)) return "a matrix block needs a render component";
@@ -54,6 +56,11 @@ function blockProblem(block: unknown): string | null {
     if (!Array.isArray(b.items)) return "a grid block needs an items array";
     if (b.items.some((item: unknown) => !item || !isComponent((item as { render?: unknown }).render))) {
       return "every grid item needs a label and a render component";
+    }
+  } else if (b.kind === "states") {
+    if (!Array.isArray(b.states)) return "a states block needs a states array";
+    if (b.states.some((state: unknown) => !state || !isComponent((state as { render?: unknown }).render))) {
+      return "every state needs a label and a render component";
     }
   } else if (!isComponent(b.render)) {
     return `a ${String(b.kind)} block needs a render component`;
@@ -191,6 +198,15 @@ function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
           ))}
         </Grid>
       );
+    case "states":
+      return (
+        <States
+          states={block.states.map((state) => ({
+            label: state.label,
+            content: createElement(state.render, { design }),
+          }))}
+        />
+      );
     case "row":
       return <Row>{createElement(block.render, { design })}</Row>;
     case "block":
@@ -198,19 +214,92 @@ function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
   }
 }
 
-/** The blocks of a specimen, without the section frame. */
-export function SpecimenBlocks({ specimen, design }: { specimen: LoadedSpecimen; design: Design }) {
+export type FrameWidth = "fit" | "mobile" | "tablet" | "desktop";
+
+/** The fixed widths a block can be shown at; "fit" is the column's own width. */
+export const FRAME_WIDTHS: { id: FrameWidth; label: string; px?: number }[] = [
+  { id: "fit", label: "Fit" },
+  { id: "mobile", label: "Mobile", px: 375 },
+  { id: "tablet", label: "Tablet", px: 768 },
+  { id: "desktop", label: "Desktop", px: 1280 },
+];
+
+/** How each block of a specimen is shown: at which widths, in the current theme or in both. */
+export interface Frames {
+  widths: FrameWidth[];
+  bothThemes: boolean;
+  theme: "light" | "dark";
+  /** The review side the copies belong to, so they take that side's tokens. */
+  side?: string;
+}
+
+const preventSubmit = (event: FormEvent) => event.preventDefault();
+
+/**
+ * A block at each chosen width and theme. Every copy is a size container (so a
+ * pattern's @container rules respond to it) and a form of its own (so named
+ * radio groups in the copies stay apart).
+ */
+function Framed({ block, design, frames }: { block: SpecimenBlock; design: Design; frames: Frames }) {
+  const themes = frames.bothThemes ? (["light", "dark"] as const) : [frames.theme];
+  const widths = FRAME_WIDTHS.filter((width) => frames.widths.includes(width.id));
+  return (
+    <div className={galleryStyles.frames}>
+      {widths.map((width) => (
+        <div key={width.id} className={galleryStyles.frameRow}>
+          {themes.map((theme) => (
+            <figure key={theme} className={galleryStyles.frame}>
+              <figcaption className={galleryStyles.caption}>
+                {width.px ? `${width.label} · ${width.px}px` : width.label}
+                {frames.bothThemes ? ` · ${theme}` : ""}
+              </figcaption>
+              <div className={galleryStyles.frameScroll}>
+                <form
+                  className={`ds-root ${galleryStyles.frameBody}`}
+                  data-theme={theme}
+                  data-side={frames.side}
+                  data-fit={width.px ? undefined : true}
+                  style={width.px ? { width: width.px } : undefined}
+                  onSubmit={preventSubmit}
+                >
+                  <Block block={block} design={design} />
+                </form>
+              </div>
+            </figure>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The blocks of a specimen, without the section frame; with `frames`, at several widths or in both themes. */
+export function SpecimenBlocks({
+  specimen,
+  design,
+  frames,
+}: {
+  specimen: LoadedSpecimen;
+  design: Design;
+  frames?: Frames;
+}) {
+  const framed = frames && (frames.bothThemes || frames.widths.some((width) => width !== "fit"));
   return (
     <>
-      {specimen.blocks.map((block, index) =>
-        block.title ? (
+      {specimen.blocks.map((block, index) => {
+        const content = framed ? (
+          <Framed block={block} design={design} frames={frames} />
+        ) : (
+          <Block block={block} design={design} />
+        );
+        return block.title ? (
           <Group key={index} title={block.title}>
-            <Block block={block} design={design} />
+            {content}
           </Group>
         ) : (
-          <Block key={index} block={block} design={design} />
-        ),
-      )}
+          <Fragment key={index}>{content}</Fragment>
+        );
+      })}
     </>
   );
 }
@@ -219,14 +308,16 @@ export function SpecimenSection({
   specimen,
   design,
   onAsk,
+  frames,
 }: {
   specimen: LoadedSpecimen;
   design: Design;
   onAsk: (prefix: string) => void;
+  frames?: Frames;
 }) {
   return (
     <Section id={specimen.id} title={specimen.title} description={specimen.description ?? ""} onAsk={onAsk}>
-      <SpecimenBlocks specimen={specimen} design={design} />
+      <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
     </Section>
   );
 }

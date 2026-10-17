@@ -21,7 +21,12 @@ export interface ReviewTarget {
   rows?: string[];
   /** Matrix column labels to keep. */
   columns?: string[];
+  /** Widths to show each block at, as size containers: "fit" (the column), "mobile", "tablet", "desktop". */
+  widths?: ReviewWidth[];
 }
+
+export const REVIEW_WIDTHS = ["fit", "mobile", "tablet", "desktop"] as const;
+export type ReviewWidth = (typeof REVIEW_WIDTHS)[number];
 
 export interface ReviewRequest {
   title: string;
@@ -33,6 +38,27 @@ export interface ReviewStep {
   id: string;
   at: number;
   label: string;
+}
+
+/** How many alternatives one prompt can ask for, and what they are called. */
+export const ALTERNATIVE_LABELS = ["A", "B", "C"] as const;
+export const MAX_ALTERNATIVES = ALTERNATIVE_LABELS.length;
+
+/**
+ * A set of alternatives: the agent made several takes on one prompt, each from
+ * the same starting point, and the user picks one to continue with. Each take
+ * is an iteration of the review; the workspace holds the last one.
+ */
+export interface Alternatives {
+  prompt: string;
+  /** The commit every alternative started from. */
+  start: string;
+  /** How many were asked for (how many were made, once done). */
+  count: number;
+  /** The finished ones, in order: each one's label and the iteration it ended at. */
+  options: { label: string; step: string }[];
+  /** False while the agent is still making them. */
+  done: boolean;
 }
 
 export interface ReviewState extends ReviewRequest {
@@ -47,6 +73,8 @@ export interface ReviewState extends ReviewRequest {
    * "also changed" check; null when they can reach everything, absent until the first iteration.
    */
   reach?: string[] | null;
+  /** Alternatives being made, or waiting for the user to pick one. */
+  alternatives?: Alternatives;
 }
 
 function labels(value: unknown, field: string, errors: string[]): string[] | undefined {
@@ -88,11 +116,18 @@ export function parseReviewRequest(
         errors.push(`${field}.block must be the title of one of the specimen's blocks`);
         return;
       }
+      let widths: ReviewWidth[] | undefined;
+      if (target.widths !== undefined) {
+        const valid = Array.isArray(target.widths) && target.widths.every((width) => REVIEW_WIDTHS.includes(width));
+        if (valid && (target.widths as unknown[]).length) widths = target.widths as ReviewWidth[];
+        else errors.push(`${field}.widths must be a list of ${REVIEW_WIDTHS.map((width) => `"${width}"`).join(", ")}`);
+      }
       show.push({
         specimen: specimen.slice(0, 80),
         block: typeof target.block === "string" ? target.block.trim().slice(0, 80) : undefined,
         rows: labels(target.rows, `${field}.rows`, errors),
         columns: labels(target.columns, `${field}.columns`, errors),
+        ...(widths ? { widths } : {}),
       });
     });
   }
@@ -103,5 +138,8 @@ export function parseReviewRequest(
 export function describeTarget(target: ReviewTarget): string {
   const parts = [target.specimen, target.block].filter(Boolean).join(" › ");
   const narrowed = [...(target.rows ?? []), ...(target.columns ?? [])];
-  return narrowed.length ? `${parts} · ${narrowed.join(", ")}` : parts;
+  // Fit alone is the usual view and needs no mention.
+  const shown = target.widths?.some((width) => width !== "fit") ? target.widths : [];
+  const label = narrowed.length ? `${parts} · ${narrowed.join(", ")}` : parts;
+  return shown.length ? `${label} (${shown.join(", ")})` : label;
 }

@@ -110,10 +110,23 @@ export default defineSpecimen([
         ),
       },
       {
-        kind: "grid",
-        title: "Loading and empty",
-        min: 360,
-        items: [
+        kind: "states",
+        title: "States · populated, loading and empty",
+        states: [
+          {
+            label: "populated",
+            render: () => (
+              <div style={{ width: "100%" }}>
+                <DataTable
+                  caption="Members"
+                  columns={COLUMNS.slice(0, 3)}
+                  rows={MEMBERS.slice(0, 3)}
+                  rowKey={(member: Member) => member.id}
+                  selectable
+                />
+              </div>
+            ),
+          },
           {
             label: "loading",
             render: () => (

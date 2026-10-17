@@ -21,6 +21,44 @@ export function writePref(key: string, value: string): void {
   }
 }
 
+type Theme = "light" | "dark";
+
+/**
+ * The preview theme: the system's, followed live, until the user picks one.
+ * The pick lasts for this tab (session storage), so a new visit starts from
+ * the system again.
+ */
+export function useTheme(): [Theme, (theme: Theme) => void] {
+  const [system, setSystem] = useState<Theme>(systemTheme);
+  const [chosen, setChosen] = useState<Theme | null>(() => {
+    try {
+      const stored = sessionStorage.getItem("basis:theme");
+      return stored === "light" || stored === "dark" ? stored : null;
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    const query = matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystem(systemTheme());
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const choose = (theme: Theme) => {
+    setChosen(theme);
+    try {
+      sessionStorage.setItem("basis:theme", theme);
+    } catch {
+      // The pick only lasts until the page reloads.
+    }
+  };
+  return [chosen ?? system, choose];
+}
+
+function systemTheme(): Theme {
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 /**
  * State that starts from a stored preference and is stored again when it
  * changes. `decode` turns the stored text (or null) into a valid value;

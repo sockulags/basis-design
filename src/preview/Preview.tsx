@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
+import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
 import { clearProblems, setProblem } from "./errors.ts";
@@ -43,6 +44,9 @@ export function Preview({ view, post }: PreviewProps) {
   // more would put their named radio groups in the document three times).
   const shown = new Set((review?.targets ?? []).map((target) => findSpecimen(specimens, target.specimen)?.id ?? ""));
   const problemsKey = problems.map((problem) => `${problem.file}: ${problem.message}`).join("\n");
+  // Widths and themes for every block, chosen in the bar above the sections.
+  const [frameChoice, setFrameChoice] = useFrameChoice();
+  const frames = useMemo(() => ({ ...frameChoice, theme }), [frameChoice, theme]);
   // Large pages render their first screen at once and the rest in steps (see progressive.ts).
   const [rendered, reveal] = useProgressiveCount(onPage.length, page);
   const pageIds = onPage.map((specimen) => specimen.id).join(",");
@@ -114,9 +118,10 @@ export function Preview({ view, post }: PreviewProps) {
                 {INTROS[page] && <p className={styles.description}>{INTROS[page]}</p>}
               </header>
             )}
+            {onPage.length > 0 && <FrameBar choice={frameChoice} onChange={setFrameChoice} />}
             {onPage.map((specimen, index) =>
               index < rendered ? (
-                <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} />
+                <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} frames={frames} />
               ) : (
                 <section key={specimen.id} id={specimen.id} className={styles.pending} aria-busy="true">
                   <h2>{specimen.title}</h2>

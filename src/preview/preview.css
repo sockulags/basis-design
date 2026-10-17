@@ -65,6 +65,13 @@ body {
   opacity: 1;
 }
 
+/* Toggles in the gallery's own bars (widths, themes, blink) show when they are on. */
+.ask-button[aria-pressed="true"] {
+  border-style: solid;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+}
+
 .ask-button:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;

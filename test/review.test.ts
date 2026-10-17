@@ -33,6 +33,17 @@ describe("parseReviewRequest", () => {
     assert.equal(labels.ok, false);
   });
 
+  test("accepts widths, and explains a bad width", () => {
+    const result = parseReviewRequest(
+      JSON.stringify({ title: "x", show: [{ specimen: "Navbar", widths: ["mobile", "desktop"] }] }),
+    );
+    assert.ok(result.ok);
+    assert.deepEqual(result.request.show[0]?.widths, ["mobile", "desktop"]);
+    const bad = parseReviewRequest(JSON.stringify({ title: "x", show: [{ specimen: "Navbar", widths: ["phone"] }] }));
+    assert.equal(bad.ok, false);
+    assert.match(bad.ok ? "" : bad.errors.join(), /"fit", "mobile", "tablet", "desktop"/);
+  });
+
   test("keeps at most four targets and ignores unknown keys", () => {
     const show = Array.from({ length: 6 }, (_, index) => ({ specimen: `S${index}`, note: "ignored" }));
     const result = parseReviewRequest(JSON.stringify({ title: "x", show }));
@@ -49,4 +60,6 @@ describe("parseReviewRequest", () => {
 test("describeTarget names the specimen, block and labels", () => {
   assert.equal(describeTarget({ specimen: "Buttons" }), "Buttons");
   assert.equal(describeTarget({ specimen: "Tabs", block: "Pill", rows: ["a"], columns: ["b"] }), "Tabs › Pill · a, b");
+  assert.equal(describeTarget({ specimen: "Navbar", widths: ["fit"] }), "Navbar");
+  assert.equal(describeTarget({ specimen: "Navbar", widths: ["fit", "mobile"] }), "Navbar (fit, mobile)");
 });

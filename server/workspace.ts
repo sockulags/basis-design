@@ -37,6 +37,8 @@ export class Workspace extends EventEmitter<Events> {
   private settleTimer?: NodeJS.Timeout;
   private reviewTimer?: NodeJS.Timeout;
   private turnLabel = "";
+  /** A set of alternatives being made before a review holds it: what was asked, and where the takes start. */
+  private pendingAlternatives?: { prompt: string; start: string; count: number };
   /** Serialises git operations; concurrent commits would race on the index. */
   private queue: Promise<unknown> = Promise.resolve();
   /** True while an agent turn runs; its changes are committed once, when the turn ends. */
@@ -65,6 +67,7 @@ export class Workspace extends EventEmitter<Events> {
     const hasCommits = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() !== "";
     await this.commit(hasCommits ? "external" : "init", note ? { label: note } : {});
     this.history = await loadHistory(this.dir);
+    // Copies of past versions from earlier runs, except the open review's starting point.
     await this.snapshots.prune(this.reviews.state?.baseline);
     await this.readReviewRequest();
     this.watcher = watch(this.dir, { recursive: true }, (_event, filename) => this.onFsEvent(filename));
@@ -166,6 +169,76 @@ export class Workspace extends EventEmitter<Events> {
       if (index === -1 || index === steps.length - 1) return;
       await this.reviews.restore(stepId);
       await this.recordStep(`Back to iteration ${index + 1}`);
+    });
+    await this.reload();
+    await this.check();
+  }
+
+  /**
+   * Starts a set of alternatives for `prompt`: records hand edits first, then
+   * notes where every take starts (the open review's latest iteration, or the
+   * last history entry, which a review opened by the first take starts from).
+   */
+  async beginAlternatives(prompt: string, count: number): Promise<void> {
+    await this.commit("external", {});
+    await this.serial(async () => {
+      const start = this.reviews.tip ?? (await git(this.dir, ["rev-parse", "HEAD"])).trim();
+      this.pendingAlternatives = { prompt, start, count };
+    });
+  }
+
+  /**
+   * Records the take just made as alternative `label`. Returns false when there
+   * is no review to hold the set (the first take did not open one, or it was
+   * discarded), which ends the set.
+   */
+  async alternativeDone(label: string): Promise<boolean> {
+    return this.serial(async () => {
+      const review = this.reviews.state;
+      const pending = this.pendingAlternatives;
+      const tip = this.reviews.tip;
+      if (!review || !pending || !tip) return false;
+      const set = review.alternatives ?? { ...pending, options: [], done: false };
+      await this.reviews.setAlternatives({ ...set, options: [...set.options, { label, step: tip }] });
+      this.emit("review", this.reviews.state);
+      return true;
+    });
+  }
+
+  /** Puts the workspace back where the set started, for the next take; going back is not an iteration. */
+  async nextAlternative(): Promise<void> {
+    const start = this.pendingAlternatives?.start;
+    if (!start || !this.reviews.state) return;
+    await this.serial(() => this.reviews.restore(start, true));
+    await this.reload();
+    await this.check();
+  }
+
+  /** Ends making the set; with fewer than two takes there is nothing to choose between. */
+  async endAlternatives(): Promise<void> {
+    this.pendingAlternatives = undefined;
+    await this.serial(async () => {
+      const set = this.reviews.state?.alternatives;
+      if (!set) return;
+      await this.reviews.setAlternatives(
+        set.options.length > 1 ? { ...set, count: set.options.length, done: true } : undefined,
+      );
+      this.emit("review", this.reviews.state);
+    });
+  }
+
+  /** Continues with one alternative: the workspace becomes that take (a new iteration, unless it already is). */
+  async chooseAlternative(label: string): Promise<void> {
+    await this.serial(async () => {
+      const set = this.reviews.state?.alternatives;
+      const option = set?.done ? set.options.find((item) => item.label === label) : undefined;
+      if (!option) return;
+      if (option.step !== this.reviews.tip) {
+        await this.reviews.restore(option.step);
+        await this.recordStep(`Chose alternative ${label}`);
+      }
+      await this.reviews.setAlternatives(undefined);
+      this.emit("review", this.reviews.state);
     });
     await this.reload();
     await this.check();
@@ -306,7 +379,8 @@ export class Workspace extends EventEmitter<Events> {
     await this.reviews.end();
     this.emit("review", null);
     this.emit("design", this.state);
-    await this.snapshots.prune(undefined);
+    // The copies stay until the next start (see init): the preview server remembers files it saw removed, so a
+    // copy written again at the same path would not load.
   }
 }
 

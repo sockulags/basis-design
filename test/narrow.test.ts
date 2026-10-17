@@ -68,6 +68,31 @@ describe("narrowSpecimen", () => {
     );
   });
 
+  test("filters a pattern's states by row labels", () => {
+    const pattern: LoadedSpecimen = {
+      ...buttons,
+      blocks: [
+        {
+          kind: "states",
+          title: "States",
+          states: [
+            { label: "populated", render },
+            { label: "empty", render },
+            { label: "error", render },
+          ],
+        },
+      ],
+    };
+    const result = narrowSpecimen(pattern, { specimen: "Buttons", rows: ["Empty"] });
+    assert.ok("specimen" in result);
+    const [block] = result.specimen.blocks;
+    assert.ok(block?.kind === "states");
+    assert.deepEqual(
+      block.states.map((state) => state.label),
+      ["empty"],
+    );
+  });
+
   test("keeps a named free-form block even when rows are given", () => {
     assert.equal(narrowed({ specimen: "Buttons", block: "Live", rows: ["primary"] })[0]?.kind, "row");
   });

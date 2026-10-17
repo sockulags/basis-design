@@ -37,6 +37,11 @@ export type SpecimenBlock =
     }
   /** Labelled examples in a responsive grid. */
   | { kind: "grid"; title?: string; min?: number; items: { label: string; render: ComponentType<RenderProps> }[] }
+  /**
+   * The data states of a pattern, one under the other at full width: how it looks populated, empty, loading,
+   * failed or with long content (see STATES for the usual labels; add others a pattern needs).
+   */
+  | { kind: "states"; title?: string; states: { label: string; render: ComponentType<RenderProps> }[] }
   /** Free content laid out in a wrapping row. */
   | { kind: "row"; title?: string; render: ComponentType<RenderProps> }
   /** Free content, full width. */
@@ -53,6 +58,9 @@ export interface Specimen {
   order?: number;
   blocks: SpecimenBlock[];
 }
+
+/** The usual labels of a `states` block, in the order they read best. */
+export const STATES = ["populated", "empty", "loading", "error", "long content"] as const;
 
 /** Identity helper that gives specimen files type checking. */
 export function defineSpecimen<T extends Specimen | Specimen[]>(specimen: T): T {

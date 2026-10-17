@@ -9,6 +9,7 @@ import {
 } from "react";
 import { annotationLabel, type Annotation } from "../../shared/annotations.ts";
 import { MAX_IMAGES, type ClientMessage } from "../../shared/protocol.ts";
+import { MAX_ALTERNATIVES } from "../../shared/review.ts";
 import styles from "./ChatPanel.module.css";
 import { imageAttachment, type Attachment } from "./images.ts";
 
@@ -52,6 +53,8 @@ export function Composer({
   const [images, setImages] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** How many takes the next message asks for; back to one after sending, since more cost more. */
+  const [alternatives, setAlternatives] = useState(1);
   const fileInput = useRef<HTMLInputElement>(null);
   /** Position in `sent` while recalling earlier prompts; null while typing a new one. */
   const recall = useRef<number | null>(null);
@@ -91,7 +94,9 @@ export function Composer({
       text: draft.trim(),
       images: images.map(({ mimeType, data }) => ({ mimeType, data })),
       annotations,
+      alternatives: alternatives > 1 ? alternatives : undefined,
     });
+    setAlternatives(1);
     onDraft("");
     setImages([]);
     setNotice(null);
@@ -189,13 +194,15 @@ export function Composer({
         onPaste={onPaste}
         placeholder={
           ready || busy
-            ? annotations.length
-              ? "What should change? Refer to picks as [1], [2]…"
-              : reviewing
-                ? "Tell the agent what to change in this review…"
-                : busy
-                  ? "Type the next step; it runs when the agent is done…"
-                  : "Describe a change, paste a screenshot, or pick an element…"
+            ? alternatives > 1
+              ? `Describe the change; the agent makes ${alternatives} alternatives to choose between…`
+              : annotations.length
+                ? "What should change? Refer to picks as [1], [2]…"
+                : reviewing
+                  ? "Tell the agent what to change in this review…"
+                  : busy
+                    ? "Type the next step; it runs when the agent is done…"
+                    : "Describe a change, paste a screenshot, or pick an element…"
             : "Waiting for the agent…"
         }
         rows={2}
@@ -243,6 +250,19 @@ export function Composer({
           />
         </div>
         <div className={styles.sendGroup}>
+          <div className={styles.count} role="group" aria-label="Alternatives">
+            {Array.from({ length: MAX_ALTERNATIVES }, (_, index) => index + 1).map((count) => (
+              <button
+                key={count}
+                type="button"
+                aria-pressed={alternatives === count}
+                onClick={() => setAlternatives(count)}
+                title={count === 1 ? "One version" : `${count} alternatives side by side, to pick one from`}
+              >
+                ×{count}
+              </button>
+            ))}
+          </div>
           {busy && (
             <button
               type="button"

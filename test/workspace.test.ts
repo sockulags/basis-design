@@ -88,6 +88,28 @@ describe("history", () => {
     assert.equal(workspace.entries.length, 1);
   });
 
+  test("an untouched earlier specimen format is updated, a changed one is left alone", async () => {
+    const earlier = execFileSync("git", ["show", "ff623a8:template/components/specimen.ts"], {
+      cwd: path.resolve(import.meta.dirname, ".."),
+      encoding: "utf8",
+    });
+    const untouched = await folder();
+    (await start(untouched)).close();
+    await writeFile(path.join(untouched, "components", "specimen.ts"), earlier);
+    // An older workspace has the earlier format in its history too.
+    git(untouched, ["add", "-A"]);
+    git(untouched, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older format"]);
+    const updated = await start(untouched);
+    assert.match(await readFile(path.join(untouched, "components", "specimen.ts"), "utf8"), /kind: "states"/);
+    assert.equal(updated.entries.at(-1)?.label, "Basis added the states block for specimens");
+
+    const changed = await folder();
+    (await start(changed)).close();
+    await writeFile(path.join(changed, "components", "specimen.ts"), `${earlier}\n// my own helper\n`);
+    await start(changed);
+    assert.doesNotMatch(await readFile(path.join(changed, "components", "specimen.ts"), "utf8"), /kind: "states"/);
+  });
+
   test("an older workspace gets the files Basis added since", async () => {
     const dir = await folder();
     (await start(dir)).close();
@@ -226,5 +248,94 @@ describe("reviews", () => {
       { specimen: "Tabs", block: undefined, rows: undefined, columns: undefined },
     ]);
     assert.equal(workspace.review?.baseline, baseline);
+  });
+});
+
+describe("alternatives", () => {
+  /** Makes one take the way AgentHost does: a turn, then recorded as the next alternative. */
+  async function take(workspace: Workspace, dir: string, label: string, value: string, first = false) {
+    if (!first) await workspace.nextAlternative();
+    await turn(workspace, `Alternative ${label}: Bolder`, async () => {
+      if (first && !workspace.review) await openReview(dir, "Bolder");
+      await setToken(dir, value);
+    });
+    return workspace.alternativeDone(label);
+  }
+
+  test("each take starts from the same point and is an iteration; choosing one continues from it", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await turn(workspace, "First", async () => {
+      await openReview(dir);
+      await setToken(dir, "#111111");
+    });
+    const first = workspace.review!.steps[0]!.id;
+
+    await workspace.beginAlternatives("Bolder", 3);
+    assert.ok(await take(workspace, dir, "A", "#aaaaaa", true));
+    assert.ok(await take(workspace, dir, "B", "#bbbbbb"));
+    assert.ok(await take(workspace, dir, "C", "#cccccc"));
+    await workspace.endAlternatives();
+
+    const review = workspace.review!;
+    assert.deepEqual(
+      review.steps.map((step) => step.label),
+      ["First", "Alternative A: Bolder", "Alternative B: Bolder", "Alternative C: Bolder"],
+    );
+    assert.equal(review.alternatives?.done, true);
+    assert.equal(review.alternatives?.start, first);
+    assert.deepEqual(
+      review.alternatives?.options.map((option) => option.label),
+      ["A", "B", "C"],
+    );
+    // B and C build on the starting point, not on the take before them.
+    assert.equal(git(dir, ["rev-parse", `${review.steps[2]!.id}^`]), first);
+    assert.equal(git(dir, ["rev-parse", `${review.steps[3]!.id}^`]), first);
+    assert.equal(await token(dir), "#cccccc");
+
+    await workspace.chooseAlternative("A");
+    assert.equal(await token(dir), "#aaaaaa");
+    assert.equal(workspace.review?.alternatives, undefined);
+    assert.equal(workspace.review?.steps.at(-1)?.label, "Chose alternative A");
+  });
+
+  test("the first take can open the review, and choosing the one on show adds no iteration", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    const head = git(dir, ["rev-parse", "HEAD"]);
+    await workspace.beginAlternatives("Bolder", 2);
+    assert.ok(await take(workspace, dir, "A", "#aaaaaa", true));
+    assert.ok(await take(workspace, dir, "B", "#bbbbbb"));
+    await workspace.endAlternatives();
+    assert.equal(workspace.review?.baseline, head);
+    assert.equal(workspace.review?.alternatives?.start, head);
+
+    await workspace.chooseAlternative("B");
+    assert.equal(workspace.review?.alternatives, undefined);
+    assert.equal(workspace.review?.steps.length, 2);
+    assert.equal(await token(dir), "#bbbbbb");
+  });
+
+  test("a new iteration after the set puts it away", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await workspace.beginAlternatives("Bolder", 2);
+    await take(workspace, dir, "A", "#aaaaaa", true);
+    await take(workspace, dir, "B", "#bbbbbb");
+    await workspace.endAlternatives();
+    await turn(workspace, "A bit darker", () => setToken(dir, "#222222"));
+    assert.equal(workspace.review?.alternatives, undefined);
+    assert.equal(workspace.review?.steps.length, 3);
+  });
+
+  test("without a review there is no set, and the take goes to history as usual", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    await workspace.beginAlternatives("Bolder", 2);
+    await turn(workspace, "Alternative A: Bolder", () => setToken(dir, "#aaaaaa"));
+    assert.equal(await workspace.alternativeDone("A"), false);
+    await workspace.endAlternatives();
+    assert.equal(workspace.review, null);
+    assert.equal(workspace.entries.at(-1)?.label, "Alternative A: Bolder");
   });
 });

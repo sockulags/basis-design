@@ -17,7 +17,7 @@ import {
   type PromptImage,
   type ToolStatus,
 } from "../shared/protocol.ts";
-import { describeTarget } from "../shared/review.ts";
+import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
 import { loadChat, saveChat } from "./chatlog.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
@@ -94,11 +94,12 @@ export class AgentHost extends EventEmitter<Events> {
   private openText?: { id: string; kind: "agent" | "thought" };
   private permissions = new Map<string, (optionId: string | null) => void>();
   private stderrTail: string[] = [];
-  private autoFixes = 0;
   private previewErrors: string[] = [];
   private seq = 0;
   /** Prompts sent while a turn was running, oldest first. */
-  private queued: { id: string; text: string; attachments: Attachments }[] = [];
+  private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
+  /** Set by Stop; ends the current set of alternatives and the fix loop, not just the running turn. */
+  private stopping = false;
 
   constructor(
     private readonly workspace: Workspace,
@@ -215,26 +216,90 @@ export class AgentHost extends EventEmitter<Events> {
   }
 
   /**
-   * Runs a turn. A prompt sent while a turn runs is queued and runs when the
-   * agent is free again; `queuedId` is the chat item it was queued as.
+   * Runs what the user sent: one turn, or with `alternatives` > 1 that many
+   * takes on it to choose between. A prompt sent while the agent works is
+   * queued and runs when it is free again; `queuedId` is the chat item it was
+   * queued as.
    */
-  async prompt(text: string, attachments: Attachments = {}, auto = false, queuedId?: string): Promise<void> {
+  async prompt(text: string, attachments: Attachments = {}, queuedId?: string, alternatives = 1): Promise<void> {
     const connection = this.connection;
-    const sessionId = this.sessionId;
-    if (!connection || !sessionId) return;
-    if (!auto && this.state.status === "busy") return this.enqueue(text, attachments);
+    if (!connection || !this.sessionId) return;
+    const count = Math.max(1, Math.min(MAX_ALTERNATIVES, Math.floor(alternatives) || 1));
+    if (this.state.status === "busy") return this.enqueue(text, attachments, count);
     if (this.state.status !== "ready") return;
-    if (!auto) this.autoFixes = 0;
+    this.stopping = false;
+    this.setState({ ...this.state, status: "busy", detail: undefined });
     const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
     const annotations = attachments.annotations ?? [];
-    this.push(this.userItem(queuedId ?? this.nextId("user"), text, images, annotations, auto));
-    this.setState({ ...this.state, status: "busy", detail: undefined });
-    // Fix-up turns are labelled as such in history and reviews, not with the whole problem report.
-    const label = auto
-      ? "Fixed reported problems"
-      : text || annotations.map(annotationLabel).join(", ") || "Image prompt";
-    await this.workspace.beginTurn(label);
-    const message = text || "See the attached context.";
+    this.push({
+      ...this.userItem(queuedId ?? this.nextId("user"), text, images, annotations, false),
+      alternatives: count > 1 ? count : undefined,
+    });
+    const label = text || annotations.map(annotationLabel).join(", ") || "Image prompt";
+    const turn = { text, images, annotations, label, instruction: attachments.instruction };
+    if (count > 1) await this.runAlternatives(turn, count);
+    else await this.runChecked(turn);
+    if (this.connection === connection) this.setState({ ...this.state, status: "ready" });
+    // Whatever the user queued meanwhile runs once everything above is done.
+    await this.runQueued();
+  }
+
+  /** One turn plus the fix-up turns for what it left broken. Returns false when it was stopped or failed. */
+  private async runChecked(turn: Turn): Promise<boolean> {
+    const connection = this.connection;
+    const completed = await this.runTurn(turn);
+    for (let fixes = 0; completed && fixes < MAX_AUTO_FIXES && !this.stopping; fixes += 1) {
+      const problems = await this.collectProblems();
+      if (!problems || this.connection !== connection) break;
+      this.push(this.userItem(this.nextId("user"), problems, [], [], true));
+      // Fix-up turns are labelled as such in history and reviews, not with the whole problem report.
+      await this.runTurn({ text: problems, images: [], annotations: [], label: "Fixed reported problems" });
+    }
+    return completed && !this.stopping;
+  }
+
+  /**
+   * Makes `count` takes on one prompt, each from the same starting point, for
+   * the user to compare in a review and pick from. Between takes Basis puts the
+   * workspace back; the agent's session remembers the earlier takes, so it can
+   * make the next one different.
+   */
+  private async runAlternatives(turn: Turn, count: number): Promise<void> {
+    const labels = ALTERNATIVE_LABELS.slice(0, count);
+    await this.workspace.beginAlternatives(turn.label, count);
+    for (const [index, label] of labels.entries()) {
+      if (index > 0) {
+        if (!this.workspace.review?.alternatives || this.stopping || !this.connection) break;
+        await this.workspace.nextAlternative();
+      }
+      this.notice(`Alternative ${label} of ${count}`, "info");
+      const completed = await this.runChecked({
+        ...turn,
+        label: `Alternative ${label}: ${turn.label}`,
+        instruction: [turn.instruction, alternativeInstruction(index, labels, Boolean(this.workspace.review))]
+          .filter(Boolean)
+          .join("\n\n"),
+      });
+      if (!(await this.workspace.alternativeDone(label))) {
+        if (index === 0)
+          this.notice(
+            "The agent made one version without opening a review, so there is nothing to compare it with.",
+            "info",
+          );
+        break;
+      }
+      if (!completed) break;
+    }
+    await this.workspace.endAlternatives();
+  }
+
+  /** Sends one turn to the agent and records what it changed as one undo step (or iteration). */
+  private async runTurn(turn: Turn): Promise<boolean> {
+    const connection = this.connection;
+    const sessionId = this.sessionId;
+    if (!connection || !sessionId) return false;
+    await this.workspace.beginTurn(turn.label);
+    const message = turn.text || "See the attached context.";
     const body = this.needsPreamble
       ? `${FIRST_PROMPT_PREAMBLE}
 
@@ -244,18 +309,19 @@ ${message}`
     const blocks: acp.ContentBlock[] = [];
     const context = this.reviewContext();
     if (context) blocks.push({ type: "text", text: context });
-    if (attachments.instruction) blocks.push({ type: "text", text: attachments.instruction });
-    if (annotations.length) blocks.push({ type: "text", text: formatAnnotations(annotations) });
-    for (const image of images) blocks.push({ type: "image", mimeType: image.mimeType, data: image.data });
+    if (turn.instruction) blocks.push({ type: "text", text: turn.instruction });
+    if (turn.annotations.length) blocks.push({ type: "text", text: formatAnnotations(turn.annotations) });
+    for (const image of turn.images) blocks.push({ type: "image", mimeType: image.mimeType, data: image.data });
     blocks.push({ type: "text", text: body });
+    let completed = false;
     try {
       const result = await connection.agent.request(acp.methods.agent.session.prompt, {
         sessionId,
         prompt: blocks,
       });
+      completed = result.stopReason === "end_turn";
       if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
-      else if (result.stopReason !== "end_turn")
-        this.notice(`The agent stopped early (${result.stopReason}).`, "error");
+      else if (!completed) this.notice(`The agent stopped early (${result.stopReason}).`, "error");
     } catch (error) {
       if (this.connection === connection) this.notice(describeError(error), "error");
     } finally {
@@ -264,14 +330,7 @@ ${message}`
     }
     // Stay busy while the turn is checked and recorded as one undo step.
     await this.workspace.endTurn();
-    const problems = await this.collectProblems();
-    if (this.connection === connection) this.setState({ ...this.state, status: "ready" });
-    if (problems && this.connection === connection && this.autoFixes < MAX_AUTO_FIXES) {
-      this.autoFixes += 1;
-      await this.prompt(problems, {}, true);
-    }
-    // Fixes first, then whatever the user queued meanwhile.
-    if (!auto) await this.runQueued();
+    return completed && this.connection === connection;
   }
 
   /** Removes a queued prompt before it runs. */
@@ -281,11 +340,15 @@ ${message}`
     if (this.queued.length !== before) this.remove(id);
   }
 
-  private enqueue(text: string, attachments: Attachments): void {
+  private enqueue(text: string, attachments: Attachments, alternatives: number): void {
     const id = this.nextId("user");
     const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
-    this.push({ ...this.userItem(id, text, images, attachments.annotations ?? [], false), queued: true });
-    this.queued.push({ id, text, attachments });
+    this.push({
+      ...this.userItem(id, text, images, attachments.annotations ?? [], false),
+      queued: true,
+      alternatives: alternatives > 1 ? alternatives : undefined,
+    });
+    this.queued.push({ id, text, attachments, alternatives });
   }
 
   private async runQueued(): Promise<void> {
@@ -293,7 +356,7 @@ ${message}`
     if (!next) return;
     // The message moves from where it was queued to the end of the conversation, where its turn starts.
     this.remove(next.id);
-    await this.prompt(next.text, next.attachments, false, next.id);
+    await this.prompt(next.text, next.attachments, next.id, next.alternatives);
   }
 
   private clearQueue(): void {
@@ -362,6 +425,7 @@ ${message}`
 
   /** Stops the running turn; prompts queued behind it are dropped too, since Stop means stop. */
   async cancel(): Promise<void> {
+    this.stopping = true;
     this.clearQueue();
     this.cancelPermissions();
     if (this.connection && this.sessionId) {
@@ -574,6 +638,40 @@ ${message}`
     this.seq += 1;
     return `${prefix}-${Date.now().toString(36)}-${this.seq}`;
   }
+}
+
+/** What one turn sends: the user's words and attachments, and how history labels it. */
+interface Turn {
+  text: string;
+  images: PromptImage[];
+  annotations: Annotation[];
+  label: string;
+  instruction?: string;
+}
+
+/**
+ * Tells the agent which take it is making. The first one also opens the
+ * review the takes are compared in, unless one is open already.
+ */
+function alternativeInstruction(index: number, labels: readonly string[], reviewOpen: boolean): string {
+  const label = labels[index];
+  if (index === 0) {
+    return [
+      `The user asked for ${labels.length} alternatives of this change (${labels.join(", ")}), to compare side by side and pick one to continue with.`,
+      `Make alternative ${label} now; Basis then puts the workspace back and asks for the next one.`,
+      "Make each alternative a complete, clearly different take on the request (a different direction, not a small variation of the same idea).",
+      reviewOpen
+        ? ""
+        : "Write review.json first, showing what the alternatives change: Basis compares them in that review, and without it there is nothing to compare.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+  return [
+    `Basis has put the workspace back to where alternative ${labels[0]} started.`,
+    `Make alternative ${label} now: a clearly different take on the same request from ${labels.slice(0, index).join(" and ")}, which the user will see next to it.`,
+    "Leave review.json as it is unless what the review shows has to change.",
+  ].join(" ");
 }
 
 export interface Attachments {

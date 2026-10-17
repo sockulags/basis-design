@@ -99,6 +99,20 @@ export function Row({ children, wrap = true }: { children: ReactNode; wrap?: boo
   );
 }
 
+/** A pattern's data states, each labelled, one under the other at full width. */
+export function States({ states }: { states: { label: string; content: ReactNode }[] }) {
+  return (
+    <div className={styles.states}>
+      {states.map((state, index) => (
+        <div key={`${state.label}-${index}`} className={styles.state} data-state-label={state.label}>
+          <span className={styles.caption}>{state.label}</span>
+          {state.content}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Grid({ children, min = 220 }: { children: ReactNode; min?: number }) {
   return (
     <div className={styles.grid} style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${min}px), 1fr))` }}>

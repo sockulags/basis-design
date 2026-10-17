@@ -69,8 +69,9 @@ The result becomes the starting point of real projects, so treat the components 
 - Every \`components/*.specimen.tsx\` file becomes a gallery section and a sidebar entry. It default-exports
   \`defineSpecimen({ ... })\` (or an array of specimens) from \`components/specimen.ts\`; read that file for the format.
 - A specimen has a title, an optional description, group (default "Components"), order, and blocks:
-  \`matrix\` (rows × columns, usually variants × states), \`grid\` (labelled examples), \`row\` and \`block\`
-  (free content, for live demos). Every render is a React component, so it may use hooks.
+  \`matrix\` (rows × columns, usually variants × states), \`grid\` (labelled examples), \`states\`
+  (a pattern's data states, full width), \`row\` and \`block\` (free content, for live demos). Every render is a
+  React component, so it may use hooks.
 - Show every state side by side: pin states with the \`force\` prop (\`forced(columnLabel)\` maps "hover",
   "focus-visible" and "pressed"), and add disabled, loading, invalid and the like as their own columns.
 - Keep specimens in step with components. When you add a variant, add it to the matrix. When you create a
@@ -91,6 +92,12 @@ The result becomes the starting point of real projects, so treat the components 
 - New patterns (a command palette, a kanban board, a pricing table ...) follow the same shape: a file pair,
   a specimen with a sensible group (Navigation, Data, Forms, Feedback, Examples or a new one) and order,
   and an export from \`patterns/index.ts\`.
+- Show a pattern's data states in a \`states\` block (see \`STATES\` in \`components/specimen.ts\`): populated, empty,
+  loading, error and long content, whichever apply, plus any state of its own. Every pattern that shows data
+  should cover them; they are what reviews and the user check first.
+- Make patterns responsive with container queries (\`@container (max-width: 640px) { ... }\`), not \`@media\`.
+  The gallery can show every block at mobile, tablet and desktop widths inside a size container, and a pattern
+  lives in columns of any width in a real app, so it should respond to the space it gets, not the screen.
 
 ## Adding a component or pattern
 
@@ -134,8 +141,12 @@ this folder:
   \`columns\` only those matrix columns; blocks where none of them appear are left out. Use the exact labels
   from the specimen. Narrow it down, so the review shows what you changed rather than the whole specimen.
 - Show what the request is about, not everything your change touches; Basis lists other sections that changed
-  by itself. For a pattern, show the variant or state that changed. If a state the user cares about has no
-  block yet (empty, loading, error, long content ...), add it to the specimen first, then show it.
+  by itself. For a pattern, show the variant or state that changed (\`rows\` picks states of a \`states\`
+  block). If a state the user cares about has no block yet (empty, loading, error, long content ...), add it to
+  the specimen first, then show it.
+- A target may add \`"widths": ["mobile", "tablet", "desktop"]\` (any of those and \`"fit"\`) to show each block at
+  those widths. Use it when the change is about layout at a size. The user switches between light and dark
+  themselves, so a review shows one theme at a time.
 - While a review is open, Basis says so with every message. Everything you change belongs to it; keep working
   on what the user asks and update \`review.json\` when the focus moves. You never close a review yourself.
 - Broad requests that restyle the whole system ("make it warmer") do not need a review.

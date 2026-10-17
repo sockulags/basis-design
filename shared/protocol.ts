@@ -55,6 +55,8 @@ export type ChatItem =
       annotations?: string[];
       /** Sent while the agent was busy; runs when the current turn ends. */
       queued?: boolean;
+      /** Asked for this many alternatives to choose between. */
+      alternatives?: number;
     }
   | { kind: "agent"; id: string; text: string }
   | { kind: "thought"; id: string; text: string }
@@ -170,7 +172,8 @@ export type ServerMessage =
   | { type: "export-result"; result: ExportWriteResult };
 
 export type ClientMessage =
-  | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[] }
+  /** With `alternatives` (2 or 3), the agent makes that many takes on the prompt to choose between. */
+  | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[]; alternatives?: number }
   /** Asks the agent to create a new component or pattern (decided by the page) in a guided turn. */
   | { type: "create"; page: PageId; name: string; purpose: string }
   | { type: "cancel" }
@@ -186,6 +189,8 @@ export type ClientMessage =
   | { type: "review-discard" }
   /** Goes back to an earlier iteration of the open review (recorded as a new iteration). */
   | { type: "review-step"; id: string }
+  /** Continues the open review with one of its alternatives. */
+  | { type: "review-choose"; label: string }
   /** Removes a queued prompt before it runs. */
   | { type: "unqueue"; id: string }
   /**

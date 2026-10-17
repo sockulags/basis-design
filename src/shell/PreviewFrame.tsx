@@ -70,6 +70,23 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     if (generation > 0) post({ type: "picking", on: picking });
   }, [generation, picking, post]);
 
+  // Blink mode switches with the B key; pass it on when focus is in the chrome, unless the user is typing.
+  const blinking = view.review?.layout === "blink";
+  useEffect(() => {
+    if (!blinking) return;
+    const forward = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "b" || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      if ((event.target as Element).closest?.("input, textarea, select, [contenteditable]")) return;
+      post({ type: "blink-key", down: event.type === "keydown" });
+    };
+    window.addEventListener("keydown", forward);
+    window.addEventListener("keyup", forward);
+    return () => {
+      window.removeEventListener("keydown", forward);
+      window.removeEventListener("keyup", forward);
+    };
+  }, [blinking, post]);
+
   return (
     <div className={styles.canvas} data-inspecting={inspecting || undefined}>
       <iframe

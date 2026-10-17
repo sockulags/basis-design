@@ -60,6 +60,13 @@ export function narrowSpecimen(
         available.push(
           `"${blockName(block, index)}" has rows ${quoted(block.rows)} and columns ${quoted(block.columns)}`,
         );
+    } else if (block.kind === "states") {
+      const states = rows.length
+        ? block.states.filter((state) => rows.some((label) => same(label, state.label)))
+        : block.states;
+      if (states.length && columns.length === 0) narrowed.push({ ...block, states });
+      else
+        available.push(`"${blockName(block, index)}" has states ${quoted(block.states.map((state) => state.label))}`);
     } else if (block.kind === "grid") {
       const items = rows.length
         ? block.items.filter((item) => rows.some((label) => same(label, item.label)))

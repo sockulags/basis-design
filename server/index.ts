@@ -180,7 +180,12 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       const text = message.text.trim();
       const hasAttachments = Boolean(message.images?.length || message.annotations?.length);
       if (text || hasAttachments)
-        await agent.prompt(text, { images: message.images, annotations: message.annotations });
+        await agent.prompt(
+          text,
+          { images: message.images, annotations: message.annotations },
+          undefined,
+          Number(message.alternatives) || 1,
+        );
       return;
     }
     case "create": {
@@ -209,9 +214,10 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     case "revert":
       return workspace.revert(message.historyId);
     case "review-approve": {
-      // Approving takes the review as it is: not mid-turn, and not with known problems in it.
+      // Approving takes the review as it is: not mid-turn, not with known problems in it, and not before an
+      // alternative is chosen.
       const { errors, typeErrors } = workspace.state;
-      if (agent.agent.status === "busy" || errors || typeErrors) return;
+      if (agent.agent.status === "busy" || errors || typeErrors || workspace.review?.alternatives) return;
       return workspace.approveReview();
     }
     case "review-discard":
@@ -220,6 +226,9 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     case "review-step":
       if (agent.agent.status === "busy") return;
       return workspace.reviewStep(String(message.id ?? ""));
+    case "review-choose":
+      if (agent.agent.status === "busy") return;
+      return workspace.chooseAlternative(String(message.label ?? ""));
     case "unqueue":
       return agent.unqueue(String(message.id ?? ""));
     case "baseline-get": {

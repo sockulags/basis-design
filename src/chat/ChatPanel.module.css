@@ -197,6 +197,14 @@
   font-size: 10.5px;
 }
 
+.alternativesLabel {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--app-subtle);
+  font-family: var(--app-mono);
+  font-size: 10.5px;
+}
+
 .markdown {
   overflow-wrap: anywhere;
 }
@@ -441,9 +449,10 @@
 
 .composerBar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px 8px;
   margin-top: 6px;
 }
 
@@ -645,7 +654,44 @@
 
 .sendGroup {
   display: flex;
+  align-items: center;
   gap: 6px;
+  /* In a narrow chat it wraps under the tools, still at the right. */
+  margin-left: auto;
+}
+
+/* How many alternatives the agent makes: one, or two or three to choose between. */
+.count {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--app-line);
+  border-radius: 7px;
+}
+
+.count button {
+  min-width: 26px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-muted);
+  font: inherit;
+  font-family: var(--app-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.count button:hover {
+  color: var(--app-text);
+}
+
+.count button[aria-pressed="true"] {
+  background: var(--app-ink-3);
+  color: var(--app-text);
 }
 
 .user[data-queued] {

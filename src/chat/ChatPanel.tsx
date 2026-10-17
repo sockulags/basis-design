@@ -203,6 +203,7 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
       return (
         <div className={styles.user} data-auto={item.auto || undefined} data-queued={item.queued || undefined}>
           {item.auto && <span className={styles.autoLabel}>Basis → agent</span>}
+          {item.alternatives && <span className={styles.alternativesLabel}>{item.alternatives} alternatives</span>}
           {item.queued && (
             <span className={styles.queuedLabel}>
               Queued · runs when the agent is done

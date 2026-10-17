@@ -46,10 +46,25 @@ export interface NavSection {
   page: PageId;
 }
 
-export type CompareLayout = "split" | "stacked";
+/** How a review shows before and after: next to each other, one above the other, or in the same place. */
+export type CompareLayout = "split" | "stacked" | "blink";
 
 /** A review target as the preview shows it; peeks are sections the user opened from "Also changed". */
 export type ReviewViewTarget = ReviewTarget & { peek?: boolean };
+
+/** A past version the preview can run: its tokens, and where it imports that version's source from. */
+export interface PastVersion {
+  design: Design;
+  base: string;
+}
+
+/**
+ * One alternative as the preview shows it: a past version (null while it is
+ * being prepared), the workspace as it is now, or one still to be made.
+ */
+export type AlternativeColumn = { label: string } & (
+  { kind: "past"; version: PastVersion | null } | { kind: "live" } | { kind: "pending" }
+);
 
 /** The review view: what the review shows, before (the review's starting point) next to now. */
 export interface ReviewView {
@@ -57,9 +72,11 @@ export interface ReviewView {
   targets: ReviewViewTarget[];
   layout: CompareLayout;
   /** The starting point, or null while it is being prepared. */
-  baseline: { design: Design; base: string } | null;
+  baseline: PastVersion | null;
   /** Specimen files the changes can reach; "also changed" checks only these (all, when absent or null). */
   reach?: string[] | null;
+  /** With alternatives, each target shows where they started next to every alternative instead. */
+  alternatives?: { before: PastVersion | null; columns: AlternativeColumn[]; making: boolean };
 }
 
 /**
@@ -79,7 +96,9 @@ export type ToPreview =
   | { type: "scroll-to"; id: string }
   | { type: "picking"; on: boolean }
   | { type: "picks-remove"; index: number }
-  | { type: "picks-clear" };
+  | { type: "picks-clear" }
+  /** The B key pressed or let go in the chrome while a review blinks, so it works wherever focus is. */
+  | { type: "blink-key"; down: boolean };
 
 export type FromPreview =
   | { type: "ready" }

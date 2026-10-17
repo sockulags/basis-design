@@ -79,6 +79,21 @@ through the workspace's imports, by name through barrels, and stores the result 
 A change to a variable every component inherits from the gallery root (font, text colour, background, size,
 leading) reaches everything.
 
+A target can ask for `widths`; the preview then renders each block in frames (`Framed` in `specimens.tsx`),
+which are size containers. The gallery's Show at bar uses the same frames, and can also show both themes; a
+review shows one theme at a time (Lucas prefers toggling), which starts from the system theme. Blink
+stacks the panes in one grid cell and hides all but one; the chrome forwards the B key to the preview, so it
+works wherever focus is.
+
+**Alternatives** (×2 or ×3 by Send): `AgentHost.runAlternatives` runs one checked turn (turn plus fix-ups) per
+take. Between takes `Workspace.nextAlternative` restores the starting commit with `asBase`, so going back is not
+an iteration and the next take's commit has the start as parent. `alternativeDone` records each take's last
+iteration in `ReviewState.alternatives`; the first take must open the review, or the set ends with a notice.
+The workspace keeps the last take, which the preview renders live (so the fix loop still sees render errors);
+the others render from snapshots like the before side. `chooseAlternative` restores the chosen take as a new
+iteration (none if it is the one on show). A new iteration after the set puts it away; approve waits until one
+is chosen. The queue waits for the whole set.
+
 ### Large galleries
 
 A page renders its first six sections at once and the rest six per task (`src/preview/progressive.ts`), with a
@@ -142,6 +157,14 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   between copies.
 - **Smooth scrolling gets cancelled** by the layout changes of progressive rendering, so scrolling to a section
   jumps while sections are still being added and is smooth once the page is complete.
+- **Specimen format upgrades:** `components/specimen.ts` lives in each workspace. Seeding replaces it only when
+  its LF-normalised sha256 matches a known earlier template (`EARLIER_SPECIMEN_FORMATS` in `server/setup.ts`).
+  When you change `template/components/specimen.ts`, add the hash of the version you replace to that list.
+- **Vite remembers removed files:** a snapshot copy deleted and written again at the same path while the
+  preview server runs gives 404s. Copies are therefore only pruned at start-up, and the chrome forgets its
+  cached past versions when a review ends or the server says hello again.
+- **`.ds-root` fills the viewport** (`min-height: 100vh`) as the page root; review panes and width frames, which
+  are `.ds-root` too, reset it.
 - **Section ids** must stay under 80 characters: the chrome truncates longer ones from the preview. Repeated ids
   become `id-2`, `id-3` (they used to grow as `id-2-2-2`, which broke navigation with many duplicates).
 
@@ -169,12 +192,13 @@ Lucas is rolling out a larger idea in steps:
    a product repo's context, designing views for one of its features).
 7. Scaling the preview: pages render progressively, and "also changed" checks only the sections a review can
    reach: done. Specimen modules still load up front; at 230 ms for 86 sections that was not the bottleneck.
+8. Comparing better: blink mode in reviews; pattern states (the `states` block) plus widths and both themes
+   through container frames; several alternatives side by side, picked with ×2/×3 by Send: done.
 
-Expansion as agreed is done; the next step is Lucas' call.
+The next step is Lucas' call.
 
-Ideas discussed for later: pattern states (declared data states plus automatic widths and themes), several
-alternatives side by side, blink/overlay mode for subtle differences, contracts for patterns, automatic
-accessibility checks (axe) in the problems loop.
+Ideas discussed for later: contracts for patterns, automatic accessibility checks (axe) in the problems loop,
+making the starter patterns respond to narrow widths (the Navbar overflows at mobile width today).
 
 ## Known limits
 
