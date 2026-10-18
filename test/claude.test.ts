@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,9 +48,11 @@ describe("findClaude", () => {
     assert.equal(findClaude({ env: { PATH: "" }, platform: "win32", home }), exe);
   });
 
-  test("on macOS and Linux, finds claude on the PATH", async () => {
+  test("on macOS and Linux, finds claude on the PATH, through its links", async (t) => {
+    // A Unix PATH splits on ":", which a Windows path (C:\...) cannot go through.
+    if (process.platform === "win32") return t.skip("a Unix PATH cannot hold Windows paths");
     const bin = await file("unix", "bin", "claude");
     const found = findClaude({ env: { PATH: `/nowhere:${path.dirname(bin)}` }, platform: "linux", home: base });
-    assert.equal(path.resolve(found ?? ""), path.resolve(bin));
+    assert.equal(found, realpathSync(bin));
   });
 });
