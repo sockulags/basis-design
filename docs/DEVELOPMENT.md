@@ -175,11 +175,18 @@ npm run typecheck    # tsc 7 over src, server, shared, template, test
 npm run lint         # oxlint: correctness, React hooks, unused code
 npm run format       # prettier --write .
 npm test             # node:test via tsx: pure functions plus workspace git flows in temp folders
+npm run test:e2e     # Playwright: the app in Chromium, each test with its own Basis and a stand-in agent
 ```
 
 - **Tests** live in `test/`. `workspace.test.ts` runs real git in throwaway folders and stubs the type check
   (`new Workspace(dir, { typecheck })`). Add a test with every change to history, reviews or migrations: that
   code restores and deletes files in the user's workspace.
+- **End-to-end tests** live in `test/e2e/` (`*.spec.ts`, run by Playwright; `npx playwright install chromium`
+  once). The `basis` fixture in `test/e2e/basis.ts` starts a Basis per test with a throwaway workspace on port
+  5400 and `BASIS_AGENT_SCRIPT` pointing at `fake-agent.mjs`, a stand-in ACP agent that moves
+  `motion.duration.fast` by 10ms through the client's file methods (a timing token, so the checks find nothing to
+  fix) and opens a review of Buttons when the prompt contains `E2E-REVIEW`. The gallery is a cross-origin iframe;
+  Playwright reaches into it with `gallery(page)`. CI runs them on Linux and keeps traces of failures.
 - **Before restarting the dev server**, check that the agent is idle: a turn in flight is lost. A small Node
   script connecting to `ws://127.0.0.1:5320/bridge` with header `origin: http://localhost:5320` gets a `hello`
   message containing `agent.status`. The chat and an open review survive the restart.
@@ -189,18 +196,18 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   workspace and never touches the saved project list. To test projects themselves, give the instance its own
   home instead: `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts`. A home of its own starts
   with a new project in its `workspaces/` folder; before 2026-10-18 it adopted `workspace/` in the repo, which is
-  Lucas' real workspace. Stop it and delete the folder afterwards.
+  the maintainer's real workspace. Stop it and delete the folder afterwards.
 - **Verify in the built-in browser.** The parent cannot read the iframe's DOM (by design), so check preview
   content with screenshots and zoom, or through what the chrome shows (sidebar, problems list, chips).
 - **Verify the export** by unzipping the kit into a temp app with a `tsconfig` whose `paths` point at Basis'
   `@types/react` and a Vite config aliasing react, then running tsc and vite build.
-- **The first `npm run dev` after 2026-10-18** moves Lucas' project list from the repo root to `~/.basis`; the
+- **The first `npm run dev` after 2026-10-18** moves a project list kept in the repo root to `~/.basis`; the
   projects themselves stay where they are.
 
 ## Releasing
 
 Basis is published to npm as `basis-design`, with the command `basis` (`bin/basis.js`, which loads the
-TypeScript server through tsx). Publishing is Lucas' call; nothing is published without his go-ahead.
+TypeScript server through tsx). Publishing is the maintainer's call.
 
 - Everything the app needs at run time is a dependency, not a dev dependency: tsx, vite and its React plugin,
   typescript (the workspace type check) and `@types/react`/`@types/react-dom` (the workspace `tsconfig` points at
@@ -226,8 +233,9 @@ TypeScript server through tsx). Publishing is Lucas' call; nothing is published 
 - **CRLF:** files in the Windows checkout are CRLF (`core.autocrlf=true`); seeding normalises templates to LF,
   and Prettier runs with `endOfLine: auto`.
 - **Workspace git:** it runs as user "Basis" with `core.autocrlf=false` (see `server/exec.ts`).
-- **Container queries in patterns:** Navbar is its own size container and switches to the narrow layout under
-  960px; AppShell is the container `app-shell`, and SidebarNav becomes its rail only inside a narrow one, so a
+- **Container queries in patterns:** Navbar is its own size container: under 1024px its search becomes a button
+  that opens the field below the bar, under 800px links, search and actions move behind the menu button. A
+  gallery at Fit on a laptop is about 900px wide, which is why the middle step exists. AppShell is the container `app-shell`, and SidebarNav becomes its rail only inside a narrow one, so a
   sidebar on its own keeps its width. Both layouts of the Navbar are rendered and CSS shows one, so search and
   actions exist twice in the DOM (one hidden).
 - **OAuth refresh races:** several Claude Code processes at once (a dev instance, a test instance, a Claude Code
@@ -263,12 +271,14 @@ TypeScript server through tsx). Publishing is Lucas' call; nothing is published 
 - **Section ids** must stay under 80 characters: the chrome truncates longer ones from the preview. Repeated ids
   become `id-2`, `id-3` (they used to grow as `id-2-2-2`, which broke navigation with many duplicates).
 
-## Working agreement with Lucas
+## Working with the maintainer
 
-- Reply in Swedish. Code, commit messages and docs are in English. No AI attribution or Co-Authored-By.
-- Commit and push only when asked; Lucas usually says "committa och pusha". Commit messages explain why, with a
-  body listing the main changes.
-- Ask before deleting the user's data. For bigger features, sketch the user flow (what starts it, the loop, what
+Basis is maintained by Lucas Skog. These are the conventions for changes, by people and agents alike; agents
+working with Lucas also reply to him in Swedish.
+
+- Code, commit messages and docs are in English. No AI attribution or Co-Authored-By trailers.
+- Commit and push only when asked. Commit messages explain why, with a body listing the main changes.
+- Ask before deleting a user's data. For bigger features, sketch the user flow (what starts it, the loop, what
   ends it) and get a yes before building, then build, verify in the browser, and report what was tested.
 
 ## Where things stand
