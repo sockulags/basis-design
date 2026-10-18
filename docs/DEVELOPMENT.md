@@ -24,7 +24,8 @@ component source, patterns and the gallery specimens.
     project entry may name a product `repo`; linking one updates the open project in place (`OpenProject.update`),
     and `AgentHost` auto-approves reads and searches inside it and tells the agent about it every turn. Bringing in
     its design system is a guided turn (`importInstruction`), and what the agent learns goes to `product.md` in
-    the workspace, which it may write like the design file.
+    the workspace, which it may write like the design file. Each turn points the agent at `product.md` when it
+    exists (`repoContext` in `server/agent.ts`), so it reads that before the repo.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).

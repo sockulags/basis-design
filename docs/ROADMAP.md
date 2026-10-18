@@ -69,7 +69,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
       to a new agent-editable file (`product.md`) and opens a review of the key specimens.
 - [x] **Create a project from a repo.** The create dialog can start from a product repo: it links the repo and
       runs the step above in one go.
-- [ ] **Repo context in every turn.** The brief and per-turn context point the agent at `product.md` and the
+- [x] **Repo context in every turn.** The brief and per-turn context point the agent at `product.md` and the
       repo, so requests about the product's features use its real terms and structure.
 
 ### Views
@@ -95,6 +95,11 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Repo context: each turn names the repo and points at product.md when it exists (or asks the agent
+  to start it); the brief's "A linked product repo" section covers read-only use, keeping product.md current,
+  demo content in the product's language and following the repo's structure for existing features. In a fresh
+  session the agent read product.md first and filled stat cards with Harbor's shipment terms without opening the
+  repo.
 - 2026-10-18: Creating a project from a repo checks the folder before anything is created, names the project
   after the repo folder when no name is given, and starts the bring-in turn once the new project's agent is
   ready (`AgentHost.whenReady`).

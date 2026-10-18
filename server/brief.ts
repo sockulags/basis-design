@@ -156,6 +156,21 @@ this folder:
   on what the user asks and update \`review.json\` when the focus moves. You never close a review yourself.
 - Broad requests that restyle the whole system ("make it warmer") do not need a review.
 
+## A linked product repo
+
+A project may design for a real product whose repo is linked in Basis; when it is, every message names it.
+
+- The repo is read-only. Read and search it with your read and search tools (shell commands there need the
+  user's approval); never write to it. Basis refuses writes outside this folder.
+- \`product.md\` is what you know about the product: what it is, where its tokens and components live, its
+  component inventory with the Basis counterparts, and its terms and conventions. Read it before looking in the
+  repo, and keep it current when you learn something new, so later turns need not survey the repo again.
+- Speak the product's language. Demo content in specimens and views uses its domain, entities and wording (a
+  logistics product shows shipments and ports, not generic users), taken from product.md or the repo.
+- When the user asks about a feature or screen the product already has, look at how the repo builds it (its
+  pages, routes and components) and follow its structure and terms, expressed with this design system's
+  components and patterns.
+
 ## How to work
 
 - Work in focused passes. Broad requests ("make it warmer", "more playful") may touch many tokens at once;

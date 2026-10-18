@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -19,6 +20,7 @@ import {
 } from "../shared/protocol.ts";
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
 import { loadChat, saveChat } from "./chatlog.ts";
+import { PRODUCT_FILE } from "./paths.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -339,7 +341,10 @@ ${message}`
       : message;
     this.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
-    if (this.repo) blocks.push({ type: "text", text: repoContext(this.repo) });
+    if (this.repo) {
+      const hasNotes = existsSync(path.join(this.workspace.dir, PRODUCT_FILE));
+      blocks.push({ type: "text", text: repoContext(this.repo, hasNotes) });
+    }
     const context = this.reviewContext();
     if (context) blocks.push({ type: "text", text: context });
     if (turn.instruction) blocks.push({ type: "text", text: turn.instruction });
@@ -704,11 +709,12 @@ interface Turn {
 }
 
 /** Tells the agent about the product repo linked to the project, on every turn. */
-function repoContext(repo: string): string {
+function repoContext(repo: string, hasNotes: boolean): string {
   return [
-    `This project designs for a product whose repo is linked in Basis: ${repo}.`,
-    "Read and search it whenever the product's look, components, terms or screens matter to the request; use your read and search tools there, since shell commands need the user's approval.",
-    "It is read-only: never write there; Basis refuses writes outside the workspace.",
+    `This project designs for a product whose repo is linked in Basis: ${repo} (read-only; see "A linked product repo" in AGENTS.md).`,
+    hasNotes
+      ? "What is known about it is in product.md: read that first, look in the repo only for what it does not cover, and add what you learn."
+      : "There is no product.md yet: when you learn something about the product worth keeping, write it there.",
   ].join(" ");
 }
 
