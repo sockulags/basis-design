@@ -91,6 +91,15 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Template updates for existing workspaces. A workspace owns its copy of the starter template, so
+  Basis replaces only what nobody changed: files matching an earlier version from git history
+  (`template/history.json`), a component's files together, since a new Navbar.tsx needs its new stylesheet
+  (found by a real run, where the source was updated and the changed stylesheet was not). Changed files get a
+  guided turn from `template/CHANGES.md`; against an older Navbar with its own bar height, the agent brought in
+  the three layouts, kept the height and opened a review. It first reached for `diff` in a shell, which waits for
+  approval, so the instruction says to compare with the read tool. This replaces `EARLIER_SPECIMEN_FORMATS`,
+  whose three hashes the history reproduces exactly.
+
 - 2026-10-18: Packaging. The name stays Basis (no design tool by that name turned up), published on npm as
   `basis-design`, since `basis` is taken; the command is still `basis`. Apache-2.0 for the app, for its patent
   grant and because the ACP adapters use it; MIT-0 for `template/`, because those components are copied into the

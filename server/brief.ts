@@ -350,6 +350,24 @@ export function importInstruction(repo: string): string {
   ].join("\n");
 }
 
+/**
+ * The guided turn that brings a newer starter template into a workspace whose agent changed the starter files.
+ * `changes` is the part of template/CHANGES.md the workspace has not caught up with.
+ */
+export function templateInstruction(changes: string, files: string[]): string {
+  return [
+    "Basis has improved its starter template since this design system started from it. Bring the improvements below into this workspace's own components, patterns and views, in this turn.",
+    "",
+    changes,
+    "",
+    `1. The current template is in .basis/template/ (components/, patterns/, views/). These files here differ from it because they were changed: ${files.join(", ")}. Read each and its template version with your read tool; the list above says what changed, so you need no shell commands or diffs.`,
+    "2. Bring in each improvement where the workspace's file still has the part it concerns. Keep this design system's own look, tokens, variants and additions, and every contract. If the workspace already solves it another way, leave it.",
+    "3. Edit the files with your tools; never copy a template file over the workspace's own.",
+    "4. Write review.json showing the specimens that changed most (up to four), so the user compares before and after.",
+    "Finish with a short summary: which improvements you brought in and where, and what you left out and why.",
+  ].join("\n");
+}
+
 /** Prepended to the first prompt when the agent cannot take an appended system prompt. */
 export const FIRST_PROMPT_PREAMBLE =
   "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json, product.md and files under components/, patterns/ and views/.";

@@ -31,6 +31,12 @@ export function Field({ label, hint, error, children }: FieldProps) {
       )}
       {error && (
         <span id={errorId} className={styles.error}>
+          {/* An icon as well as the colour, so the error does not rely on colour alone. */}
+          <svg className={styles.errorIcon} viewBox="0 0 16 16" aria-hidden>
+            <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M8 4.75v3.75" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <circle cx="8" cy="11.1" r="0.9" fill="currentColor" />
+          </svg>
           {error}
         </span>
       )}

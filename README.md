@@ -42,6 +42,7 @@ A project can link the **product repo** it designs for (project menu, **Link pro
 - **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `~/.basis/workspaces/`.
 - **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance. Basis refuses a folder that already has other files, so it never starts a history in someone's project.
 - Switching waits while the agent works. The agent of the project you leave stops, and coming back resumes its conversation, so it remembers where you were. The export remembers its target folder per project.
+- When Basis' starter components improve, the files a project never changed update by themselves. For the ones the agent changed, the project menu offers a guided turn that brings the improvements in, as a review, keeping the project's own look.
 - Removing a project from the list never deletes its folder. Earlier versions kept the project list in the Basis folder; it moves to `~/.basis` on first start, and its projects stay where they are. The `./workspace` of versions before projects becomes the first project.
 
 ## The workspace

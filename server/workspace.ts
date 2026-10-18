@@ -4,7 +4,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.ts";
 import { fixedColorFindings } from "../shared/fixed-colors.ts";
-import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts";
+import type { DesignState, HistoryEntry, Snapshot, TemplateUpdate } from "../shared/protocol.ts";
 import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
 import { git, lines, typecheck } from "./exec.ts";
 import { commitToHistory, describeSource, loadHistory, type EntryMeta, type Source } from "./history.ts";
@@ -12,6 +12,7 @@ import { DESIGN_FILE, isSourcePath, PRODUCT_FILE, relativeInside, SOURCE_DIRS } 
 import { reachedSpecimens } from "./reach.ts";
 import { Reviews } from "./reviews.ts";
 import { claimWorkspaceFormat, seedWorkspace, writeGeneratedFiles } from "./setup.ts";
+import { recordTemplateVersion, templateUpdate, writeTemplateCopy } from "./template.ts";
 import { Snapshots } from "./snapshots.ts";
 
 const DIFF_LIMIT = 400_000;
@@ -46,6 +47,8 @@ export class Workspace extends EventEmitter<Events> {
   /** A hand edit being checked and recorded (see onFsEvent); close() waits for it. */
   private settling: Promise<void> = Promise.resolve();
   private closed = false;
+  /** A newer starter template this workspace has not caught up with (see server/template.ts). */
+  private template: TemplateUpdate | null = null;
   /** True while an agent turn runs; its changes are committed once, when the turn ends. */
   agentActive = false;
 
@@ -73,6 +76,8 @@ export class Workspace extends EventEmitter<Events> {
     const hasCommits = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() !== "";
     await this.commit(hasCommits ? (note ? "upgrade" : "external") : "init", note ? { label: note } : {});
     this.history = await loadHistory(this.dir);
+    this.template = await templateUpdate(this.dir);
+    if (this.template) await writeTemplateCopy(this.dir);
     // Copies of past versions from earlier runs, except the open review's starting point.
     await this.snapshots.prune(this.reviews.state?.baseline);
     await this.readReviewRequest();
@@ -101,7 +106,20 @@ export class Workspace extends EventEmitter<Events> {
       reviewErrors: this.reviews.errors,
       colorFindings: this.colorFindings,
       workspace: this.dir,
+      templateUpdate: this.template,
     };
+  }
+
+  get templateUpdate(): TemplateUpdate | null {
+    return this.template;
+  }
+
+  /** Records the newer template as caught up with, whether its changes were brought in or skipped. */
+  async settleTemplateUpdate(): Promise<void> {
+    if (!this.template) return;
+    await recordTemplateVersion(this.dir, this.template.to);
+    this.template = null;
+    this.emit("design", this.state);
   }
 
   get entries(): HistoryEntry[] {

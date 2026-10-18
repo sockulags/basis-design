@@ -23,7 +23,17 @@
 }
 
 .error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   color: var(--color-danger);
+}
+
+.errorIcon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  margin-top: 0.1em;
 }
 
 .input {

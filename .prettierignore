@@ -5,3 +5,4 @@ package-lock.json
 *.md
 test-results
 playwright-report
+template/history.json

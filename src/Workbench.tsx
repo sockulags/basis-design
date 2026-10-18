@@ -237,6 +237,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
               projects={state.projects}
               agentBusy={state.agent?.status === "busy"}
               error={state.projectError}
+              templateUpdate={state.design?.templateUpdate ?? null}
               send={send}
             />
           }

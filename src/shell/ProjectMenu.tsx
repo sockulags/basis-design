@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ClientMessage, ProjectEntry } from "../../shared/protocol.ts";
+import type { ClientMessage, ProjectEntry, TemplateUpdate } from "../../shared/protocol.ts";
 import styles from "./Shell.module.css";
 
 interface ProjectMenuProps {
@@ -9,6 +9,8 @@ interface ProjectMenuProps {
   agentBusy: boolean;
   /** The server's answer to the last failed project request. */
   error: { message: string } | null;
+  /** A newer starter template the open project can bring in. */
+  templateUpdate: TemplateUpdate | null;
   send: (message: ClientMessage) => void;
 }
 
@@ -18,7 +20,7 @@ type Dialog = "create" | "open" | "repo" | null;
  * The open project, where the brand used to be, with the list of projects:
  * switch to one, start a new one, or open a workspace folder from elsewhere.
  */
-export function ProjectMenu({ project, projects, agentBusy, error, send }: ProjectMenuProps) {
+export function ProjectMenu({ project, projects, agentBusy, error, templateUpdate, send }: ProjectMenuProps) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   /** The error when the last request went out; a different one (even with the same text) is the answer to it. */
@@ -66,6 +68,11 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
       >
         <span className={styles.brandMark} aria-hidden />
         <span className={styles.projectName}>{project?.name ?? "Basis"}</span>
+        {templateUpdate && (
+          <span className={styles.updateDot}>
+            <span className="visually-hidden">, starter template update available</span>
+          </span>
+        )}
         <svg viewBox="0 0 16 16" aria-hidden>
           <path d="m4.5 6.5 3.5 3.5 3.5-3.5" />
         </svg>
@@ -151,6 +158,34 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
                     Unlink
                   </button>
                 )}
+              </div>
+            </div>
+          )}
+          {templateUpdate && (
+            <div className={styles.projectRepo}>
+              <span className={styles.projectRepoHint}>
+                Basis' starter components have improved since this project began. Files nobody changed are already up to
+                date; the agent brings the improvements into{" "}
+                {templateUpdate.files.length === 1
+                  ? "the one changed file"
+                  : `${templateUpdate.files.length} changed files`}
+                , in a review.
+              </span>
+              <div className={styles.projectRepoActions}>
+                <button
+                  type="button"
+                  className={styles.chromeButton}
+                  disabled={agentBusy}
+                  onClick={() => {
+                    setOpen(false);
+                    send({ type: "template-update" });
+                  }}
+                >
+                  Bring them in
+                </button>
+                <button type="button" className={styles.chromeButton} onClick={() => send({ type: "template-skip" })}>
+                  Skip
+                </button>
               </div>
             </div>
           )}

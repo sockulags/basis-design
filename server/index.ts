@@ -13,11 +13,12 @@ import {
   type ProjectEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
-import { createInstruction, importInstruction, viewInstruction } from "./brief.ts";
+import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
 import { checkRepo, Projects } from "./projects.ts";
+import { templateChanges } from "./template.ts";
 
 // History, reviews and restores all run on git; without it nothing below works, and the error would not say why.
 if (spawnSync("git", ["--version"], { windowsHide: true }).error) {
@@ -382,7 +383,25 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     }
     case "import-design":
       return bringInDesign(socket);
+    case "template-update":
+      return bringInTemplate();
+    case "template-skip":
+      return current.workspace.settleTemplateUpdate();
   }
+}
+
+/**
+ * Starts (or queues) the guided turn that brings a newer starter template's changes into the workspace's changed
+ * starter files. The workspace counts as caught up once the turn has run (or is queued); its review shows what came
+ * in.
+ */
+async function bringInTemplate(): Promise<void> {
+  const update = current.workspace.templateUpdate;
+  if (!update) return;
+  const workspace = current.workspace;
+  const instruction = templateInstruction(await templateChanges(update.from), update.files);
+  await current.agent.prompt("Bring in the improvements to Basis' starter template", { instruction });
+  await workspace.settleTemplateUpdate();
 }
 
 /** Starts (or queues, while the agent works) the guided turn that brings in the linked repo's design system. */

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -6,6 +5,7 @@ import path from "node:path";
 import { REVIEW_FILE } from "../shared/review.ts";
 import { AGENT_BRIEF, CLAUDE_MD } from "./brief.ts";
 import { COMPONENTS_DIR, PATTERNS_DIR, repoRoot, SOURCE_DIRS, VIEWS_DIR } from "./paths.ts";
+import { updateUntouchedStarterFiles } from "./template.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -48,8 +48,11 @@ export async function seedWorkspace(dir: string): Promise<string> {
     await seed(dir, VIEWS_DIR);
     if (!fresh) notes.push("a starter view");
   }
-  if (await updateSpecimenFormat(dir)) notes.push("the newest specimen format");
-  return notes.length ? `Basis added ${notes.join(" and ")}` : "";
+  // Starter files nobody changed follow the template (see server/template.ts).
+  const updated = await updateUntouchedStarterFiles(dir);
+  const parts = notes.length ? [`added ${notes.join(" and ")}`] : [];
+  if (updated.length) parts.push(`updated ${updated.length === 1 ? updated[0] : `${updated.length} starter files`}`);
+  return parts.length ? `Basis ${parts.join(" and ")}` : "";
 }
 
 /**
@@ -73,27 +76,6 @@ async function addLaterPatterns(dir: string): Promise<string[]> {
     added.push(name);
   }
   return added;
-}
-
-/**
- * components/specimen.ts is Basis' specimen format, seeded once. When it is an
- * untouched copy of an earlier version, it is replaced with the current one;
- * a copy someone changed is left alone. Add the hash of the current template
- * here whenever the template changes (sha256 of its text with LF line endings).
- */
-const EARLIER_SPECIMEN_FORMATS = new Set([
-  "e04c6fc2a3e85090b7672d229d95ca8c5a42009f6397332230d324357b993169",
-  "03370daf9bba1c4329d3dac7b76199970cab9c11a6ea2d23e1a484ead80d36d6",
-  "1f826f8c8f183e311fd20cca0e5e3c138ac2775c4e156862600c24e9dad7cf7d",
-]);
-
-async function updateSpecimenFormat(dir: string): Promise<boolean> {
-  const file = path.join(dir, COMPONENTS_DIR, "specimen.ts");
-  const current = (await readFile(file, "utf8").catch(() => "")).replaceAll("\r\n", "\n");
-  if (!EARLIER_SPECIMEN_FORMATS.has(createHash("sha256").update(current).digest("hex"))) return false;
-  const template = await readFile(path.join(repoRoot, "template", COMPONENTS_DIR, "specimen.ts"), "utf8");
-  await writeFile(file, template.replaceAll("\r\n", "\n"));
-  return true;
 }
 
 /**

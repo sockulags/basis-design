@@ -63,6 +63,14 @@ component source, patterns and the gallery specimens.
     walks past (`undoStep` in `src/shell/history.ts`; older histories have it as `external` labelled "Basis
     added …"). `WORKSPACE_FORMAT` is written to `.basis/format.json`; raise it when an older Basis would misread
     a workspace a newer one has opened, and the older one then refuses it.
+  - `template.ts`: keeping workspaces up to date with the starter template. `template/history.json` lists the
+    hashes of every earlier version of each starter file, written from git by `npm run template:history`. On
+    start, a unit of files that belong together (`Navbar.tsx`, `Navbar.module.css`, `Navbar.specimen.tsx`) is
+    replaced with the current template when none of its files was changed, so a component never ends up with a
+    new source and an old stylesheet. A workspace records the template version it caught up with in
+    `.basis/template.json`; when it is behind `TEMPLATE_VERSION` and has changed starter files, the project menu
+    offers a guided turn (`templateInstruction`) that brings in what `template/CHANGES.md` lists since that
+    version, from a copy of the template in `.basis/template/`, and opens a review. Skip records the version too.
   - `history.ts`: one commit per agent turn, approved review, restore or hand edit, with `Basis-*` trailers.
   - `reviews.ts`: the open review (see below).
   - `snapshots.ts`: read-only copies of past versions in `.basis/snapshots/<commit>/`.
@@ -260,9 +268,10 @@ TypeScript server through tsx). Publishing is the maintainer's call.
   baseline contract later goes in `LATER_PATTERNS` (`server/setup.ts`): a workspace without its `.tsx` gets its
   files and an export appended to `patterns/index.ts`. Use only icon names from the first icon set in such a
   pattern and its specimen, since the workspace's `icons.tsx` is its own.
-- **Specimen format upgrades:** `components/specimen.ts` lives in each workspace. Seeding replaces it only when
-  its LF-normalised sha256 matches a known earlier template (`EARLIER_SPECIMEN_FORMATS` in `server/setup.ts`).
-  When you change `template/components/specimen.ts`, add the hash of the version you replace to that list.
+- **Changing the template:** after any change in `template/`, run `npm run template:history` and commit
+  `template/history.json`; `test/workspace.test.ts` fails until you do. When the change is worth bringing into
+  workspaces whose agent changed the files, raise `TEMPLATE_VERSION` (`server/template.ts`) and describe the
+  change under a new heading in `template/CHANGES.md`, written for the agent: what changed and where.
 - **Vite remembers removed files:** a snapshot copy deleted and written again at the same path while the
   preview server runs gives 404s. Copies are therefore only pruned at start-up, and the chrome forgets its
   cached past versions when a review ends or the server says hello again.
@@ -330,8 +339,6 @@ comparison of the whole gallery between two history entries, the icon, and publi
 - **Codex** runs read-only commands in its sandbox without asking, even in read-only mode (seen with
   `Get-Content` in the workspace). Such reads do not reach Basis' approval as Claude Code's do; whether its
   sandbox lets them read outside the workspace has not been tested.
-- **Template changes reach new workspaces only.** Existing workspaces keep their components (the agent owns
-  them); the reduced-motion rules, described field errors and narrow layouts arrive with a new project.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

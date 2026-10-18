@@ -126,6 +126,17 @@ export interface DesignState {
   /** Colours in tokens and stylesheets that stay the same in both themes (see shared/fixed-colors.ts). */
   colorFindings: string[];
   workspace: string;
+  /** A newer starter template whose changes the agent can bring into this workspace; null when caught up. */
+  templateUpdate: TemplateUpdate | null;
+}
+
+/** A newer starter template the workspace has not caught up with (see server/template.ts). */
+export interface TemplateUpdate {
+  /** The template version the workspace last caught up with (0: before versions were recorded). */
+  from: number;
+  to: number;
+  /** Starter files the workspace has changed, which differ from the current template. */
+  files: string[];
 }
 
 /** A past version materialised for a review: its tokens, and where the preview can import its source. */
@@ -223,4 +234,8 @@ export type ClientMessage =
    */
   | { type: "project-repo"; id: string; repo: string | null; bringIn?: boolean }
   /** Starts the guided turn that brings the open project's product repo design system into the workspace. */
-  | { type: "import-design" };
+  | { type: "import-design" }
+  /** Starts the guided turn that brings the newer starter template's changes into the workspace. */
+  | { type: "template-update" }
+  /** Marks the newer template as seen without bringing its changes in. */
+  | { type: "template-skip" };

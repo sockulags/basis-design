@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
 import { WORKSPACE_FORMAT } from "../server/setup.ts";
+import { earlierTemplateHashes, TEMPLATE_VERSION, templateChanges } from "../server/template.ts";
 import { Workspace } from "../server/workspace.ts";
 
 /*
@@ -125,7 +126,7 @@ describe("history", () => {
     git(untouched, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older format"]);
     const updated = await start(untouched);
     assert.match(await readFile(path.join(untouched, "components", "specimen.ts"), "utf8"), /kind: "states"/);
-    assert.equal(updated.entries.at(-1)?.label, "Basis added the newest specimen format");
+    assert.equal(updated.entries.at(-1)?.label, "Basis updated components/specimen.ts");
 
     const changed = await folder();
     await (await start(changed)).close();
@@ -189,6 +190,86 @@ describe("pattern contracts", () => {
     await workspace.close();
     const entries = (await start(dir)).entries.length;
     assert.equal(entries, workspace.entries.length);
+  });
+});
+
+describe("template updates", () => {
+  const basis = path.resolve(import.meta.dirname, "..");
+  /** A starter file as an earlier commit of Basis had it. */
+  const earlier = (commit: string, file: string) =>
+    execFileSync("git", ["show", `${commit}:template/${file}`], { cwd: basis, encoding: "utf8" });
+
+  test("a starter file nobody changed follows the template; a changed one is left for the agent", async () => {
+    const dir = await folder();
+    await (await start(dir)).close();
+    // An older workspace: one untouched earlier version, one the agent changed, no recorded template version.
+    await writeFile(
+      path.join(dir, "components", "Button.module.css"),
+      earlier("91f8516", "components/Button.module.css"),
+    );
+    const changed = `${earlier("91f8516", "components/Tabs.module.css")}\n.mine { color: red; }\n`;
+    await writeFile(path.join(dir, "components", "Tabs.module.css"), changed);
+    git(dir, ["add", "-A"]);
+    git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
+    await rm(path.join(dir, ".basis", "template.json"));
+
+    const workspace = await start(dir);
+    const template = await readFile(path.join(basis, "template", "components", "Button.module.css"), "utf8");
+    assert.equal(
+      await readFile(path.join(dir, "components", "Button.module.css"), "utf8"),
+      template.replaceAll("\r\n", "\n"),
+    );
+    assert.equal(workspace.entries.at(-1)?.source, "upgrade");
+    assert.match(workspace.entries.at(-1)?.label ?? "", /^Basis updated/);
+    assert.equal(await readFile(path.join(dir, "components", "Tabs.module.css"), "utf8"), changed);
+
+    const update = workspace.state.templateUpdate;
+    assert.deepEqual(update?.files, ["components/Tabs.module.css"]);
+    assert.equal(update?.to, TEMPLATE_VERSION);
+    // The agent compares against a copy of the template inside the workspace.
+    assert.ok(existsSync(path.join(dir, ".basis", "template", "components", "Tabs.module.css")));
+  });
+
+  test("a component's files are updated together: one changed file keeps its untouched siblings as they were", async () => {
+    const dir = await folder();
+    await (await start(dir)).close();
+    const source = earlier("0772414", "patterns/Navbar.tsx");
+    await writeFile(path.join(dir, "patterns", "Navbar.tsx"), source);
+    const styles = earlier("0772414", "patterns/Navbar.module.css").replace("height: 60px;", "height: 64px;");
+    await writeFile(path.join(dir, "patterns", "Navbar.module.css"), styles);
+    await rm(path.join(dir, ".basis", "template.json"));
+
+    const workspace = await start(dir);
+    // An updated Navbar.tsx would use classes the changed stylesheet does not have.
+    assert.equal(await readFile(path.join(dir, "patterns", "Navbar.tsx"), "utf8"), source);
+    assert.deepEqual(workspace.state.templateUpdate?.files, ["patterns/Navbar.module.css", "patterns/Navbar.tsx"]);
+  });
+
+  test("a skipped or brought-in update is not offered again, and a new workspace starts caught up", async () => {
+    const dir = await folder();
+    const fresh = await start(dir);
+    assert.equal(fresh.state.templateUpdate, null);
+    await fresh.close();
+
+    await writeFile(path.join(dir, "components", "Tabs.tsx"), "export const Mine = 1;\n", { flag: "a" });
+    await rm(path.join(dir, ".basis", "template.json"));
+    const behind = await start(dir);
+    assert.deepEqual(behind.state.templateUpdate?.files, ["components/Tabs.tsx"]);
+    await behind.settleTemplateUpdate();
+    assert.equal(behind.state.templateUpdate, null);
+    await behind.close();
+
+    assert.equal((await start(dir)).state.templateUpdate, null);
+  });
+
+  test("the changes since a version are what the agent is told", async () => {
+    assert.match(await templateChanges(0), /^## 1/);
+    assert.equal(await templateChanges(TEMPLATE_VERSION), "");
+  });
+
+  test("template/history.json lists every earlier version of the starter files", () => {
+    const saved = JSON.parse(readFileSync(path.join(basis, "template", "history.json"), "utf8"));
+    assert.deepEqual(saved, earlierTemplateHashes(basis), "Run `npm run template:history` after changing template/.");
   });
 });
 

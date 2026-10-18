@@ -904,6 +904,15 @@ a.primaryButton {
   background: var(--app-ink-2);
 }
 
+/* A newer starter template is waiting in the project menu. */
+.updateDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-signal);
+}
+
 .projectButton svg {
   flex: none;
   width: 14px;
