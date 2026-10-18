@@ -23,3 +23,15 @@ design system's own look.
   640px). The rail's grid column is pinned so its icons stay centred.
 - Small text that used `textSubtle` (SidebarNav section titles, StatCard hints) uses `textMuted`, since subtle is
   held to 3:1 and small text needs 4.5:1.
+
+## 2
+
+- DataTable fits a phone without scrolling sideways. Its frame is a size container named `data-table`; under 600px
+  each row becomes a stack of label and value pairs (every cell carries `data-label` with its column's header,
+  shown through `::before`), with the row's checkbox beside it. The header row stays as a strip with select all and
+  the sortable columns; the other headings are hidden, since every row repeats them. The table, row groups, rows,
+  headers and cells have explicit roles (`table`, `rowgroup`, `row`, `columnheader`, `cell`), which keep it a table
+  for screen readers once CSS changes its display. See the `@container data-table` block at the end of
+  `DataTable.module.css`.
+- The tooltip specimen gives the static tooltip room on its left (`paddingInlineStart`), so the open tooltip no
+  longer runs past the gallery's edge.

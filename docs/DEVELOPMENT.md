@@ -196,8 +196,9 @@ only the findings a turn introduced (not there when the turn started) into the f
 contrast table uses the same pairs. Text is held to 4.5:1, `textSubtle`, `primary` on `bg` and the focus ring to
 3:1; disabled text and borders are not checked.
 
-Accessibility (`src/preview/a11y.ts`) runs axe-core over elements marked `data-checked` (each specimen's
-demos and the review's live panes, never past versions, foundations or the offscreen impact copies), 600 ms
+Accessibility (`src/preview/a11y.ts`, which also runs the layout check below) runs axe-core over elements marked
+`data-checked` (each specimen's demos and the review's live panes, never past versions, foundations or the
+offscreen impact copies), 600 ms
 after anything that changes them, and keeps serious and critical WCAG A/AA violations, one per demo and rule so
 the text stays stable for the comparison. Duplicate-id rules are off, since the gallery repeats demos. While a
 check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the usual
@@ -210,6 +211,20 @@ The copy turns off transitions and animations, since a hidden frame does not pla
 leave colours halfway; the preview's CSP allows `'self'` as a frame ancestor for it. The gallery's own labels
 (group titles, column heads, captions) are excluded from axe: they use `textSubtle` at small sizes, which fails
 4.5:1 in the light default, and they are Basis' text, not the agent's.
+
+Layout (`src/preview/layout.ts`, with the pure parts in `shared/layout.ts`) runs in the same pass over the same
+demos and reports as its own check, `Layout`. Each demo is judged in its frame: a Show at frame (marked
+`data-frame` with its width) or, unframed, the section or review pane around it. Three rules: content past the
+frame's edge, or a box in the design that scrolls sideways (scroll snapping marks a deliberate strip and is left
+alone); text cut off by `overflow: hidden` or `clip` where the box has no `text-overflow` ellipsis (sideways) or
+line clamp (vertically), judged on the text's own line boxes so clipped images and visually hidden text do not
+count; and axe's `target-size` rule (WCAG 2.5.8, off by default in axe, enabled in the same axe run since axe runs
+one at a time), which exempts links in running text and small targets with enough space around them. The gallery's
+own wrappers and scroll areas (the matrix that scrolls on a phone on purpose) never count, and invisible content
+(a tooltip until hovered) does not count as past the edge. Findings name the demo, theme, width and an example
+element, one per demo, theme, width and rule. The copy in the other theme always adds the 375px width to its
+frames, the review's live side included, so a phone is checked whatever widths the user looks at. The fix loop sends introduced layout findings in a
+section of their own that points at the screenshot tool.
 
 Fixed colours (`shared/fixed-colors.ts`) are found on the server in `Workspace.check()`: hex, colour functions
 with literal channels, and white/black in tokens outside `color` (typography is skipped) and in the source

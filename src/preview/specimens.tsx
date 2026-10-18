@@ -14,6 +14,7 @@ import type { Specimen, SpecimenBlock } from "../../template/components/specimen
 import { Flow, Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
 import galleryStyles from "./Gallery.module.css";
 import { CHECKED } from "./a11y.ts";
+import { FRAME } from "./layout.ts";
 
 /**
  * Every `*.specimen.tsx` one folder deep in the workspace. "@workspace"
@@ -333,6 +334,7 @@ function Framed({ block, design, frames }: { block: SpecimenBlock; design: Desig
                   data-theme={theme}
                   data-side={frames.side}
                   data-fit={width.px ? undefined : true}
+                  {...{ [FRAME]: width.px ?? "fit" }}
                   style={width.px ? { width: width.px } : undefined}
                   onSubmit={preventSubmit}
                 >
@@ -391,7 +393,7 @@ export function SpecimenSection({
 }) {
   return (
     <Section id={specimen.id} title={specimen.title} description={specimen.description ?? ""} onAsk={onAsk}>
-      {/* What the accessibility check covers (see a11y.ts); display: contents keeps the layout as it was. */}
+      {/* What the checks cover (see a11y.ts); display: contents keeps the layout as it was. */}
       <div {...{ [CHECKED]: specimen.title }} style={{ display: "contents" }}>
         <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
       </div>

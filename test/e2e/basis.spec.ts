@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { unzipSync } from "fflate";
 import { expect, gallery, historyCount, open, prompt, test } from "./basis.ts";
 
@@ -115,4 +117,66 @@ test("the verification kit captures every screen of the views and runs as a stat
   for (const file of ["design/index.html", "design/design.json", "capture.mjs", "compare.mjs", "README.md"]) {
     expect(files[`basis-verify/${file}`], file).toBeDefined();
   }
+});
+
+test("the starter template has no layout findings, and a broken specimen shows each kind", async ({ page, basis }) => {
+  // The preview reports its checks to the chrome; keep the latest report.
+  await page.addInitScript(() => {
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "checks") (window as unknown as { checks: unknown }).checks = event.data;
+    });
+  });
+  const settled = async () => {
+    await page.waitForFunction(() => {
+      const report = (window as unknown as { checks?: { running: boolean } }).checks;
+      return report && !report.running;
+    });
+    return page.evaluate(() => (window as unknown as { checks: { checks: string[] } }).checks.checks);
+  };
+  await open(page, basis);
+  for (const name of ["Design system", "Patterns", "Views"]) {
+    await page.getByRole("button", { name, exact: true }).first().click();
+    // The copy of the preview in the other theme checks every demo at 375px as well.
+    await page.waitForTimeout(1500);
+    expect((await settled()).filter((check) => check.startsWith("Layout: "))).toEqual([]);
+  }
+
+  await page.getByRole("button", { name: "Design system", exact: true }).first().click();
+  await writeFile(
+    path.join(basis.workspace, "components", "Broken.specimen.tsx"),
+    `import { defineSpecimen } from "./specimen.ts";
+
+export default defineSpecimen({
+  title: "Broken",
+  blocks: [
+    { kind: "block", render: () => <div style={{ width: 600, height: 20 }}>Too wide for a phone</div> },
+    {
+      kind: "block",
+      render: () => (
+        <button type="button" style={{ width: 60, overflow: "hidden", whiteSpace: "nowrap" }}>
+          Save changes
+        </button>
+      ),
+    },
+    {
+      kind: "block",
+      render: () => (
+        <div>
+          <button type="button" aria-label="One" style={{ width: 12, height: 12, padding: 0 }} />
+          <button type="button" aria-label="Two" style={{ width: 12, height: 12, padding: 0 }} />
+          <p>Read <a href="#">the guide</a> first.</p>
+        </div>
+      ),
+    },
+  ],
+});
+`,
+  );
+  await expect
+    .poll(async () => (await settled()).filter((check) => check.startsWith("Layout: Broken")).join("\n"))
+    .toMatch(/at 375px: content does not fit the frame/);
+  const findings = (await settled()).filter((check) => check.startsWith("Layout: Broken")).join("\n");
+  expect(findings).toMatch(/text is cut off .* "Save changes"/);
+  expect(findings).toMatch(/smaller than 24 by 24px .* aria-label="One"/);
+  expect(findings).not.toMatch(/the guide/);
 });

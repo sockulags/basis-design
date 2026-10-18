@@ -5,7 +5,7 @@ import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
 import { contrastFailures } from "../../shared/contrast.ts";
-import { scheduleAccessibilityCheck } from "./a11y.ts";
+import { scheduleDemoChecks } from "./a11y.ts";
 import { useResolvedColors } from "./color.ts";
 import { clearProblems, onHotUpdate, setFindings, setProblem } from "./errors.ts";
 import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
@@ -27,7 +27,7 @@ interface PreviewProps {
   view: PreviewView;
   /** Sends a message to the chrome: the sections found, "ask the agent" requests, what changed in a review. */
   post: (message: FromPreview) => void;
-  /** The hidden copy in the other theme, which only runs the accessibility check: it skips what else a review shows. */
+  /** The hidden copy in the other theme, which only runs the checks of the demos: it skips what else a review shows. */
   themeCheck?: boolean;
 }
 
@@ -56,7 +56,19 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   const problemsKey = problems.map((problem) => `${problem.file}: ${problem.message}`).join("\n");
   // Widths and themes for every block, chosen in the bar above the sections.
   const [frameChoice, setFrameChoice] = useFrameChoice();
-  const frames = useMemo(() => ({ ...frameChoice, theme }), [frameChoice, theme]);
+  // The copy in the other theme also shows every block at phone width, so the layout check always covers a phone
+  // whatever widths the user looks at.
+  const frames = useMemo(
+    () => ({
+      ...frameChoice,
+      widths:
+        themeCheck && !frameChoice.widths.includes("mobile")
+          ? [...frameChoice.widths, "mobile" as const]
+          : frameChoice.widths,
+      theme,
+    }),
+    [frameChoice, theme, themeCheck],
+  );
   // Large pages render their first screen at once and the rest in steps (see progressive.ts).
   const [rendered, reveal] = useProgressiveCount(onPage.length, page);
   const pageIds = onPage.map((specimen) => specimen.id).join(",");
@@ -84,13 +96,10 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [problemsKey]);
 
-  // Anything that changes what the live demos render asks for an accessibility check once things settle.
+  // Anything that changes what the live demos render asks for the checks once things settle.
   const [hotVersion, setHotVersion] = useState(0);
   useEffect(() => onHotUpdate(() => setHotVersion((value) => value + 1)), []);
-  useEffect(
-    () => scheduleAccessibilityCheck(),
-    [design, theme, page, review, rendered, frames, sectionsKey, hotVersion],
-  );
+  useEffect(() => scheduleDemoChecks(), [design, theme, page, review, rendered, frames, sectionsKey, hotVersion]);
 
   const props = { design, onAsk };
   return (
@@ -102,7 +111,14 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
       <div className={`ds-root ${styles.root}`} data-theme={theme}>
         {review ? (
           <>
-            <Review view={review} specimens={specimens} design={design} theme={theme} onAsk={onAsk} />
+            <Review
+              view={review}
+              specimens={specimens}
+              design={design}
+              theme={theme}
+              onAsk={onAsk}
+              alsoPhone={themeCheck}
+            />
             {review.baseline && !themeCheck && (
               <Impact
                 baseline={review.baseline}

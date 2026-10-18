@@ -25,7 +25,7 @@ interface ChatPanelProps {
   connected: boolean;
   /** Validation, type and render problems in the workspace; empty when everything is fine. */
   problems: string[];
-  /** Findings of the automatic checks (contrast, accessibility, themes); listed apart, since they do not break anything. */
+  /** Findings of the automatic checks (contrast, accessibility, layout, themes); listed apart, since they do not break anything. */
   checks: string[];
   draft: string;
   onDraft: (text: string) => void;

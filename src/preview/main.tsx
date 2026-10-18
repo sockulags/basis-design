@@ -17,7 +17,7 @@ import "./preview.css";
 const params = new URLSearchParams(location.search);
 /**
  * This document is the preview's hidden copy in the other theme (see ThemeChecker), embedded by the preview on
- * the same origin. It renders the same view and reports nothing but its accessibility findings.
+ * the same origin. It renders the same view and reports nothing but the findings of its checks of the demos.
  */
 const themeCheck = params.has("theme-check");
 const parentOrigin = themeCheck ? location.origin : (params.get("parent") ?? "");
@@ -99,10 +99,11 @@ function useScrollSpy(view: string | null): void {
 }
 
 /**
- * The accessibility check needs the demos rendered in a theme to check them in it, and the user sees one theme at
- * a time. So the preview keeps a copy of itself in the other theme: a same-origin frame the user never sees
- * (transparent, inert, behind the page) but laid out at the same size, so axe measures real colours and layout.
- * Its findings join this document's.
+ * The checks of the demos need them rendered in a theme to check them in it, and the user sees one theme at a time.
+ * So the preview keeps a copy of itself in the other theme: a same-origin frame the user never sees (transparent,
+ * inert, behind the page) but laid out at the same size, so axe measures real colours and layout. It also shows
+ * every block at phone width (see Preview), so the layout check always covers a phone. Its findings join this
+ * document's.
  */
 function ThemeChecker({ view }: { view: PreviewView }) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -135,7 +136,7 @@ function ThemeChecker({ view }: { view: PreviewView }) {
     <iframe
       ref={frame}
       src={`${location.pathname}?theme-check`}
-      title="Accessibility check in the other theme"
+      title="Checks in the other theme"
       aria-hidden
       tabIndex={-1}
       inert

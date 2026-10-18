@@ -38,7 +38,11 @@ export interface DataTableProps<T> {
 
 const LOADING_ROWS = 5;
 
-/** A sortable, selectable table with loading and empty states. */
+/**
+ * A sortable, selectable table with loading and empty states. In a narrow container each row becomes a stack of
+ * label and value pairs, so nothing scrolls sideways on a phone; the explicit roles keep it a table for screen
+ * readers, which some browsers stop announcing once CSS changes a table's display.
+ */
 export function DataTable<T>({
   columns,
   rows,
@@ -72,12 +76,12 @@ export function DataTable<T>({
   return (
     <div className={styles.frame} data-ds="data-table" data-density={density}>
       <div className={styles.scroll}>
-        <table className={styles.table} aria-busy={loading || undefined}>
+        <table className={styles.table} role="table" aria-busy={loading || undefined}>
           <caption className={styles.caption}>{caption}</caption>
-          <thead>
-            <tr>
+          <thead role="rowgroup">
+            <tr role="row">
               {selectable && (
-                <th scope="col" className={styles.check}>
+                <th scope="col" role="columnheader" className={styles.check}>
                   <Checkbox
                     aria-label="Select all rows"
                     checked={allSelected}
@@ -93,6 +97,7 @@ export function DataTable<T>({
                   <th
                     key={column.key}
                     scope="col"
+                    role="columnheader"
                     style={{ width: column.width }}
                     data-align={column.align}
                     aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : undefined}
@@ -118,25 +123,25 @@ export function DataTable<T>({
               })}
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {loading &&
               Array.from({ length: LOADING_ROWS }, (_, index) => (
-                <tr key={`loading-${index}`}>
+                <tr key={`loading-${index}`} role="row">
                   {selectable && (
-                    <td className={styles.check}>
+                    <td role="cell" className={styles.check}>
                       <Skeleton width={16} height={16} />
                     </td>
                   )}
                   {columns.map((column, columnIndex) => (
-                    <td key={column.key} data-align={column.align}>
+                    <td key={column.key} role="cell" data-label={column.header} data-align={column.align}>
                       <Skeleton width={`${55 + ((index * 17 + columnIndex * 23) % 40)}%`} />
                     </td>
                   ))}
                 </tr>
               ))}
             {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={span} className={styles.empty}>
+              <tr role="row">
+                <td role="cell" colSpan={span} className={styles.empty}>
                   {empty ?? "Nothing here yet."}
                 </td>
               </tr>
@@ -148,16 +153,17 @@ export function DataTable<T>({
                 return (
                   <tr
                     key={key}
+                    role="row"
                     data-selected={isSelected || undefined}
                     data-force={forceHover === key ? "hover" : undefined}
                   >
                     {selectable && (
-                      <td className={styles.check}>
+                      <td role="cell" className={styles.check}>
                         <Checkbox aria-label={`Select row ${key}`} checked={isSelected} onChange={() => toggle(key)} />
                       </td>
                     )}
                     {columns.map((column) => (
-                      <td key={column.key} data-align={column.align}>
+                      <td key={column.key} role="cell" data-label={column.header} data-align={column.align}>
                         {column.cell(row)}
                       </td>
                     ))}

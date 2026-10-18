@@ -39,6 +39,9 @@
     "15f18fe8494bb008e85f06a8ebd2d491826e565ddb16a6a01b270e115977838b",
     "f1bae693a614018f19d7f9cdb2f5d9b950a711016d2639ba0ea03acbe05ef797"
   ],
+  "components/Overlay.specimen.tsx": [
+    "5d7293026b0514016f9a60a4d37f6ba79810f9fd9415729861b81cc1597742dd"
+  ],
   "components/Tabs.module.css": [
     "f794ecc0a17aea3390c72851f56a005a16b9a5c532809c57b0bd597f49faf7cc"
   ],
@@ -63,11 +66,15 @@
   "patterns/AppShell.specimen.tsx": [
     "bbf6e40b1eb59ab81faec7d298daedf964721210acd319518370d654828e61b5"
   ],
+  "patterns/DataTable.module.css": [
+    "8402f38e8cb48e5d2385ded878413f8f7a350059775fd5198bf80f513a6085bf"
+  ],
   "patterns/DataTable.specimen.tsx": [
     "07ddde9be4ff6b5fbe080145b59cb98719ebf17665efea5168ce653e45e52328",
     "fef38e643e27c8515167d03b2f9578c4f490dc3c472f39db5ec8a3f8de5b0405"
   ],
   "patterns/DataTable.tsx": [
+    "011f1aef8dd950c3af4d5bc2f773c8585192433d45a5dc0e7b202decbb2df0cc",
     "bee57f1686bbbfeb08670475c687c18f8e33b19b09b804d2e3b857c9575f4227"
   ],
   "patterns/EmptyState.tsx": [

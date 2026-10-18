@@ -25,6 +25,8 @@ interface ReviewProps {
   design: Design;
   theme: "light" | "dark";
   onAsk: (prefix: string) => void;
+  /** In the copy in the other theme: the live side is also shown at phone width, for the layout check. */
+  alsoPhone?: boolean;
 }
 
 /**
@@ -102,7 +104,7 @@ function sidesOf(view: ReviewView): Side[] {
  * agent; a target that does not resolve is reported, so the agent can fix its
  * review.json.
  */
-export function Review({ view, specimens, design, theme, onAsk }: ReviewProps) {
+export function Review({ view, specimens, design, theme, onAsk, alsoPhone = false }: ReviewProps) {
   const sides = sidesOf(view);
   const blink = useBlink(view.layout === "blink", sides.length);
   const pasts = sides.flatMap((side) =>
@@ -151,6 +153,7 @@ export function Review({ view, specimens, design, theme, onAsk }: ReviewProps) {
           onAsk={onAsk}
           showing={view.layout === "blink" ? blink.showing : null}
           onFlip={blink.flip}
+          alsoPhone={alsoPhone}
         />
       ))}
     </div>
@@ -220,9 +223,10 @@ interface TargetProps {
   /** In blink mode, the side on show (an index into `sides`); null shows them all. */
   showing: number | null;
   onFlip: () => void;
+  alsoPhone: boolean;
 }
 
-function Target({ index, target, specimens, sides, design, theme, onAsk, showing, onFlip }: TargetProps) {
+function Target({ index, target, specimens, sides, design, theme, onAsk, showing, onFlip, alsoPhone }: TargetProps) {
   const live = findSpecimen(specimens, target.specimen);
   const narrowed = live ? narrowSpecimen(live, target) : null;
   const problem = !live
@@ -291,12 +295,12 @@ function Target({ index, target, specimens, sides, design, theme, onAsk, showing
                       {source.note && <span className={styles.paneNote}>{source.note}</span>}
                     </p>
                     <SectionBoundary name={label} onAsk={onAsk}>
-                      {/* The live side is what the accessibility check covers (see a11y.ts). */}
+                      {/* The live side is what the checks cover (see a11y.ts). */}
                       <div {...{ [CHECKED]: label }} style={{ display: "contents" }}>
                         <SpecimenBlocks
                           specimen={narrowed.specimen}
                           design={design}
-                          frames={framesFor(target, theme, side.key)}
+                          frames={liveFrames(target, theme, side.key, alsoPhone)}
                         />
                       </div>
                     </SectionBoundary>
@@ -397,6 +401,19 @@ const preventSubmit = (event: FormEvent) => event.preventDefault();
 function framesFor(target: ReviewViewTarget, theme: "light" | "dark", side: string): Frames | undefined {
   if (!target.widths) return undefined;
   return { widths: target.widths, bothThemes: false, theme, side };
+}
+
+/** The live side's frames; with `phone`, phone width is added to what the target asks for. */
+function liveFrames(target: ReviewViewTarget, theme: "light" | "dark", side: string, phone: boolean) {
+  const frames = framesFor(target, theme, side);
+  if (!phone) return frames;
+  const widths = frames?.widths ?? ["fit"];
+  return {
+    widths: widths.includes("mobile") ? widths : [...widths, "mobile" as const],
+    bothThemes: false,
+    theme,
+    side,
+  };
 }
 
 /** A click on a pane switches sides in blink mode, unless it was meant for a control in the demo. */

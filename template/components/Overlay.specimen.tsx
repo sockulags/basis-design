@@ -14,7 +14,7 @@ export default defineSpecimen({
       title: "Tooltip · static and live",
       render: () => (
         <>
-          <div style={{ paddingTop: 44, marginRight: "var(--space-6)" }}>
+          <div style={{ paddingTop: 44, paddingInlineStart: "var(--space-12)", marginRight: "var(--space-6)" }}>
             <Tooltip text="Copied to clipboard" open>
               <Button variant="secondary">Static</Button>
             </Tooltip>

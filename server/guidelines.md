@@ -184,6 +184,8 @@ states move through time on top of it.
   on focus, not only on hover.
 - Sticky header (and first column on wide tables), row hover, skeleton rows while loading, and the empty, no-results
   and error states.
+- On a phone a table does not scroll sideways, where columns go unseen: rows stack as label and value pairs, or
+  less important columns give way. Select all and sorting stay reachable.
 - Pagination or "Load more" when users look for or compare items; infinite scroll only for browsing feeds.
 - Stat cards and dashboards: every number answers a question and shows a comparison (target, previous period,
   threshold) and links to the records behind it. Bars and lines, not pies, donuts, gauges or 3D. Fit what is

@@ -110,7 +110,7 @@ export type FromPreview =
   | { type: "picks"; annotations: Annotation[] }
   | { type: "picking"; on: boolean }
   | { type: "errors"; errors: string[] }
-  /** Findings of the automatic checks (contrast, accessibility), and whether one is still running. */
+  /** Findings of the automatic checks (contrast, accessibility, layout), and whether one is still running. */
   | { type: "checks"; checks: string[]; running: boolean }
   | { type: "sections"; sections: NavSection[] };
 
@@ -195,7 +195,7 @@ export function parseFromPreview(data: unknown): FromPreview | null {
         ? {
             type: "checks",
             checks: raw.checks
-              .slice(0, 40)
+              .slice(0, 60)
               .map((check) => text(check, 400))
               .filter((check): check is string => check !== null),
             running: raw.running === true,

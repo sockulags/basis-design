@@ -17,6 +17,7 @@ import {
   type PromptImage,
   type ToolStatus,
 } from "../shared/protocol.ts";
+import { LAYOUT_CHECK } from "../shared/layout.ts";
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
 import { loadChat, saveChat } from "./chatlog.ts";
 import { PRODUCT_FILE, relativeInside } from "./paths.ts";
@@ -488,7 +489,7 @@ ${message}`
         .slice(0, limit)
         .map((item) => item.slice(0, length));
     this.previewErrors = strings(errors, 10, 600);
-    this.checks = strings(checks, 40, 400);
+    this.checks = strings(checks, 60, 400);
     this.checking = checking;
   }
 
@@ -517,9 +518,16 @@ ${message}`
     // Only what this turn introduced: findings that were there before are the user's to ask about, and
     // repeating them would send the agent after them on every turn.
     const introduced = this.checks.filter((check) => !this.checksBefore.has(check));
-    if (introduced.length) {
+    const layout = introduced.filter((check) => check.startsWith(`${LAYOUT_CHECK}: `));
+    const accessibility = introduced.filter((check) => !layout.includes(check));
+    if (accessibility.length) {
       sections.push(
-        `Your change fails these accessibility checks (WCAG 2 AA). Fix them, unless the user asked for exactly this; then say so instead:\n${list(introduced)}`,
+        `Your change fails these accessibility checks (WCAG 2 AA). Fix them, unless the user asked for exactly this; then say so instead:\n${list(accessibility)}`,
+      );
+    }
+    if (layout.length) {
+      sections.push(
+        `Your change breaks the layout of these demos at the widths named (Basis checks every demo at 375px as well as at the widths the gallery shows). Look at each with the screenshot tool at that width, fix it and look again, unless the user asked for exactly this; then say so instead:\n${list(layout)}`,
       );
     }
     const fixedColors = this.workspace.state.colorFindings.filter((finding) => !this.checksBefore.has(finding));

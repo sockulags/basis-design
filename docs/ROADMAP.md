@@ -75,7 +75,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       tool. The brief says when to look: after a visual change and before opening a review, at the narrowest width
       and in both themes. Done when: a real Claude turn calls the tool and acts on what it saw, and Codex is tried
       if it is logged in (log the result either way).
-- [ ] **Layout checks.** A preview check beside `src/preview/a11y.ts`, over the same marked demos, through the
+- [x] **Layout checks.** A preview check beside `src/preview/a11y.ts`, over the same marked demos, through the
       same checks channel (only findings a turn introduced reach the agent). Three rules: content wider than its
       frame at the frame's width (horizontal scroll), text clipped by `overflow: hidden` without `text-overflow` or
       line clamping, and interactive targets smaller than 24 by 24 CSS pixels (WCAG 2.5.8; inline links in running
@@ -176,6 +176,41 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Layout checks. `src/preview/layout.ts` runs in the same pass as axe over the same marked demos and
+  reports as its own check, `Layout`, with the deciding parts (edges, cut lines, the example, the text) in
+  `shared/layout.ts` under unit tests. A demo is judged in its frame: a Show at frame, now marked `data-frame` with
+  its width, or the section or review pane around it. Overflow counts content past the frame's edge and also a box
+  in the design that scrolls sideways, since that is what the starter view's member table did on a phone: the
+  table scrolled inside DataTable's own scroller, so the page never scrolled, but the last column was out of sight.
+  A box with scroll snapping counts as a deliberate strip and is left alone; the gallery's own wrappers and scroll
+  areas (the button table at 375) never count, and neither does invisible content (a tooltip until hovered).
+  Clipping is judged on the text's own line boxes, so a clipped avatar or visually hidden text is not a finding;
+  an ellipsis allows sideways clipping and a line clamp vertical clipping. Target size is axe's own `target-size`
+  rule (off by default in axe), enabled in the accessibility run, since axe runs one at a time and the rule already
+  implements WCAG 2.5.8's spacing exception and the inline-link exemption; its findings go under Layout. Findings
+  name the demo, theme and width ("at 375px", or "at the gallery's full width" for Fit, without a number, so a
+  resized window does not change the text the fix loop compares) and an example element's start tag, one per demo,
+  theme, width and rule. Phone width is always checked: the hidden copy in the other theme adds 375px to its frames,
+  in the gallery and on a review's live side, so the user's own Show at choice changes nothing. The fix loop sends
+  layout findings in their own section that points at the screenshot tool, and the brief and the guidelines (tables
+  on a phone) mention the check. The limit on findings from the preview went from 40 to 60, since Layout adds up to
+  15. The starter template came out with two faults, now fixed: DataTable stacks its rows as label and value pairs
+  under a 600px container (select all and the sortable headers stay as a strip; explicit table roles keep it a
+  table for screen readers once CSS changes its display), and the tooltip specimen gives its open tooltip room on
+  the left. TEMPLATE_VERSION is 2 with a CHANGES.md section, because a workspace whose agent changed DataTable
+  would otherwise keep a table that scrolls on phones, and the new check would list it for good. Verified: unit
+  tests; an e2e test that the starter has no layout findings on any page and that a planted specimen shows all
+  three kinds while an inline link, an ellipsis and a snapping strip do not; the whole starter clean at 375, 768
+  and 1280 in both themes; and two real Claude turns on a throwaway instance. In the first ("a filter bar of
+  chips, compact") Claude built a Chip component, looked at 375, made the bar one scrolling row with scroll
+  snapping, saw its own negative margin push the strip past the edge, fixed that and opened a review; no finding
+  reached the loop. Its fixes then ran inside that review, where the copy had added 375 only to gallery pages, so
+  a phone fault there would have gone unseen; the review's live side gets 375 too now (checked by removing the
+  snapping by hand: the 375 finding appeared in the review). In the second ("a small × on the selected chip") the fix loop sent it a target-size finding: the ×
+  was 24px but its pinned pressed state scaled it to 22px. Claude named the `scale(0.92)` as the cause, removed it,
+  marked the press with a darker circle instead, looked at 375 and 900 in both themes, and the checks came back
+  empty. It also noticed the gallery's own state table scrolling at 375 and correctly left it alone.
 
 - 2026-10-19: A screenshot tool for the agent. Every session gets an MCP server named `basis` over stdio:
   `server/agent-tools-mcp.mjs`, run with Basis' own Node, which only speaks MCP and forwards `tools/list` and

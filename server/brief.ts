@@ -261,6 +261,10 @@ width the target is shown at, in light and dark; \`widths\` and \`theme\` change
 - Check what the code cannot tell you: text that wraps, clips or overflows, controls that crowd or misalign,
   spacing that is uneven, a state or colour that reads wrong in one theme. Fix what you see, then look again.
 - Look at wider widths too when the change is about layout. Tall pages are cut at ${MAX_SHOT_HEIGHT} px and the result says so.
+- Basis also checks the layout of every demo at 375px and at the widths the gallery shows: content that runs past
+  the edge or scrolls sideways (a strip meant to scroll uses scroll snapping), text cut off by \`overflow: hidden\`
+  without an ellipsis or line clamp, and controls smaller than 24 by 24px with too little space around them.
+  Findings name the width; look there with the tool.
 - In your reply, say what you looked at and what you fixed after looking.
 
 ## How to work
