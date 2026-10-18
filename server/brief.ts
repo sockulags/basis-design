@@ -17,7 +17,8 @@ The result becomes the starting point of real projects, so treat the components 
 
 - \`design-system.json\` (tokens) and anything under \`components/\` or \`patterns/\` (React + CSS Modules). Nothing else: not
   AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages.
-  \`review.json\` (see Reviews below) is the only other file you write.
+  \`review.json\` (see Reviews below) and \`product.md\` (what you learned about a linked product repo) are the
+  only other files you write.
   \`.basis/snapshots/\` holds read-only copies of past versions for the review view: never read or search them,
   they are not the current source.
 - Prefer tokens for look and feel (colour, type, spacing, radius, shadow, motion). Change component code for
@@ -234,6 +235,23 @@ export function createInstruction(
   ].join(" ");
 }
 
+/**
+ * The guided turn that brings a linked product repo's design system into the
+ * workspace: tokens, the look of components and patterns, and what the agent
+ * learned, written down in product.md for later turns.
+ */
+export function importInstruction(repo: string): string {
+  return [
+    `The user linked the product repo at ${repo} and asked Basis to bring in its design system. Do all of it in this turn:`,
+    "1. Survey the repo with your read and search tools: where its design decisions live (Tailwind config or @theme blocks, CSS custom properties, SCSS variables, theme objects, token JSON), its fonts, and its component library (where components live, which exist, their variants and states).",
+    "2. Map what you find onto design-system.json: colour roles for both themes, typography (families, and fontImports for web fonts), spacing, radius, shadow and motion. Keep each role's meaning. Fill roles the product lacks so text stays readable; if it has no dark theme, derive one in its spirit and say so.",
+    "3. Restyle components and patterns to resemble the product's own (shape, density, borders, emphasis, how states look). Prefer tokens, then component CSS; keep every contract.",
+    `4. Write product.md: what the product is, in a few lines; where its tokens and components live in the repo; an inventory of its components (name, path, what it is, and the Basis component or pattern it corresponds to); and the terms and conventions worth reusing in views. Later turns read it instead of surveying the repo again.`,
+    "5. Write review.json showing the specimens that best show the change (Buttons, a form control, a data pattern, the navigation), so the user compares before and after.",
+    "Finish with a short summary: what you mapped, what you could not find, and what you guessed.",
+  ].join("\n");
+}
+
 /** Prepended to the first prompt when the agent cannot take an appended system prompt. */
 export const FIRST_PROMPT_PREAMBLE =
-  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json and files under components/ and patterns/.";
+  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json, product.md and files under components/ and patterns/.";

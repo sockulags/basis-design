@@ -5,6 +5,8 @@ import { SOURCE_FOLDERS } from "../shared/frame.ts";
 export const repoRoot = path.resolve(import.meta.dirname, "..");
 
 export const DESIGN_FILE = "design-system.json";
+/** What the agent knows about the linked product repo: where its tokens live, its components and terms. */
+export const PRODUCT_FILE = "product.md";
 export const COMPONENTS_DIR = "components";
 export const PATTERNS_DIR = "patterns";
 

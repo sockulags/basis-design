@@ -7,7 +7,7 @@ import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts"
 import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
 import { git, lines, typecheck } from "./exec.ts";
 import { commitToHistory, describeSource, loadHistory, type EntryMeta, type Source } from "./history.ts";
-import { DESIGN_FILE, isSourcePath, SOURCE_DIRS } from "./paths.ts";
+import { DESIGN_FILE, isSourcePath, PRODUCT_FILE, SOURCE_DIRS } from "./paths.ts";
 import { reachedSpecimens } from "./reach.ts";
 import { Reviews } from "./reviews.ts";
 import { seedWorkspace, writeGeneratedFiles } from "./setup.ts";
@@ -103,11 +103,11 @@ export class Workspace extends EventEmitter<Events> {
     return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
   }
 
-  /** Files the agent may change: the design file, review.json and anything under components/ or patterns/. */
+  /** Files the agent may change: the design file, review.json, product.md and anything under components/ or patterns/. */
   isEditable(target: string): boolean {
     if (!this.isInside(target)) return false;
     const relative = path.relative(this.dir, path.resolve(target)).split(path.sep).join("/");
-    return relative === DESIGN_FILE || relative === REVIEW_FILE || isSourcePath(relative);
+    return relative === DESIGN_FILE || relative === REVIEW_FILE || relative === PRODUCT_FILE || isSourcePath(relative);
   }
 
   /** Marks the start of an agent turn; `label` is the prompt that started it. */

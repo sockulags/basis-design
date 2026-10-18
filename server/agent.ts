@@ -619,7 +619,7 @@ ${message}`
   private async writeTextFile(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
     if (!this.workspace.isEditable(params.path)) {
       throw new Error(
-        "Basis only lets the agent write design-system.json, review.json and files under components/ or patterns/ in its workspace.",
+        "Basis only lets the agent write design-system.json, review.json, product.md and files under components/ or patterns/ in its workspace.",
       );
     }
     await mkdir(path.dirname(params.path), { recursive: true });

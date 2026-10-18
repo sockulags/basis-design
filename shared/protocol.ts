@@ -209,5 +209,10 @@ export type ClientMessage =
   /** Adds a workspace folder (or an empty or new one) to the list and opens it. */
   | { type: "project-open"; dir: string }
   | { type: "project-remove"; id: string }
-  /** Links a product repo folder to a project, or unlinks it (null). */
-  | { type: "project-repo"; id: string; repo: string | null };
+  /**
+   * Links a product repo folder to a project, or unlinks it (null). With `bringIn`, linking the open project's
+   * repo also starts the guided turn that brings in its design system.
+   */
+  | { type: "project-repo"; id: string; repo: string | null; bringIn?: boolean }
+  /** Starts the guided turn that brings the open project's product repo design system into the workspace. */
+  | { type: "import-design" };

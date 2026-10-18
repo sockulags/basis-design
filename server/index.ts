@@ -10,7 +10,7 @@ import {
   type ProjectEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
-import { createInstruction } from "./brief.ts";
+import { createInstruction, importInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, OpenProject, type ProjectOptions } from "./project.ts";
@@ -324,9 +324,24 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       }
       if (entry.id === current.entry.id) current.update(entry);
       broadcast({ type: "projects", projects: projects.list });
+      if (message.bringIn === true && entry.id === current.entry.id) await bringInDesign(socket);
       return;
     }
+    case "import-design":
+      return bringInDesign(socket);
   }
+}
+
+/** Starts (or queues, while the agent works) the guided turn that brings in the linked repo's design system. */
+async function bringInDesign(socket: WebSocket): Promise<void> {
+  const repo = current.entry.repo;
+  if (!repo) {
+    send(socket, { type: "project-error", message: "Link a product repo first." });
+    return;
+  }
+  await current.agent.prompt(`Bring in the design system from ${path.basename(repo)}`, {
+    instruction: importInstruction(repo),
+  });
 }
 
 chromeServer.listen(port, host, () => {

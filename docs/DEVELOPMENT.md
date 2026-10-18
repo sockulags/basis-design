@@ -22,7 +22,9 @@ component source, patterns and the gallery specimens.
     open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
     the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
     project entry may name a product `repo`; linking one updates the open project in place (`OpenProject.update`),
-    and `AgentHost` auto-approves reads and searches inside it and tells the agent about it every turn.
+    and `AgentHost` auto-approves reads and searches inside it and tells the agent about it every turn. Bringing in
+    its design system is a guided turn (`importInstruction`), and what the agent learns goes to `product.md` in
+    the workspace, which it may write like the design file.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).

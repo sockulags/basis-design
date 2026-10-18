@@ -63,7 +63,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
       change, unlink). Reads and searches inside the repo are approved automatically; writes there are
       refused like any path outside the workspace. Every turn tells the agent the repo exists and is
       read-only.
-- [ ] **Bring in its design system.** A guided turn, started from the project menu after linking (and offered
+- [x] **Bring in its design system.** A guided turn, started from the project menu after linking (and offered
       right after): the agent surveys the repo (Tailwind config, CSS variables, theme files, component
       library), writes the tokens, restyles components and patterns to match, writes a component inventory
       to a new agent-editable file (`product.md`) and opens a review of the key specimens.
@@ -95,6 +95,12 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Bringing in a design system is one guided turn (`importInstruction` in `server/brief.ts`),
+  offered by a checkbox when linking and from the project menu. `product.md` is a new agent-editable file in
+  history. Against the Harbor fixture the agent mapped every token, matched fonts, radii and density, restyled
+  badges as Harbor's status pills, wrote a component inventory and opened a review; the fix loop then caught
+  dark-theme contrast it had introduced and it fixed part of it. Findings that survive the one fix-up turn stay
+  listed for the user rather than being sent again.
 - 2026-10-18: A linked repo is stored on the project entry (`repo`). Reads and searches inside it are approved
   automatically; shell commands there still ask, and the per-turn context steers the agent to its read and
   search tools. Incident while testing this step: an instance started with a fresh `BASIS_HOME` adopted

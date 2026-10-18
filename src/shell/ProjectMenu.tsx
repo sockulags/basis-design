@@ -132,6 +132,19 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
                   <button
                     type="button"
                     className={styles.chromeButton}
+                    onClick={() => {
+                      setOpen(false);
+                      send({ type: "import-design" });
+                    }}
+                    title="The agent reads the repo and restyles this design system to match it, in a review"
+                  >
+                    Bring in its design
+                  </button>
+                )}
+                {project.repo && (
+                  <button
+                    type="button"
+                    className={styles.chromeButton}
                     onClick={() => request({ type: "project-repo", id: project.id, repo: null })}
                   >
                     Unlink
@@ -191,6 +204,8 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [copyCurrent, setCopyCurrent] = useState(false);
+  /** Linking can start bringing in the repo's design system right away; changing a linked repo does not by default. */
+  const [bringIn, setBringIn] = useState(!current?.repo);
   const [dir, setDir] = useState(mode === "repo" ? (current?.repo ?? "") : "");
   const [pending, setPending] = useState(false);
   const valid = mode === "create" ? name.trim().length > 0 : dir.trim().length > 0;
@@ -211,7 +226,7 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
       mode === "create"
         ? { type: "project-create", name: name.trim(), copyCurrent }
         : mode === "repo"
-          ? { type: "project-repo", id: current?.id ?? "", repo: dir.trim() }
+          ? { type: "project-repo", id: current?.id ?? "", repo: dir.trim(), bringIn }
           : { type: "project-open", dir: dir.trim() },
     );
   };
@@ -279,6 +294,12 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
                 autoFocus
               />
               <p className={styles.muted}>Use the full path.</p>
+              {mode === "repo" && (
+                <label className={styles.projectCheck}>
+                  <input type="checkbox" checked={bringIn} onChange={(event) => setBringIn(event.target.checked)} />
+                  Bring in its design system now: the agent restyles this project to match, in a review
+                </label>
+              )}
             </>
           )}
           {error && <p className={styles.kitError}>{error}</p>}

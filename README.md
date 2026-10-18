@@ -32,7 +32,7 @@ Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex
 
 Each project is a workspace of its own: its own design system, history, chat and review. Switch, create and open projects from the menu with the project's name at the top left.
 
-A project can link the **product repo** it designs for (project menu, **Link product repo…**). The agent reads and searches it without asking, to match the product's look, components and terms, and never writes there: writes outside the workspace are refused.
+A project can link the **product repo** it designs for (project menu, **Link product repo…**). The agent reads and searches it without asking, to match the product's look, components and terms, and never writes there: writes outside the workspace are refused. **Bring in its design** (offered when you link, and in the project menu) starts a guided turn: the agent maps the repo's tokens onto `design-system.json`, restyles the components and patterns to resemble the product's, writes what it learned to `product.md` (where the tokens live, an inventory of the product's components and their Basis counterparts, terms to reuse) and opens a review.
 
 - **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `workspaces/` in the Basis folder.
 - **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance. Basis refuses a folder that already has other files, so it never starts a history in someone's project.
@@ -49,6 +49,7 @@ workspace/
     contracts.ts         the API of every component added beyond the Basis baseline
   patterns/              larger building blocks composed from components/ (seeded from template/)
   review.json            written by the agent to open or update a review (not in history)
+  product.md             what the agent learned about a linked product repo
   .git/                  history: one commit per agent turn, approved review, restore or hand edit
   AGENTS.md, CLAUDE.md   the agent's instructions (generated)
   tsconfig.json, .basis/ type-check setup and contracts (generated), the open review, its snapshot, the chat
