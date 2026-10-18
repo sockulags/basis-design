@@ -76,7 +76,8 @@ function StarterKit({
             <span className={styles.muted}>
               {manifest.folder}/ · {manifest.files.length} files · {formatBytes(total)}
             </span>
-            <ul>
+            {/* It scrolls, so it takes focus: keyboard users can scroll it too. */}
+            <ul tabIndex={0} aria-label="Files in the starter kit">
               {manifest.files.map((file) => (
                 <li key={file.path}>
                   <span>{file.path}</span>
@@ -116,7 +117,7 @@ function StarterKit({
               {conflicts.conflicts.length} {conflicts.conflicts.length === 1 ? "file" : "files"} in{" "}
               <code>{conflicts.target}</code> would change. Nothing has been written yet.
             </p>
-            <ul>
+            <ul tabIndex={0} aria-label="Files that would change">
               {conflicts.conflicts.slice(0, 12).map((file) => (
                 <li key={file}>{file}</li>
               ))}

@@ -108,6 +108,23 @@ async function seed(dir: string, folder: string, only: (name: string) => boolean
   }
 }
 
+/**
+ * The workspace format this Basis writes. Raise it when a change means an older Basis would misread or damage a
+ * workspace this one has opened; an older Basis then refuses to open it instead.
+ */
+export const WORKSPACE_FORMAT = 1;
+
+/** Refuses a workspace a newer Basis has opened, and marks it with this Basis' format otherwise. */
+export async function claimWorkspaceFormat(dir: string): Promise<void> {
+  const file = path.join(dir, ".basis", "format.json");
+  const saved = existsSync(file) ? Number(JSON.parse(await readFile(file, "utf8")).format) || 0 : 0;
+  if (saved > WORKSPACE_FORMAT) {
+    throw new Error("a newer version of Basis has opened this project. Update Basis to open it again.");
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${JSON.stringify({ format: WORKSPACE_FORMAT })}\n`);
+}
+
 /** Files Basis owns in the workspace, rewritten on every start and kept out of history. */
 export async function writeGeneratedFiles(dir: string): Promise<void> {
   const basisDir = path.join(dir, ".basis");

@@ -1,4 +1,6 @@
+/* A size container, so the sidebar inside turns into its icon rail when the shell is narrow (see SidebarNav). */
 .shell {
+  container: app-shell / inline-size;
   display: flex;
   flex-direction: column;
   height: 100vh;

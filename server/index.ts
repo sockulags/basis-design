@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { createServer as createVite } from "vite";
@@ -13,8 +14,14 @@ import {
 import { createInstruction, importInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
-import { guard, OpenProject, type ProjectOptions } from "./project.ts";
+import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
 import { checkRepo, Projects } from "./projects.ts";
+
+// History, reviews and restores all run on git; without it nothing below works, and the error would not say why.
+if (spawnSync("git", ["--version"], { windowsHide: true }).error) {
+  console.error("Basis needs git on the PATH. Install it from https://git-scm.com/downloads and start Basis again.");
+  process.exit(1);
+}
 
 const root = path.resolve(import.meta.dirname, "..");
 const host = "127.0.0.1";
@@ -49,7 +56,22 @@ const projectOptions: ProjectOptions = {
   agent: initialAgent,
   broadcast: (message) => broadcast(message),
 };
-let current = await OpenProject.open(projects.active!, projectOptions);
+/** A port in use is the start-up failure people meet most (often a Basis already running); say how to get past it. */
+function exitIfPortInUse(error: unknown): void {
+  const err = error as NodeJS.ErrnoException & { port?: number };
+  if (err?.code !== "EADDRINUSE") return;
+  console.error(
+    `Port ${err.port ?? "?"} is in use, perhaps by a Basis that is already running. Stop it, or start this one with ` +
+      "another PORT (the preview uses PORT + 1, or BASIS_PREVIEW_PORT).",
+  );
+  process.exit(1);
+}
+
+let current = await OpenProject.open(projects.active!, projectOptions).catch((error: unknown) => {
+  exitIfPortInUse(error);
+  console.error(`Could not open ${projects.active!.name}: ${(error as Error).message}`);
+  process.exit(1);
+});
 /** True while one project closes and the next opens; requests wait for the new hello. */
 let switching = false;
 
@@ -68,6 +90,7 @@ const chromeVite = await createVite({
 });
 const chromeGuard = guard((url) => url === "/preview.html");
 chromeServer.on("request", (req, res) => {
+  if (!isLocalHost(req, port)) return refuseHost(res);
   if (req.method === "GET" && req.url === "/export/starter-kit.zip") {
     void sendStarterKitZip(res);
     return;
@@ -365,6 +388,10 @@ async function bringInDesign(socket: WebSocket): Promise<void> {
   });
 }
 
+chromeServer.once("error", (error) => {
+  exitIfPortInUse(error);
+  throw error;
+});
 chromeServer.listen(port, host, () => {
   console.log(`Basis is running at http://localhost:${port}`);
   console.log(`Project: ${current.entry.name} (${current.entry.dir})`);

@@ -21,11 +21,19 @@ export function describeSource(source: Source): string {
   if (source === "init") return "Starting point";
   if (source === "external") return "Edit on disk";
   if (source === "review") return "Approved review";
+  if (source === "upgrade") return "Basis update";
   return "Earlier version";
 }
 
 function isSource(value: string | undefined): value is Source {
-  return value === "init" || value === "agent" || value === "revert" || value === "external" || value === "review";
+  return (
+    value === "init" ||
+    value === "agent" ||
+    value === "revert" ||
+    value === "external" ||
+    value === "review" ||
+    value === "upgrade"
+  );
 }
 
 /**

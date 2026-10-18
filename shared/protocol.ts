@@ -8,8 +8,9 @@ import type { ReviewState } from "./review.ts";
 export const AGENT_IDS = ["claude", "codex"] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
 
+/** Names in the agent picker. Anthropic's branding rules allow "Claude" in a menu labelled Agent, not "Claude Code". */
 export const AGENT_LABELS: Record<AgentId, string> = {
-  claude: "Claude Code",
+  claude: "Claude",
   codex: "Codex",
 };
 
@@ -75,7 +76,8 @@ export type ChatItem =
 export interface HistoryEntry {
   id: string;
   at: number;
-  source: "init" | "agent" | "revert" | "external" | "review";
+  /** `upgrade` is Basis bringing an older workspace up to date (files it added since), which Undo never removes. */
+  source: "init" | "agent" | "revert" | "external" | "review" | "upgrade";
   name: string;
   /** The prompt behind an agent change, or what a restore went back to. */
   label?: string;

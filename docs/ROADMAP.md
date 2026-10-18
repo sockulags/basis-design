@@ -91,6 +91,18 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Release readiness. Anthropic's terms allow a product to run the unmodified Claude Code with the
+  user's own login, so Basis keeps subscription sign-in; the picker says "Claude", as the branding rules ask. The
+  design agent no longer inherits the user's Claude Code setup: `settingSources: []` rather than `["project"]`,
+  because the project source reads CLAUDE.md in every folder above the workspace and so picked up
+  `~/.claude/CLAUDE.md`; the brief already arrives as the system prompt. The adapter takes its starting permission
+  mode from the user's settings regardless, so Basis switches the session to the mode that asks. Codex had never
+  run: the old adapter failed on today's models, and in its default mode Codex edited files without asking Basis,
+  so it now runs on `@agentclientprotocol/codex-acp` in read-only mode, where edits come to Basis for approval.
+  Narrow Navbar and AppShell use container queries, so they respond wherever they sit, not only in the gallery's
+  frames; the sidebar's rail is tied to a narrow AppShell so a sidebar on its own keeps its width. Spinners keep
+  turning under reduced motion, since they are the only sign that work goes on.
+
 - 2026-10-18: Design guidelines for the agent. Researched from primary sources (WCAG 2.2 and its Understanding
   documents, the APG patterns, Material 3 tokens, Apple HIG, GOV.UK, Carbon, Atlassian, Polaris, Spectrum, NN/g,
   Laws of UX, HAX, PAIR, and visual-craft writers) and distilled in our own words into `server/guidelines.md`:

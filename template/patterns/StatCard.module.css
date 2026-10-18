@@ -69,8 +69,9 @@
   color: var(--color-text-muted);
 }
 
+/* Small text: muted, since subtle is held to 3:1 and small text needs 4.5:1. */
 .hint {
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
 }
 
 .loading {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ClientMessage, ProjectEntry } from "../../shared/protocol.ts";
 import styles from "./Shell.module.css";
 
@@ -24,6 +24,7 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
   /** The error when the last request went out; a different one (even with the same text) is the answer to it. */
   const [errorBefore, setErrorBefore] = useState<{ message: string } | null | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
+  const panelId = useId();
   const answer = errorBefore !== undefined && error !== errorBefore ? (error?.message ?? null) : null;
 
   // Linking happens in place (no project switch), so the dialog closes once the entry shows the change.
@@ -59,7 +60,7 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
         type="button"
         className={styles.projectButton}
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-controls={open ? panelId : undefined}
         title={project?.dir}
         onClick={() => setOpen((value) => !value)}
       >
@@ -70,7 +71,8 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
         </svg>
       </button>
       {open && (
-        <div className={`${styles.menu} ${styles.projectMenu}`} role="menu">
+        // A panel the button discloses, not a menu: it holds hints, rows with their own buttons and actions.
+        <div id={panelId} className={`${styles.menu} ${styles.projectMenu}`}>
           <p className={styles.menuHint}>
             {agentBusy
               ? "The agent is working; switch projects when it is done."
@@ -83,7 +85,6 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
               <div key={entry.id} className={styles.projectRow}>
                 <button
                   type="button"
-                  role="menuitem"
                   className={styles.menuItem}
                   aria-current={isOpen || undefined}
                   disabled={agentBusy && !isOpen}

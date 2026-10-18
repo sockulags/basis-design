@@ -15,10 +15,12 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex from the picker above the chat. Basis needs `git` on the PATH.
+Open http://localhost:5320. Basis starts Claude Code by default (shown as Claude in the picker above the chat); switch to Codex there. Basis needs Node.js 22.12 or later and `git` on the PATH.
 
 - **Claude Code:** log in once with `claude` in a terminal. Basis starts it through `@agentclientprotocol/claude-agent-acp`.
-- **Codex:** log in once with `codex login`. Basis starts it through `npx @zed-industries/codex-acp`.
+- **Codex:** log in once with `codex login`. Basis starts it through `npx @agentclientprotocol/codex-acp`, at a fixed version that npx fetches on first use.
+
+Usage counts against your own plan. A turn can take up to three agent runs (the turn and up to two fix-ups), and ×2 or ×3 alternatives multiply that.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -89,7 +91,10 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 - **Layout:**
   - The sidebar scrolls the preview to each section and can collapse to an icon rail.
   - The chat can be resized by dragging its edge (double-click resets) and hidden with the toggle in the top bar or Ctrl+B.
-- **Permissions:** reads inside the workspace and edits to the files the agent may change are approved automatically. Anything else, such as shell commands, web fetches or other files, shows up in the chat for you to approve.
+- **Permissions:** reads inside the workspace and edits to the files the agent may change are approved automatically. Anything else, such as shell commands, web fetches or other files, shows up in the chat for you to approve. Paths are compared after following links, so a link inside the workspace that leads out of it is not approved.
+  - The agent always starts in the mode that asks: Claude Code in its default mode and Codex in read-only mode, whatever your own settings default to. Codex still runs read-only commands in its sandbox without asking.
+  - Claude Code runs without your own `~/.claude` setup (CLAUDE.md, skills, hooks, permission rules, claude.ai connectors and auto memory), so rules meant for your coding neither steer the design agent nor approve anything for it. Basis' instructions arrive as its system prompt.
+  - A linked product repo is read without asking, so text in it can steer the agent like any prompt. Approve shell commands with that in mind.
 - **Export:** the **Starter kit** tab packages the whole design system for a new project. You can download it as a zip or write it straight into a project folder; if any file there would change, nothing is written until you confirm. The kit contains:
   - `components/`, with imports rewritten to extensionless form so any bundler and default `tsconfig` accept them,
   - `tokens.css`, CSS custom properties with dark mode via `data-theme` or the OS setting,
@@ -98,6 +103,19 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
   - a README on wiring it up.
 
   The kit needs React 18+ and CSS Modules, nothing else. The other tabs export the token formats one at a time.
+
+## Privacy
+
+Basis runs on your machine and answers only on localhost. It sends no telemetry. What leaves your machine is what the agent sends to Anthropic or OpenAI under your own account (your prompts, attachments, and the files it reads, including a linked product repo), web fonts that your design system imports from Google Fonts or Bunny Fonts, and the Codex adapter that npx downloads on first use.
+
+## Troubleshooting
+
+- **"Basis needs git on the PATH":** install git, then start Basis again.
+- **"Port 5320 is in use":** another Basis is probably running. Stop it, or start this one with another `PORT`. The preview takes `PORT + 1`.
+- **The agent asks you to log in:** run `claude` (or `codex login`) in a terminal, then pick the agent again in the picker.
+- **"Usage limit":** your plan's limit is reached. It resets after a while, and the conversation is kept until then.
+- **"Another Claude Code process is refreshing it":** several Claude Code processes refreshed their login at once. Send the message again.
+- **"A newer version of Basis has opened this project":** update Basis. An older Basis refuses such a project rather than misreading it.
 
 ## Stack
 

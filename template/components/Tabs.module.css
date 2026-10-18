@@ -130,3 +130,11 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-xs);
 }
+
+/* Reduced motion: the selected-tab indicator and the hover underline jump instead of sliding or growing. */
+@media (prefers-reduced-motion: reduce) {
+  .indicator[data-animate],
+  .list[data-variant="underline"] .tab::after {
+    transition: none;
+  }
+}

@@ -8,10 +8,10 @@ import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts"
 import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
 import { git, lines, typecheck } from "./exec.ts";
 import { commitToHistory, describeSource, loadHistory, type EntryMeta, type Source } from "./history.ts";
-import { DESIGN_FILE, isSourcePath, PRODUCT_FILE, SOURCE_DIRS } from "./paths.ts";
+import { DESIGN_FILE, isSourcePath, PRODUCT_FILE, relativeInside, SOURCE_DIRS } from "./paths.ts";
 import { reachedSpecimens } from "./reach.ts";
 import { Reviews } from "./reviews.ts";
-import { seedWorkspace, writeGeneratedFiles } from "./setup.ts";
+import { claimWorkspaceFormat, seedWorkspace, writeGeneratedFiles } from "./setup.ts";
 import { Snapshots } from "./snapshots.ts";
 
 const DIFF_LIMIT = 400_000;
@@ -58,6 +58,7 @@ export class Workspace extends EventEmitter<Events> {
   }
 
   async init(): Promise<void> {
+    await claimWorkspaceFormat(this.dir);
     await writeGeneratedFiles(this.dir);
     if (!existsSync(this.file)) await writeFile(this.file, serialize(DEFAULT_DESIGN));
     const note = await seedWorkspace(this.dir);
@@ -67,7 +68,7 @@ export class Workspace extends EventEmitter<Events> {
     await this.reload();
     await this.check();
     const hasCommits = (await git(this.dir, ["rev-list", "-n", "1", "--all"]).catch(() => "")).trim() !== "";
-    await this.commit(hasCommits ? "external" : "init", note ? { label: note } : {});
+    await this.commit(hasCommits ? (note ? "upgrade" : "external") : "init", note ? { label: note } : {});
     this.history = await loadHistory(this.dir);
     // Copies of past versions from earlier runs, except the open review's starting point.
     await this.snapshots.prune(this.reviews.state?.baseline);
@@ -101,15 +102,16 @@ export class Workspace extends EventEmitter<Events> {
     return this.reviews.state;
   }
 
+  /** True for a path inside the workspace, also after following links (`relativeInside`). */
   isInside(target: string): boolean {
-    const relative = path.relative(this.dir, path.resolve(target));
-    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+    const relative = relativeInside(this.dir, target);
+    return relative !== null && relative !== "";
   }
 
   /** Files the agent may change: the design file, review.json, product.md and anything in the source folders. */
   isEditable(target: string): boolean {
-    if (!this.isInside(target)) return false;
-    const relative = path.relative(this.dir, path.resolve(target)).split(path.sep).join("/");
+    const relative = relativeInside(this.dir, target);
+    if (!relative) return false;
     return relative === DESIGN_FILE || relative === REVIEW_FILE || relative === PRODUCT_FILE || isSourcePath(relative);
   }
 

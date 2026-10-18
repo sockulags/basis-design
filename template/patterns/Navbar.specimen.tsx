@@ -101,23 +101,18 @@ export default defineSpecimen({
     },
     {
       kind: "block",
-      title: "Compact · narrow screens, open the menu",
-      render: function CompactNavbar() {
-        const [open, setOpen] = useState(false);
-        return (
-          <div style={{ ...frame, maxWidth: 380 }}>
-            <Navbar
-              brand={brand}
-              links={NAV_LINKS}
-              active="overview"
-              compact
-              menuOpen={open}
-              onMenuToggle={() => setOpen((value) => !value)}
-              user={{ initials: "AL", name: "Ada Lovelace" }}
-            />
-          </div>
-        );
-      },
+      title: "Narrow · under 960px the links and search move behind the menu",
+      render: () => (
+        <div style={{ ...frame, maxWidth: 380 }}>
+          <Navbar
+            brand={brand}
+            links={NAV_LINKS}
+            active="overview"
+            searchPlaceholder="Search projects…"
+            user={{ initials: "AL", name: "Ada Lovelace" }}
+          />
+        </div>
+      ),
     },
   ],
 });

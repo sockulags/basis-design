@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Avatar } from "../components/index.ts";
 import { Icon } from "./icons.tsx";
 import styles from "./Navbar.module.css";
@@ -18,13 +18,17 @@ export interface NavbarProps {
   onNavigate?: (id: string) => void;
   /** Shows a search field with this placeholder. */
   searchPlaceholder?: string;
-  /** Extra controls before the avatar, such as buttons. */
+  /** Extra controls before the avatar, such as buttons. In the narrow layout they move into the menu. */
   actions?: ReactNode;
   user?: { initials: string; name: string };
   /** The bottom shadow used once the page has scrolled under the bar. */
   elevated?: boolean;
-  /** Narrow layout: links move behind a menu button. */
+  /**
+   * Forces the narrow layout, where links, search and actions move behind a menu button. Without it the bar switches by
+   * itself when it is narrower than 960px.
+   */
   compact?: boolean;
+  /** Controls the menu from outside; otherwise the bar keeps its own open state. */
   menuOpen?: boolean;
   onMenuToggle?: () => void;
 }
@@ -40,10 +44,21 @@ export function Navbar({
   user,
   elevated = false,
   compact = false,
-  menuOpen = false,
+  menuOpen,
   onMenuToggle,
 }: NavbarProps) {
   const menuId = useId();
+  const [ownOpen, setOwnOpen] = useState(false);
+  const open = menuOpen ?? ownOpen;
+  const toggle = onMenuToggle ?? (() => setOwnOpen((value) => !value));
+
+  const search = searchPlaceholder && (
+    <label className={styles.search}>
+      <span className={styles.visuallyHidden}>Search</span>
+      <Icon name="search" className={styles.searchIcon} />
+      <input type="search" placeholder={searchPlaceholder} />
+    </label>
+  );
 
   const renderLink = (link: NavbarLink, className: string | undefined) => (
     <a
@@ -69,34 +84,25 @@ export function Navbar({
       data-elevated={elevated || undefined}
       data-compact={compact || undefined}
     >
+      {/* Both layouts are rendered; the stylesheet shows the one that fits the bar's width. */}
       <div className={styles.bar}>
-        {compact && (
-          <button
-            type="button"
-            className={styles.menuButton}
-            aria-expanded={menuOpen}
-            aria-controls={menuId}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={onMenuToggle}
-          >
-            <Icon name={menuOpen ? "close" : "menu"} size={18} />
-          </button>
-        )}
+        <button
+          type="button"
+          className={styles.menuButton}
+          aria-expanded={open}
+          aria-controls={menuId}
+          aria-label={open ? "Close menu" : "Open menu"}
+          onClick={toggle}
+        >
+          <Icon name={open ? "close" : "menu"} size={18} />
+        </button>
         <div className={styles.brand}>{brand}</div>
-        {!compact && (
-          <nav className={styles.links} aria-label="Main">
-            {links.map((link) => renderLink(link, styles.link))}
-          </nav>
-        )}
+        <nav className={styles.links} aria-label="Main">
+          {links.map((link) => renderLink(link, styles.link))}
+        </nav>
         <div className={styles.end}>
-          {searchPlaceholder && !compact && (
-            <label className={styles.search}>
-              <span className={styles.visuallyHidden}>Search</span>
-              <Icon name="search" className={styles.searchIcon} />
-              <input type="search" placeholder={searchPlaceholder} />
-            </label>
-          )}
-          {actions}
+          {search}
+          {actions && <div className={styles.actions}>{actions}</div>}
           {user && (
             <span className={styles.user} title={user.name}>
               <Avatar initials={user.initials} />
@@ -104,10 +110,14 @@ export function Navbar({
           )}
         </div>
       </div>
-      {compact && menuOpen && (
-        <nav id={menuId} className={styles.menu} aria-label="Main">
-          {links.map((link) => renderLink(link, styles.menuLink))}
-        </nav>
+      {open && (
+        <div id={menuId} className={styles.menu}>
+          {search}
+          {actions && <div className={styles.actions}>{actions}</div>}
+          <nav className={styles.menuLinks} aria-label="Main">
+            {links.map((link) => renderLink(link, styles.menuLink))}
+          </nav>
+        </div>
       )}
     </header>
   );

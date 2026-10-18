@@ -18,6 +18,8 @@ component source, patterns and the gallery specimens.
 
 - `server/index.ts`: the chrome server, the bridge, and switching between projects.
   - **Chrome** on `PORT` (5320) serves `index.html` and is the only origin allowed on the `/bridge` WebSocket.
+    Both servers answer only requests whose `Host` is `localhost` or `127.0.0.1` with their port
+    (`isLocalHost` in `server/project.ts`), so a page that rebinds its own name to 127.0.0.1 gets a 403.
   - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is the
     open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
     the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
@@ -33,7 +35,17 @@ component source, patterns and the gallery specimens.
   - It spawns `claude-agent-acp`, or `codex-acp` via npx, and strips inherited `CLAUDE_*` and
     `ANTHROPIC_BASE_URL` variables when launched from inside a Claude Code session (the agent's OAuth refresh
     fails otherwise).
-  - It auto-approves reads inside the workspace and edits to the files the agent may change.
+  - It auto-approves reads inside the workspace and edits to the files the agent may change. Paths are compared
+    where they really are (`relativeInside` in `server/paths.ts` follows symlinks and junctions, also for files
+    not written yet), so a link out of the workspace or the repo is not approved.
+  - Each session starts with `SESSION_META`: Claude Code loads none of the user's settings (`settingSources: []`,
+    since the project source also reads `~/.claude/CLAUDE.md` for a workspace under the home folder), no claude.ai
+    connectors, no bypass mode, and auto memory is off (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`). The brief arrives as
+    the appended system prompt. The adapter still takes the initial permission mode from the user's
+    `~/.claude/settings.json`, so `askingMode` switches the session to `ASKING_MODES` (Claude `default`, Codex
+    `read-only`) after `session/new` and `session/resume`. Codex's other modes edit the workspace unasked.
+  - The Codex adapter is `@agentclientprotocol/codex-acp` at a pinned version (`CODEX_ACP`); the old
+    `@zed-industries/codex-acp` stopped in June 2026 and fails on newer models.
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,
     render errors reported by the preview) and sends them back to the agent, at most twice. Every open tab
     reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
@@ -44,7 +56,10 @@ component source, patterns and the gallery specimens.
 - The workspace, one module per concern, coordinated by `server/workspace.ts` (serial git queue, file watcher,
   events):
   - `setup.ts`: seeding from `template/`, migrations of older workspaces, generated files (`AGENTS.md`,
-    `CLAUDE.md`, `tsconfig.json`, `.basis/`).
+    `CLAUDE.md`, `tsconfig.json`, `.basis/`). A migration is recorded with source `upgrade`, which Undo never
+    walks past (`undoStep` in `src/shell/history.ts`; older histories have it as `external` labelled "Basis
+    added …"). `WORKSPACE_FORMAT` is written to `.basis/format.json`; raise it when an older Basis would misread
+    a workspace a newer one has opened, and the older one then refuses it.
   - `history.ts`: one commit per agent turn, approved review, restore or hand edit, with `Basis-*` trailers.
   - `reviews.ts`: the open review (see below).
   - `snapshots.ts`: read-only copies of past versions in `.basis/snapshots/<commit>/`.
@@ -186,6 +201,10 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
 - **CRLF:** files in the Windows checkout are CRLF (`core.autocrlf=true`); seeding normalises templates to LF,
   and Prettier runs with `endOfLine: auto`.
 - **Workspace git:** it runs as user "Basis" with `core.autocrlf=false` (see `server/exec.ts`).
+- **Container queries in patterns:** Navbar is its own size container and switches to the narrow layout under
+  960px; AppShell is the container `app-shell`, and SidebarNav becomes its rail only inside a narrow one, so a
+  sidebar on its own keeps its width. Both layouts of the Navbar are rendered and CSS shows one, so search and
+  actions exist twice in the DOM (one hidden).
 - **OAuth refresh races:** several Claude Code processes at once (a dev instance, a test instance, a Claude Code
   session) can make a turn fail with "another Claude Code process is refreshing it". It is transient; retry.
 - **Hidden tabs:** rAF does not run in background browser tabs, so do not gate chrome-iframe messaging on rAF.
@@ -250,9 +269,17 @@ Lucas is rolling out a larger idea in steps:
    the agent's memory of it), and views (a Views page, New view from a feature or ticket, views in reviews):
    done. Its decision log records why things are the way they are.
 
+10. Release readiness (2026-10-18): symlink-safe path checks, a host check against DNS rebinding, the agent
+    isolated from the user's own Claude Code setup and started in the mode that asks, Codex tested on the new
+    adapter, pinned adapter versions and `engines`, clearer start-up and agent errors, reduced motion and
+    described field errors in the template, starter patterns that respond to narrow widths, Undo that stops at
+    Basis updates, a workspace format version, CI on three systems, and the chrome's own axe findings fixed. A
+    new project now starts without accessibility findings (two small texts in the starter patterns used
+    `textSubtle`, which is held to 3:1, and failed 4.5:1 in the light theme).
+
 The next step is Lucas' call. Left for later: syncing tokens and components forward into a linked repo, visual
-comparison of the whole gallery between two history entries, and making the starter patterns respond to narrow
-widths (the Navbar overflows at mobile width today).
+comparison of the whole gallery between two history entries, and the packaging for a release (licence, name,
+where projects live by default, an npm package or app, icon).
 
 ## Known limits
 
@@ -263,11 +290,11 @@ widths (the Navbar overflows at mobile width today).
   "Also changed". None of the starter specimens do.
 - **Reach is static.** A specimen that reads token values from its `design` prop in JavaScript, rather than
   through CSS variables, is not found by `reach.ts`; its section is then left out of "Also changed".
-- **Undo** sits on Basis' own migration entries ("Basis added starter patterns") right after an upgrade, so
-  pressing it removes the seeded files. They can be restored from history.
-- **Patterns have no contracts.** Base components added by the agent get one in `components/contracts.ts`,
-  but `patterns/` exports are only type-checked.
-- **Codex** is wired up but has never been tested.
+- **Codex** runs read-only commands in its sandbox without asking, even in read-only mode (seen with
+  `Get-Content` in the workspace). Such reads do not reach Basis' approval as Claude Code's do; whether its
+  sandbox lets them read outside the workspace has not been tested.
+- **Template changes reach new workspaces only.** Existing workspaces keep their components (the agent owns
+  them); the reduced-motion rules, described field errors and narrow layouts arrive with a new project.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

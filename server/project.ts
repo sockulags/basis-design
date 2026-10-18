@@ -19,6 +19,20 @@ export interface ProjectOptions {
   broadcast: (message: ServerMessage) => void;
 }
 
+/**
+ * True when a request names Basis' own host and port. A web page that points its own name at 127.0.0.1 (DNS
+ * rebinding) sends its name instead, so it cannot read Basis' pages or the starter kit.
+ */
+export function isLocalHost(req: http.IncomingMessage, port: number): boolean {
+  return req.headers.host === `localhost:${port}` || req.headers.host === `127.0.0.1:${port}`;
+}
+
+/** Answers 403 to requests for another host (see isLocalHost). */
+export function refuseHost(res: http.ServerResponse): void {
+  res.writeHead(403, { "Content-Type": "text/plain" });
+  res.end("Basis only answers on localhost.");
+}
+
 /** Answers 404 for page entries that do not belong on this origin; everything else falls through. */
 export function guard(blocked: (url: string) => boolean): Connect.NextHandleFunction {
   return (req, res, next) => {
@@ -94,7 +108,10 @@ export class OpenProject {
     // New specimen files must be noticed even when the workspace lives outside this repo.
     previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(entry.dir, folder)));
     const previewGuard = guard((url) => url === "/" || url === "/index.html");
-    previewServer.on("request", (req, res) => previewGuard(req, res, () => previewVite.middlewares(req, res)));
+    previewServer.on("request", (req, res) => {
+      if (!isLocalHost(req, options.previewPort)) return refuseHost(res);
+      previewGuard(req, res, () => previewVite.middlewares(req, res));
+    });
     await new Promise<void>((resolve, reject) => {
       previewServer.once("error", reject);
       previewServer.listen(options.previewPort, options.host, resolve);

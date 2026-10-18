@@ -6,7 +6,16 @@ export const SOURCE_LABEL: Record<HistoryEntry["source"], string> = {
   revert: "Restored",
   external: "Edited on disk",
   review: "Approved review",
+  upgrade: "Basis update",
 };
+
+/**
+ * Basis bringing the workspace up to date. Earlier versions recorded that as an edit on disk labelled
+ * "Basis added …".
+ */
+function isUpgrade(entry: HistoryEntry): boolean {
+  return entry.source === "upgrade" || (entry.source === "external" && !!entry.label?.startsWith("Basis added"));
+}
 
 const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const day = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
@@ -35,10 +44,13 @@ export function effectiveEntry(history: HistoryEntry[]): HistoryEntry | undefine
   return current;
 }
 
-/** What Undo goes back to, and the step it undoes. Repeated undos walk back instead of toggling. */
+/**
+ * What Undo goes back to, and the step it undoes. Repeated undos walk back instead of toggling. They stop at a Basis
+ * update: undoing it would remove files the workspace now needs (History can still restore an earlier version).
+ */
 export function undoStep(history: HistoryEntry[]): { undoes: HistoryEntry; target: HistoryEntry } | null {
   const undoes = effectiveEntry(history);
-  if (!undoes) return null;
+  if (!undoes || isUpgrade(undoes)) return null;
   const target = history[history.indexOf(undoes) - 1];
   return target ? { undoes, target } : null;
 }

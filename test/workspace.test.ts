@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
+import { WORKSPACE_FORMAT } from "../server/setup.ts";
 import { Workspace } from "../server/workspace.ts";
 
 /*
@@ -142,6 +143,16 @@ describe("history", () => {
     const workspace = await start(dir);
     assert.ok(existsSync(path.join(dir, "components", "contracts.ts")));
     assert.equal(workspace.entries.at(-1)?.label, "Basis added component contracts");
+    assert.equal(workspace.entries.at(-1)?.source, "upgrade");
+  });
+
+  test("a workspace a newer Basis has opened is refused, and left as it was", async () => {
+    const dir = await folder();
+    (await start(dir)).close();
+    const format = path.join(dir, ".basis", "format.json");
+    await writeFile(format, JSON.stringify({ format: WORKSPACE_FORMAT + 1 }));
+    await assert.rejects(start(dir), /newer version of Basis/);
+    assert.equal(JSON.parse(await readFile(format, "utf8")).format, WORKSPACE_FORMAT + 1);
   });
 });
 

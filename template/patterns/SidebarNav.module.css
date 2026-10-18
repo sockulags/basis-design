@@ -30,6 +30,7 @@
 }
 
 .sidebar[data-collapsed] .sections {
+  grid-template-columns: minmax(0, 1fr);
   padding-inline: var(--space-2);
 }
 
@@ -41,10 +42,11 @@
   list-style: none;
 }
 
+/* Small text: muted, since subtle is held to 3:1 and small text needs 4.5:1. */
 .title {
   margin: 0 0 var(--space-1);
   padding-inline: var(--space-2);
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-caps);
@@ -136,4 +138,49 @@
 .footer {
   padding: var(--space-3);
   border-top: var(--border-thin) solid var(--color-border);
+}
+
+/* Reduced motion: the sidebar collapses and expands at once. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}
+
+/* In a narrow AppShell (a phone) the sidebar becomes its icon rail, as if it were collapsed, and the counts hide.
+   Labels stay for screen readers. A sidebar outside an AppShell keeps the width it is given. */
+@container app-shell (width < 640px) {
+  .sidebar {
+    width: 64px;
+    overflow: hidden;
+  }
+
+  .sections {
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: var(--space-2);
+  }
+
+  .title {
+    height: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  .item {
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+
+  .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .badge {
+    display: none;
+  }
 }

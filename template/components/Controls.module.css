@@ -163,3 +163,12 @@
   background: var(--color-disabled-text);
   box-shadow: none;
 }
+
+/* Reduced motion: the check, the radio dot and the switch thumb switch at once instead of growing or sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .dash,
+  .radio .box::after,
+  .thumb {
+    transition: none;
+  }
+}

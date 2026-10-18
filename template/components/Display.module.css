@@ -235,3 +235,17 @@
     background-position: -100% 0;
   }
 }
+
+/* Reduced motion: cards do not lift, and the indeterminate bar and the skeleton stand still. The spinner keeps
+   turning: it is the one sign that the work goes on. */
+@media (prefers-reduced-motion: reduce) {
+  .card[data-interactive]:hover,
+  .card[data-force="hover"] {
+    transform: none;
+  }
+
+  .progress[data-indeterminate] .progressFill,
+  .skeleton {
+    animation: none;
+  }
+}

@@ -20,7 +20,7 @@ import {
 } from "../shared/protocol.ts";
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
 import { loadChat, saveChat } from "./chatlog.ts";
-import { PRODUCT_FILE } from "./paths.ts";
+import { PRODUCT_FILE, relativeInside } from "./paths.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -32,6 +32,9 @@ interface LaunchSpec {
   shell: boolean;
   loginHint: string;
 }
+
+/** The Codex adapter Basis was tested with; npx fetches it on first use. */
+const CODEX_ACP = "@agentclientprotocol/codex-acp@2.2.2";
 
 /** How each supported agent is started. Both reuse the user's own CLI login, so no API keys are needed. */
 function launchSpec(id: AgentId): LaunchSpec {
@@ -46,7 +49,8 @@ function launchSpec(id: AgentId): LaunchSpec {
   }
   return {
     command: "npx",
-    args: ["-y", "@zed-industries/codex-acp"],
+    // A fixed version: an unpinned one would fetch whatever was published last on every start.
+    args: ["-y", CODEX_ACP],
     shell: true,
     loginHint: "Run `codex login` in a terminal, then restart the agent.",
   };
@@ -58,18 +62,34 @@ function launchSpec(id: AgentId): LaunchSpec {
  * login. Drop them so the agent authenticates like a fresh CLI.
  */
 function agentEnv(): NodeJS.ProcessEnv {
-  if (!process.env.CLAUDECODE) return process.env;
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (key === "CLAUDECODE" || key === "ANTHROPIC_BASE_URL" || key === "BAGGAGE" || key.startsWith("CLAUDE_"))
-      continue;
+    const host = key === "CLAUDECODE" || key === "ANTHROPIC_BASE_URL" || key === "BAGGAGE" || key.startsWith("CLAUDE_");
+    if (process.env.CLAUDECODE && host) continue;
     env[key] = value;
   }
+  // Claude Code's auto memory lives outside the workspace and loads whatever SESSION_META says; Basis keeps its own.
+  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   return env;
 }
 
 /** Tool kinds that are auto-approved when every touched path is inside the workspace. */
 const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
+/**
+ * Claude Code loads the user's own ~/.claude by default: their CLAUDE.md, skills, hooks and permission rules, and
+ * the claude.ai connectors of their login. Rules that allow commands there would run them without Basis asking, and
+ * the rest is meant for their coding, not for designing here. So it loads none of them: not even the project
+ * source, since it reads CLAUDE.md in every folder above the workspace, and ~/.claude/CLAUDE.md is one of those for
+ * a workspace under the home folder. The brief arrives as the system prompt instead. Other agents ignore the key.
+ */
+const SESSION_META = {
+  claudeCode: { options: { settingSources: [], strictMcpConfig: true, allowDangerouslySkipPermissions: false } },
+};
+/**
+ * Per agent, the session mode in which it asks before every edit, so edits go through onPermission and Basis'
+ * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked.
+ */
+const ASKING_MODES: Record<AgentId, string> = { claude: "default", codex: "read-only" };
 const MAX_AUTO_FIXES = 2;
 const PREVIEW_SETTLE_MS = 1500;
 /** How long the fix loop waits at most for the preview's checks to finish after it settled. */
@@ -137,9 +157,7 @@ export class AgentHost extends EventEmitter<Events> {
   }
 
   private inRepo(target: string): boolean {
-    if (!this.repo) return false;
-    const relative = path.relative(this.repo, path.resolve(target));
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+    return this.repo !== undefined && relativeInside(this.repo, target) !== null;
   }
 
   get agent(): AgentState {
@@ -162,7 +180,9 @@ export class AgentHost extends EventEmitter<Events> {
     await this.stop();
     this.setState({ id: agentId, status: "starting", detail: "Starting agent…" });
     const spec = launchSpec(agentId);
-    const proc = spawn(spec.command, spec.args, {
+    // Through a shell, the command goes as one line: Node no longer accepts separate arguments there.
+    const [command, args] = spec.shell ? [[spec.command, ...spec.args].join(" "), []] : [spec.command, spec.args];
+    const proc = spawn(command, args, {
       cwd: this.workspace.dir,
       shell: spec.shell,
       stdio: ["pipe", "pipe", "pipe"],
@@ -361,7 +381,8 @@ ${message}`
       if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
       else if (!completed) this.notice(`The agent stopped early (${result.stopReason}).`, "error");
     } catch (error) {
-      if (this.connection === connection) this.notice(describeError(error), "error");
+      if (this.connection === connection)
+        this.notice(describeError(error, launchSpec(this.state.id).loginHint), "error");
     } finally {
       this.openText = undefined;
       this.cancelPermissions();
@@ -508,17 +529,18 @@ ${message}`
   private async openSession(resume = false): Promise<void> {
     const connection = this.connection;
     if (!connection) throw new Error("Agent is not connected");
-    const base = { cwd: this.workspace.dir, mcpServers: [] };
+    const base = { cwd: this.workspace.dir, mcpServers: [], _meta: SESSION_META };
     const systemPrompt = { mode: "append" as const, content: [{ type: "text" as const, text: AGENT_BRIEF }] };
     const saved = resume ? this.resumable : undefined;
     this.resumable = undefined;
     if (saved && saved.agent === this.state.id && this.supportsResume) {
       try {
-        await connection.agent.request(acp.methods.agent.session.resume, {
+        const resumed = await connection.agent.request(acp.methods.agent.session.resume, {
           ...base,
           sessionId: saved.sessionId,
           ...(this.supportsSystemPrompt ? { systemPrompt } : {}),
         });
+        await this.askingMode(connection, saved.sessionId, (resumed as acp.ResumeSessionResponse | undefined)?.modes);
         this.sessionId = saved.sessionId;
         this.needsPreamble = false;
         this.scheduleSave();
@@ -544,8 +566,25 @@ ${message}`
     this.needsPreamble = response === undefined;
     const session = response ?? (await connection.agent.request(acp.methods.agent.session.new, base));
     if (!session?.sessionId) throw new Error("The agent did not return a session id");
+    await this.askingMode(connection, session.sessionId, session.modes);
     this.sessionId = session.sessionId;
     this.scheduleSave();
+  }
+
+  /**
+   * Agents start in the user's own default mode (Claude Code's from ~/.claude, whatever SESSION_META says; Codex's
+   * from its config), and one that edits or runs commands unasked would act without Basis' rules. The session
+   * starts in the mode that asks instead (ASKING_MODES).
+   */
+  private async askingMode(
+    connection: acp.ClientConnection,
+    sessionId: string,
+    modes: acp.SessionModeState | null | undefined,
+  ): Promise<void> {
+    const asking = ASKING_MODES[this.state.id];
+    if (!modes || modes.currentModeId === asking) return;
+    if (!modes.availableModes.some((mode) => mode.id === asking)) return;
+    await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: asking });
   }
 
   /** Saves the conversation shortly after it changes; streamed text changes it many times a second. */
@@ -799,6 +838,8 @@ function describeRawInput(raw: unknown): string | undefined {
 function describeError(error: unknown, loginHint?: string): string {
   const err = error as { code?: number; message?: string; data?: unknown };
   const message = err?.message ?? String(error);
+  if (/usage limit|rate limit|too many requests|\b429\b/i.test(message))
+    return `${message} That is your plan's usage limit; it resets after a while, and Basis keeps the conversation until then.`;
   const needsAuth = err?.code === -32000 || /auth|login|logged in|credential/i.test(message);
   return needsAuth && loginHint ? `${message} ${loginHint}` : message;
 }

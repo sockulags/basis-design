@@ -216,3 +216,22 @@
     transform: translateY(12px) scale(0.97);
   }
 }
+
+/* Reduced motion: tooltips, toasts and dialogs fade in and out without moving or scaling. */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip,
+  .tooltipAnchor[data-open] .tooltip,
+  .tooltipAnchor:hover .tooltip,
+  .tooltipAnchor:focus-within .tooltip {
+    translate: -50% 0;
+  }
+
+  .enter,
+  .animate .dialog {
+    animation: fadeIn var(--duration-base) var(--ease-standard) both;
+  }
+
+  .exit {
+    animation: fadeIn var(--duration-fast) var(--ease-exit) reverse both;
+  }
+}

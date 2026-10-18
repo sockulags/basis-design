@@ -140,3 +140,12 @@
     transform: rotate(360deg);
   }
 }
+
+/* Reduced motion: a press changes colour without shrinking. The spinner keeps turning: it is the one sign that
+   the work goes on. */
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled, [data-loading]),
+  .button[data-force="active"] {
+    transform: none;
+  }
+}
