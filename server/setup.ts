@@ -32,9 +32,13 @@ export async function seedWorkspace(dir: string): Promise<string> {
     const fresh = notes.length === 0 && !existsSync(path.join(dir, ".git"));
     await seed(dir, PATTERNS_DIR);
     if (!fresh) notes.push("starter patterns");
-  } else if (!existsSync(path.join(dir, PATTERNS_DIR, "contracts.ts"))) {
-    await seed(dir, PATTERNS_DIR, (name) => name === "contracts.ts");
-    notes.push("pattern contracts");
+  } else {
+    if (!existsSync(path.join(dir, PATTERNS_DIR, "contracts.ts"))) {
+      await seed(dir, PATTERNS_DIR, (name) => name === "contracts.ts");
+      notes.push("pattern contracts");
+    }
+    const added = await addLaterPatterns(dir);
+    if (added.length) notes.push(`the ${added.join(" and ")} pattern${added.length > 1 ? "s" : ""}`);
   }
   if (!existsSync(path.join(dir, VIEWS_DIR))) {
     const fresh = notes.length === 0 && !existsSync(path.join(dir, ".git"));
@@ -43,6 +47,29 @@ export async function seedWorkspace(dir: string): Promise<string> {
   }
   if (await updateSpecimenFormat(dir)) notes.push("the newest specimen format");
   return notes.length ? `Basis added ${notes.join(" and ")}` : "";
+}
+
+/**
+ * Starter patterns added to the baseline after workspaces already had patterns/.
+ * Older workspaces get their files and an export in patterns/index.ts, since the
+ * baseline contract requires them.
+ */
+const LATER_PATTERNS = ["Composer", "Chat"];
+
+async function addLaterPatterns(dir: string): Promise<string[]> {
+  const index = path.join(dir, PATTERNS_DIR, "index.ts");
+  const added: string[] = [];
+  for (const name of LATER_PATTERNS) {
+    if (existsSync(path.join(dir, PATTERNS_DIR, `${name}.tsx`))) continue;
+    await seed(dir, PATTERNS_DIR, (file) => file.startsWith(`${name}.`));
+    const exports = await readFile(index, "utf8").catch(() => "");
+    if (!exports.includes(`"./${name}.tsx"`)) {
+      const separator = exports === "" || exports.endsWith("\n") ? "" : "\n";
+      await writeFile(index, `${exports}${separator}export * from "./${name}.tsx";\n`);
+    }
+    added.push(name);
+  }
+  return added;
 }
 
 /**

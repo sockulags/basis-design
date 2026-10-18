@@ -183,6 +183,10 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   between copies.
 - **Smooth scrolling gets cancelled** by the layout changes of progressive rendering, so scrolling to a section
   jumps while sections are still being added and is smooth once the page is complete.
+- **New starter patterns:** older workspaces already have `patterns/`, so seeding skips it. A pattern added to the
+  baseline contract later goes in `LATER_PATTERNS` (`server/setup.ts`): a workspace without its `.tsx` gets its
+  files and an export appended to `patterns/index.ts`. Use only icon names from the first icon set in such a
+  pattern and its specimen, since the workspace's `icons.tsx` is its own.
 - **Specimen format upgrades:** `components/specimen.ts` lives in each workspace. Seeding replaces it only when
   its LF-normalised sha256 matches a known earlier template (`EARLIER_SPECIMEN_FORMATS` in `server/setup.ts`).
   When you change `template/components/specimen.ts`, add the hash of the version you replace to that list.

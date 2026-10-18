@@ -1,5 +1,7 @@
 // Patterns: larger building blocks composed from ../components. Import only from there, never the other way.
 export * from "./AppShell.tsx";
+export * from "./Chat.tsx";
+export * from "./Composer.tsx";
 export * from "./DataTable.tsx";
 export * from "./EmptyState.tsx";
 export * from "./FormSection.tsx";

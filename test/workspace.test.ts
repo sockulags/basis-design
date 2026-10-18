@@ -134,6 +134,29 @@ describe("pattern contracts", () => {
     assert.ok(existsSync(path.join(dir, ".basis", "pattern-contracts.ts")));
     assert.equal(workspace.entries.at(-1)?.label, "Basis added pattern contracts");
   });
+
+  test("an older workspace gets the starter patterns added since, with their exports", async () => {
+    const dir = await folder();
+    (await start(dir)).close();
+    const index = path.join(dir, "patterns", "index.ts");
+    for (const name of ["Composer", "Chat"]) {
+      git(dir, ["rm", "-q", `patterns/${name}.tsx`, `patterns/${name}.module.css`, `patterns/${name}.specimen.tsx`]);
+      await writeFile(index, (await readFile(index, "utf8")).replace(`export * from "./${name}.tsx";\n`, ""));
+    }
+    git(dir, ["add", "patterns/index.ts"]);
+    git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
+    const workspace = await start(dir);
+    const exports = await readFile(index, "utf8");
+    for (const name of ["Composer", "Chat"]) {
+      assert.ok(existsSync(path.join(dir, "patterns", `${name}.specimen.tsx`)));
+      assert.equal(exports.split(`"./${name}.tsx"`).length, 2);
+    }
+    assert.equal(workspace.entries.at(-1)?.label, "Basis added the Composer and Chat patterns");
+    // A workspace that has them is left alone.
+    workspace.close();
+    const entries = (await start(dir)).entries.length;
+    assert.equal(entries, workspace.entries.length);
+  });
 });
 
 describe("views", () => {

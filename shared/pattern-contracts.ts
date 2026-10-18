@@ -26,6 +26,63 @@ export interface AppShellProps {
 
 export type SortDirection = "asc" | "desc";
 
+export interface ChatThreadProps {
+  children?: ReactNode;
+  composer: ReactNode;
+  empty?: ReactNode;
+  header?: ReactNode;
+}
+
+export interface ChatMessageProps {
+  role: "user" | "assistant";
+  children?: ReactNode;
+  author?: string;
+  avatar?: ReactNode;
+  time?: string;
+  status?: "done" | "streaming" | "error";
+  error?: string;
+  onRetry?: () => void;
+  actions?: ReactNode;
+  attachments?: ComposerAttachment[];
+}
+
+export interface ChatSuggestion<IconName extends string> {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: IconName;
+}
+
+export interface ChatWelcomeProps<IconName extends string> {
+  title: string;
+  description?: string;
+  suggestions?: ChatSuggestion<IconName>[];
+  onSuggestion?: (id: string) => void;
+}
+
+export interface ComposerAttachment {
+  id: string;
+  name: string;
+  meta?: string;
+  uploading?: boolean;
+}
+
+export interface ComposerProps {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  onSubmit?: (text: string) => void;
+  placeholder?: string;
+  label?: string;
+  attachments?: ComposerAttachment[];
+  onAttach?: () => void;
+  onRemoveAttachment?: (id: string) => void;
+  busy?: boolean;
+  onStop?: () => void;
+  disabled?: boolean;
+  tools?: ReactNode;
+  footer?: ReactNode;
+}
+
 export interface DataTableColumn<T> {
   key: string;
   header: string;
@@ -152,6 +209,10 @@ export type IconProps<IconName extends string> = { name: IconName; size?: number
 
 export interface PatternContracts<IconName extends string> {
   AppShell: ComponentType<AppShellProps>;
+  ChatThread: ComponentType<ChatThreadProps>;
+  ChatMessage: ComponentType<ChatMessageProps>;
+  ChatWelcome: ComponentType<ChatWelcomeProps<IconName>>;
+  Composer: ComponentType<ComposerProps>;
   /** Generic over the row type, so a table keeps its rows typed. */
   DataTable: <T>(props: DataTableProps<T>) => ReactNode;
   Pagination: ComponentType<PaginationProps>;
