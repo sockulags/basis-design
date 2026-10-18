@@ -1,0 +1,2 @@
+# The command npm installs runs on macOS and Linux too, where a shebang ending in CR fails.
+bin/basis.js text eol=lf
