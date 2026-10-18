@@ -90,7 +90,8 @@ leading) reaches everything.
 A target can ask for `widths`; the preview then renders each block in frames (`Framed` in `specimens.tsx`),
 which are size containers. The gallery's Show at bar uses the same frames, and can also show both themes; a
 review shows one theme at a time (Lucas prefers toggling), which starts from the system theme. Blink
-stacks the panes in one grid cell and hides all but one; the chrome forwards the B key to the preview, so it
+stacks the panes in one grid cell and hides all but one; the panes of a view's target share its flow position
+(`FlowSync` in `specimens.tsx`), so every side shows the same screen; the chrome forwards the B key to the preview, so it
 works wherever focus is.
 
 **Alternatives** (×2 or ×3 by Send): `AgentHost.runAlternatives` runs one checked turn (turn plus fix-ups) per
@@ -219,11 +220,14 @@ Lucas is rolling out a larger idea in steps:
    reach: done. Specimen modules still load up front; at 230 ms for 86 sections that was not the bottleneck.
 8. Comparing better: blink mode in reviews; pattern states (the `states` block) plus widths and both themes
    through container frames; several alternatives side by side, picked with ×2/×3 by Send: done.
+9. The roadmap in `docs/ROADMAP.md`, worked through by a loop: contrast and axe checks in the fix loop, contracts
+   for patterns, linking a product repo (bring in its design system, create a project from it, `product.md` as
+   the agent's memory of it), and views (a Views page, New view from a feature or ticket, views in reviews):
+   done. Its decision log records why things are the way they are.
 
-The next step is Lucas' call.
-
-Ideas discussed for later: contracts for patterns, automatic accessibility checks (axe) in the problems loop,
-making the starter patterns respond to narrow widths (the Navbar overflows at mobile width today).
+The next step is Lucas' call. Left for later: syncing tokens and components forward into a linked repo, visual
+comparison of the whole gallery between two history entries, and making the starter patterns respond to narrow
+widths (the Navbar overflows at mobile width today).
 
 ## Known limits
 

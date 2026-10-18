@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type MouseEvent } from "react";
 import type { Design } from "../../shared/design.ts";
 import type { PastVersion, ReviewView, ReviewViewTarget } from "../../shared/frame.ts";
 import { describeTarget } from "../../shared/review.ts";
@@ -9,9 +9,11 @@ import { SectionBoundary } from "./SectionBoundary.tsx";
 import { CHECKED } from "./a11y.ts";
 import { findSpecimen, narrowSpecimen } from "./narrow.ts";
 import {
+  FlowSync,
   loadPastSpecimen,
   loadRebasedSpecimen,
   SpecimenBlocks,
+  type FlowPosition,
   type Frames,
   type LoadedSpecimen,
 } from "./specimens.tsx";
@@ -235,6 +237,10 @@ function Target({ index, target, specimens, sides, design, theme, onAsk, showing
     block: target.block && !/^\d+$/.test(target.block) ? target.block : undefined,
   });
 
+  // A view's panes move through its flow together, so every side shows the same screen.
+  const [position, setPosition] = useState<FlowPosition | null>(null);
+  const flowSync = useMemo(() => ({ position, move: setPosition }), [position]);
+
   // Only what the agent asked to show is its to fix; a section the user peeks at is not.
   const key = `Review target ${index + 1}`;
   useEffect(() => {
@@ -262,71 +268,73 @@ function Target({ index, target, specimens, sides, design, theme, onAsk, showing
           <code>{problem}</code>
         </div>
       ) : (
-        <div
-          className={styles.panes}
-          style={{ "--sides": sides.length } as CSSProperties}
-          onClick={showing === null ? undefined : (event) => flipUnlessControl(event, onFlip)}
-        >
-          {sides.map((side, position) => {
-            const hidden = showing !== null && showing !== position;
-            const source = side.source;
-            if (source.kind === "live") {
+        <FlowSync.Provider value={flowSync}>
+          <div
+            className={styles.panes}
+            style={{ "--sides": sides.length } as CSSProperties}
+            onClick={showing === null ? undefined : (event) => flipUnlessControl(event, onFlip)}
+          >
+            {sides.map((side, position) => {
+              const hidden = showing !== null && showing !== position;
+              const source = side.source;
+              if (source.kind === "live") {
+                return (
+                  <div
+                    key={side.key}
+                    className={`ds-root ${styles.pane}`}
+                    data-side={side.key}
+                    data-theme={theme}
+                    data-hidden={hidden || undefined}
+                  >
+                    <p className={styles.paneLabel}>
+                      {side.label}
+                      {source.note && <span className={styles.paneNote}>{source.note}</span>}
+                    </p>
+                    <SectionBoundary name={label} onAsk={onAsk}>
+                      {/* The live side is what the accessibility check covers (see a11y.ts). */}
+                      <div {...{ [CHECKED]: label }} style={{ display: "contents" }}>
+                        <SpecimenBlocks
+                          specimen={narrowed.specimen}
+                          design={design}
+                          frames={framesFor(target, theme, side.key)}
+                        />
+                      </div>
+                    </SectionBoundary>
+                  </div>
+                );
+              }
+              if (source.kind === "pending") {
+                return (
+                  <div
+                    key={side.key}
+                    className={`ds-root ${styles.pane}`}
+                    data-side={side.key}
+                    data-theme={theme}
+                    data-hidden={hidden || undefined}
+                  >
+                    <p className={styles.paneLabel}>{side.label}</p>
+                    <p className={styles.notice}>Comes next.</p>
+                  </div>
+                );
+              }
               return (
-                <div
+                <PastPane
                   key={side.key}
-                  className={`ds-root ${styles.pane}`}
-                  data-side={side.key}
-                  data-theme={theme}
-                  data-hidden={hidden || undefined}
-                >
-                  <p className={styles.paneLabel}>
-                    {side.label}
-                    {source.note && <span className={styles.paneNote}>{source.note}</span>}
-                  </p>
-                  <SectionBoundary name={label} onAsk={onAsk}>
-                    {/* The live side is what the accessibility check covers (see a11y.ts). */}
-                    <div {...{ [CHECKED]: label }} style={{ display: "contents" }}>
-                      <SpecimenBlocks
-                        specimen={narrowed.specimen}
-                        design={design}
-                        frames={framesFor(target, theme, side.key)}
-                      />
-                    </div>
-                  </SectionBoundary>
-                </div>
+                  side={side}
+                  version={source.version}
+                  missing={source.missing}
+                  rebasedNote={source.rebased}
+                  live={live}
+                  target={target}
+                  label={label}
+                  theme={theme}
+                  hidden={hidden}
+                  onAsk={onAsk}
+                />
               );
-            }
-            if (source.kind === "pending") {
-              return (
-                <div
-                  key={side.key}
-                  className={`ds-root ${styles.pane}`}
-                  data-side={side.key}
-                  data-theme={theme}
-                  data-hidden={hidden || undefined}
-                >
-                  <p className={styles.paneLabel}>{side.label}</p>
-                  <p className={styles.notice}>Comes next.</p>
-                </div>
-              );
-            }
-            return (
-              <PastPane
-                key={side.key}
-                side={side}
-                version={source.version}
-                missing={source.missing}
-                rebasedNote={source.rebased}
-                live={live}
-                target={target}
-                label={label}
-                theme={theme}
-                hidden={hidden}
-                onAsk={onAsk}
-              />
-            );
-          })}
-        </div>
+            })}
+          </div>
+        </FlowSync.Provider>
       )}
     </section>
   );

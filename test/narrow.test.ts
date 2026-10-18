@@ -93,6 +93,33 @@ describe("narrowSpecimen", () => {
     );
   });
 
+  test("picks a view's screens by label or id", () => {
+    const view: LoadedSpecimen = {
+      ...buttons,
+      blocks: [
+        {
+          kind: "flow",
+          screens: [
+            { id: "list", label: "Delayed list", render },
+            { id: "detail", label: "Shipment", render },
+            { id: "notify", label: "Notify customer", render },
+          ],
+        },
+      ],
+    };
+    const result = narrowSpecimen(view, { specimen: "Buttons", rows: ["shipment", "notify"] });
+    assert.ok("specimen" in result);
+    const [block] = result.specimen.blocks;
+    assert.ok(block?.kind === "flow");
+    assert.deepEqual(
+      block.screens.map((screen) => screen.id),
+      ["detail", "notify"],
+    );
+    const missing = narrowSpecimen(view, { specimen: "Buttons", rows: ["Settings"] });
+    assert.ok("problem" in missing);
+    assert.match(missing.problem, /screens "Delayed list", "Shipment", "Notify customer"/);
+  });
+
   test("keeps a named free-form block even when rows are given", () => {
     assert.equal(narrowed({ specimen: "Buttons", block: "Live", rows: ["primary"] })[0]?.kind, "row");
   });

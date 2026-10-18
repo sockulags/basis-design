@@ -73,6 +73,16 @@ export function narrowSpecimen(
         : block.items;
       if (items.length && columns.length === 0) narrowed.push({ ...block, items });
       else available.push(`"${blockName(block, index)}" has items ${quoted(block.items.map((item) => item.label))}`);
+    } else if (block.kind === "flow") {
+      // A view's screens go by label or id.
+      const screens = rows.length
+        ? block.screens.filter((screen) => rows.some((label) => same(label, screen.label) || same(label, screen.id)))
+        : block.screens;
+      if (screens.length && columns.length === 0) narrowed.push({ ...block, screens });
+      else
+        available.push(
+          `"${blockName(block, index)}" has screens ${quoted(block.screens.map((screen) => screen.label))}`,
+        );
     } else if (target.block) {
       // A free-form demo cannot be narrowed, but when it was named it is what the agent wants to show.
       narrowed.push(block);

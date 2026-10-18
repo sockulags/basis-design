@@ -81,7 +81,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
 - [x] **New view.** A sidebar button on the Views page asks for a name and the feature (or ticket text) and
       starts a guided turn: the agent builds the flow from the workspace's patterns with realistic made-up
       data, consistent across screens, and opens a review of it.
-- [ ] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
+- [x] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
       for specimens.
 
 ### Later (not in this loop)
@@ -95,6 +95,9 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Views in reviews: `rows` picks a flow's screens by label or id, and the panes of one review target
+  share the flow position, so side by side, blink and alternatives compare the same screen. Every step of this
+  roadmap is done.
 - 2026-10-18: New view is a guided turn (`viewInstruction`); the description may be a whole ticket (8,000
   characters). From the HAR-212 ticket against the Harbor project the agent built five screens (delayed list,
   shipment, notify customer, nothing delayed, load error) from existing components and patterns, with consistent

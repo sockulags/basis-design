@@ -1,4 +1,13 @@
-import { createElement, Fragment, useCallback, useState, type ComponentType, type FormEvent } from "react";
+import {
+  createContext,
+  createElement,
+  Fragment,
+  useCallback,
+  useContext,
+  useState,
+  type ComponentType,
+  type FormEvent,
+} from "react";
 import type { Design } from "../../shared/design.ts";
 import { PAGES, type PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
@@ -223,6 +232,19 @@ function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
   }
 }
 
+export interface FlowPosition {
+  id: string;
+  data?: unknown;
+}
+
+/**
+ * Lets several copies of a flow move together: the panes of one review target share it, so blinking or looking
+ * side by side always compares the same screen. Without a provider each flow keeps its own place.
+ */
+export const FlowSync = createContext<{ position: FlowPosition | null; move: (next: FlowPosition) => void } | null>(
+  null,
+);
+
 /** One screen of a flow at a time; screens move on with `go`, and the strip jumps anywhere. */
 function FlowBlock({
   screens,
@@ -231,9 +253,12 @@ function FlowBlock({
   screens: Extract<SpecimenBlock, { kind: "flow" }>["screens"];
   design: Design;
 }) {
-  const [current, setCurrent] = useState<{ id: string; data?: unknown }>({ id: screens[0]?.id ?? "" });
+  const shared = useContext(FlowSync);
+  const [own, setOwn] = useState<FlowPosition>({ id: screens[0]?.id ?? "" });
+  const current = shared?.position ?? own;
+  const move = shared?.move ?? setOwn;
   const screen = screens.find((item) => item.id === current.id) ?? screens[0];
-  const go = useCallback((id: string, data?: unknown) => setCurrent({ id, data }), []);
+  const go = useCallback((id: string, data?: unknown) => move({ id, data }), [move]);
   if (!screen) return null;
   return (
     <Flow screens={screens.map(({ id, label }) => ({ id, label }))} current={screen.id} onSelect={(id) => go(id)}>

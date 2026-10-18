@@ -119,6 +119,8 @@ The result becomes the starting point of real projects, so treat the components 
   detail shows), in the product's language when a product repo is linked. Keep sample data in the view file or
   a \`views/*-data.ts\` file.
 - Views are not exported with the design system and need no contract or index.
+- To review a view, show its specimen; \`rows\` picks screens by label or id (\`"rows": ["Shipment"]\`). The panes
+  of a review move through the flow together, so before and after always show the same screen.
 
 ## Adding a component or pattern
 
