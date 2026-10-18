@@ -43,6 +43,9 @@ export class Workspace extends EventEmitter<Events> {
   private pendingAlternatives?: { prompt: string; start: string; count: number };
   /** Serialises git operations; concurrent commits would race on the index. */
   private queue: Promise<unknown> = Promise.resolve();
+  /** A hand edit being checked and recorded (see onFsEvent); close() waits for it. */
+  private settling: Promise<void> = Promise.resolve();
+  private closed = false;
   /** True while an agent turn runs; its changes are committed once, when the turn ends. */
   agentActive = false;
 
@@ -76,11 +79,18 @@ export class Workspace extends EventEmitter<Events> {
     this.watcher = watch(this.dir, { recursive: true }, (_event, filename) => this.onFsEvent(filename));
   }
 
-  close(): void {
+  /**
+   * Stops watching and waits for git work already under way, so nothing runs in the folder once this resolves
+   * (the next project, or a test removing the folder, may follow at once).
+   */
+  async close(): Promise<void> {
+    this.closed = true;
     this.watcher?.close();
     clearTimeout(this.reloadTimer);
     clearTimeout(this.settleTimer);
     clearTimeout(this.reviewTimer);
+    await this.settling;
+    await this.queue;
   }
 
   get state(): DesignState {
@@ -330,21 +340,21 @@ export class Workspace extends EventEmitter<Events> {
     if (!name || name.startsWith(".git") || name.startsWith(".basis") || name.includes("node_modules")) return;
     if (name === REVIEW_FILE) {
       clearTimeout(this.reviewTimer);
-      this.reviewTimer = setTimeout(() => void this.readReviewRequest(), 120);
+      this.reviewTimer = setTimeout(() => !this.closed && void this.readReviewRequest(), 120);
       return;
     }
     if (name === DESIGN_FILE) {
       clearTimeout(this.reloadTimer);
-      this.reloadTimer = setTimeout(() => void this.reload(), 60);
+      this.reloadTimer = setTimeout(() => !this.closed && void this.reload(), 60);
     }
     if (name !== DESIGN_FILE && !isSourcePath(name)) return;
     // Hand edits are checked and recorded once things settle; agent turns are handled by endTurn().
     clearTimeout(this.settleTimer);
     this.settleTimer = setTimeout(() => {
-      if (this.agentActive) return;
-      void (async () => {
+      if (this.agentActive || this.closed) return;
+      this.settling = (async () => {
         await this.check();
-        await this.commit("external", {});
+        if (!this.closed) await this.commit("external", {});
       })();
     }, 900);
   }

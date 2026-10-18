@@ -19,7 +19,7 @@ const open: Workspace[] = [];
 const folders: string[] = [];
 
 afterEach(async () => {
-  for (const workspace of open.splice(0)) workspace.close();
+  for (const workspace of open.splice(0)) await workspace.close();
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
 });
 
@@ -118,7 +118,7 @@ describe("history", () => {
       encoding: "utf8",
     });
     const untouched = await folder();
-    (await start(untouched)).close();
+    await (await start(untouched)).close();
     await writeFile(path.join(untouched, "components", "specimen.ts"), earlier);
     // An older workspace has the earlier format in its history too.
     git(untouched, ["add", "-A"]);
@@ -128,7 +128,7 @@ describe("history", () => {
     assert.equal(updated.entries.at(-1)?.label, "Basis added the newest specimen format");
 
     const changed = await folder();
-    (await start(changed)).close();
+    await (await start(changed)).close();
     await writeFile(path.join(changed, "components", "specimen.ts"), `${earlier}\n// my own helper\n`);
     await start(changed);
     assert.doesNotMatch(await readFile(path.join(changed, "components", "specimen.ts"), "utf8"), /kind: "states"/);
@@ -136,7 +136,7 @@ describe("history", () => {
 
   test("an older workspace gets the files Basis added since", async () => {
     const dir = await folder();
-    (await start(dir)).close();
+    await (await start(dir)).close();
     // A workspace from before contracts.ts existed: the file is not in its history either.
     git(dir, ["rm", "-q", "components/contracts.ts"]);
     git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
@@ -148,7 +148,7 @@ describe("history", () => {
 
   test("a workspace a newer Basis has opened is refused, and left as it was", async () => {
     const dir = await folder();
-    (await start(dir)).close();
+    await (await start(dir)).close();
     const format = path.join(dir, ".basis", "format.json");
     await writeFile(format, JSON.stringify({ format: WORKSPACE_FORMAT + 1 }));
     await assert.rejects(start(dir), /newer version of Basis/);
@@ -159,7 +159,7 @@ describe("history", () => {
 describe("pattern contracts", () => {
   test("an older workspace with patterns gets patterns/contracts.ts", async () => {
     const dir = await folder();
-    (await start(dir)).close();
+    await (await start(dir)).close();
     git(dir, ["rm", "-q", "patterns/contracts.ts"]);
     git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
     const workspace = await start(dir);
@@ -170,7 +170,7 @@ describe("pattern contracts", () => {
 
   test("an older workspace gets the starter patterns added since, with their exports", async () => {
     const dir = await folder();
-    (await start(dir)).close();
+    await (await start(dir)).close();
     const index = path.join(dir, "patterns", "index.ts");
     for (const name of ["Composer", "Chat"]) {
       git(dir, ["rm", "-q", `patterns/${name}.tsx`, `patterns/${name}.module.css`, `patterns/${name}.specimen.tsx`]);
@@ -186,7 +186,7 @@ describe("pattern contracts", () => {
     }
     assert.equal(workspace.entries.at(-1)?.label, "Basis added the Composer and Chat patterns");
     // A workspace that has them is left alone.
-    workspace.close();
+    await workspace.close();
     const entries = (await start(dir)).entries.length;
     assert.equal(entries, workspace.entries.length);
   });
@@ -195,7 +195,7 @@ describe("pattern contracts", () => {
 describe("views", () => {
   test("an older workspace without views gets the starter view", async () => {
     const dir = await folder();
-    (await start(dir)).close();
+    await (await start(dir)).close();
     git(dir, ["rm", "-rq", "views"]);
     git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
     const workspace = await start(dir);
@@ -279,7 +279,7 @@ describe("reviews", () => {
       await openReview(dir);
       await setToken(dir, "#111111");
     });
-    first.close();
+    await first.close();
     await setToken(dir, "#333333");
     const workspace = await start(dir);
     assert.equal(workspace.review?.title, "Softer primary");

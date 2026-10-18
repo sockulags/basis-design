@@ -143,7 +143,7 @@ export class OpenProject {
     this.workspace.removeAllListeners();
     this.agent.removeAllListeners();
     await this.agent.stop();
-    this.workspace.close();
+    await this.workspace.close();
     await this.previewVite.close();
     this.previewServer.closeAllConnections();
     await new Promise<void>((resolve) => this.previewServer.close(() => resolve()));
