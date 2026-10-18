@@ -142,6 +142,50 @@
   min-width: 0;
 }
 
+/* A view's flow: the strip of screens, then the current screen at full width. */
+.flow {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.flowStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.flowStep {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.flowStep[aria-pressed="true"] {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
+.flowIndex {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.flowScreen {
+  min-height: 420px;
+  padding: var(--space-6);
+  border: var(--border-thin) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
+}
+
 /* Widths and themes: each copy of a block in a frame of its own. The frame is a size container, so a
    pattern's @container rules respond to the frame's width the way they would to a column of that width. */
 .frames {

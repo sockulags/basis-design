@@ -74,7 +74,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ### Views
 
-- [ ] **Views page.** A third page, `views/`, for whole screens. A view file defines a flow of screens; each
+- [x] **Views page.** A third page, `views/`, for whole screens. A view file defines a flow of screens; each
       screen renders full width and gets a `go(screenId)` prop so buttons and links move through the flow. The
       gallery shows one screen at a time with a strip to jump between them, and Show at widths apply. Starter
       template: one small example view built from the starter patterns. Views are not part of the export.
@@ -95,6 +95,12 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Views reuse the specimen format with a new `flow` block (screens with `go(screen, data)`), so the
+  glob, reviews, widths and the accessibility check work for them unchanged. `views/` is a third page and source
+  folder (agent-editable, type-checked, seeded into older workspaces), left out of the starter kit. The starter
+  view is a team-members flow (list, member, invite). The specimen template changed again, so the previous
+  version's hash went into `EARLIER_SPECIMEN_FORMATS`, and the migration note now reads "the newest specimen
+  format". The sidebar offers no New view yet (next step).
 - 2026-10-18: Repo context: each turn names the repo and points at product.md when it exists (or asks the agent
   to start it); the brief's "A linked product repo" section covers read-only use, keeping product.md current,
   demo content in the product's language and following the repo's structure for existing features. In a fresh

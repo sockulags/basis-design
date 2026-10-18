@@ -18,6 +18,7 @@ interface SidebarProps {
 export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggleCollapsed, onCreate }: SidebarProps) {
   const pages = buildPages(sections).filter((item) => item.id === page);
   const { kind } = pageById(page);
+  const canCreate = kind !== "view";
   return (
     <nav className={styles.sidebar} data-collapsed={collapsed || undefined} aria-label="Preview sections">
       <div className={styles.scroll}>
@@ -50,18 +51,20 @@ export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggl
             ))}
           </div>
         ))}
-        <button
-          type="button"
-          className={styles.create}
-          onClick={onCreate}
-          title={collapsed ? `New ${kind}` : undefined}
-          aria-label={collapsed ? `New ${kind}` : undefined}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden>
-            <path d="M8 3.5v9M3.5 8h9" />
-          </svg>
-          <span className={styles.label}>New {kind}</span>
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            className={styles.create}
+            onClick={onCreate}
+            title={collapsed ? `New ${kind}` : undefined}
+            aria-label={collapsed ? `New ${kind}` : undefined}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path d="M8 3.5v9M3.5 8h9" />
+            </svg>
+            <span className={styles.label}>New {kind}</span>
+          </button>
+        )}
       </div>
       <button
         type="button"

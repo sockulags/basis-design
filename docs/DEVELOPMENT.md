@@ -61,7 +61,8 @@ component source, patterns and the gallery specimens.
   (foundations and specimen sections, or the review), `specimens.tsx` (glob and validation of
   `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed"),
   `progressive.ts` (rendering large pages in steps).
-- `template/components` and `template/patterns`: starter source with specimens; `template/contract-check.ts`
+- `template/components`, `template/patterns` and `template/views`: starter source with specimens (a view is a
+  specimen with a `flow` block, rendered by `FlowBlock` in `specimens.tsx`); `template/contract-check.ts`
   proves the template satisfies the contracts, for components (`shared/contracts.ts`) and patterns
   (`shared/pattern-contracts.ts`, generic over the workspace's `IconName`, since icon names are the
   workspace's own and a contract may only import from react).

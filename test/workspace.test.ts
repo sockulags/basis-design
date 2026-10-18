@@ -64,6 +64,7 @@ describe("history", () => {
     assert.ok(existsSync(path.join(dir, "components", "Button.tsx")));
     assert.ok(existsSync(path.join(dir, "patterns", "Navbar.tsx")));
     assert.ok(existsSync(path.join(dir, "components", "contracts.ts")));
+    assert.ok(existsSync(path.join(dir, "views", "TeamMembers.specimen.tsx")));
     assert.deepEqual(
       workspace.entries.map((entry) => entry.source),
       ["init"],
@@ -101,7 +102,7 @@ describe("history", () => {
     git(untouched, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older format"]);
     const updated = await start(untouched);
     assert.match(await readFile(path.join(untouched, "components", "specimen.ts"), "utf8"), /kind: "states"/);
-    assert.equal(updated.entries.at(-1)?.label, "Basis added the states block for specimens");
+    assert.equal(updated.entries.at(-1)?.label, "Basis added the newest specimen format");
 
     const changed = await folder();
     (await start(changed)).close();
@@ -132,6 +133,18 @@ describe("pattern contracts", () => {
     assert.ok(existsSync(path.join(dir, "patterns", "contracts.ts")));
     assert.ok(existsSync(path.join(dir, ".basis", "pattern-contracts.ts")));
     assert.equal(workspace.entries.at(-1)?.label, "Basis added pattern contracts");
+  });
+});
+
+describe("views", () => {
+  test("an older workspace without views gets the starter view", async () => {
+    const dir = await folder();
+    (await start(dir)).close();
+    git(dir, ["rm", "-rq", "views"]);
+    git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
+    const workspace = await start(dir);
+    assert.ok(existsSync(path.join(dir, "views", "TeamMembers.specimen.tsx")));
+    assert.equal(workspace.entries.at(-1)?.label, "Basis added a starter view");
   });
 });
 

@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import type { Design } from "../shared/design.ts";
-import { SOURCE_FOLDERS, type SourceFolder } from "../shared/frame.ts";
+import { PAGES, type SourceFolder } from "../shared/frame.ts";
 import type { ExportFile, ExportWriteResult } from "../shared/protocol.ts";
 import { exportCss, exportJson, exportTailwind } from "../shared/tokens.ts";
 
@@ -107,7 +107,9 @@ async function sourceFiles(workspaceDir: string, folder: SourceFolder): Promise<
 
 /** Everything a new project needs: components, patterns, tokens in three forms, and a README. */
 export async function buildStarterKit(design: Design, workspaceDir: string): Promise<ExportFile[]> {
-  const files = (await Promise.all(SOURCE_FOLDERS.map((folder) => sourceFiles(workspaceDir, folder)))).flat();
+  // Views are prototypes of a product's screens, not part of the design system a project installs.
+  const folders = PAGES.filter((page) => page.kind !== "view").map((page) => page.folder);
+  const files = (await Promise.all(folders.map((folder) => sourceFiles(workspaceDir, folder)))).flat();
   return [
     {
       path: "README.md",

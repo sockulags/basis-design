@@ -18,6 +18,13 @@ export interface RenderProps {
   design: DesignTokens;
 }
 
+/** What each screen of a `flow` block gets: `go` moves to another screen, optionally passing it data. */
+export interface ScreenProps extends RenderProps {
+  go: (screen: string, data?: unknown) => void;
+  /** What the screen that moved here passed along, if anything. */
+  data?: unknown;
+}
+
 export interface CellProps extends RenderProps {
   /** Row label, as given in `rows`. */
   row: string;
@@ -45,7 +52,12 @@ export type SpecimenBlock =
   /** Free content laid out in a wrapping row. */
   | { kind: "row"; title?: string; render: ComponentType<RenderProps> }
   /** Free content, full width. */
-  | { kind: "block"; title?: string; render: ComponentType<RenderProps> };
+  | { kind: "block"; title?: string; render: ComponentType<RenderProps> }
+  /**
+   * Whole screens of one flow, for views: the gallery shows one at a time, full width, with a strip to jump
+   * between them. The first screen shows first; each moves on with `go(id)`.
+   */
+  | { kind: "flow"; title?: string; screens: { id: string; label: string; render: ComponentType<ScreenProps> }[] };
 
 export interface Specimen {
   /** Anchor and sidebar id; defaults to the title in kebab-case. */

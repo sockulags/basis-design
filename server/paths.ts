@@ -9,6 +9,7 @@ export const DESIGN_FILE = "design-system.json";
 export const PRODUCT_FILE = "product.md";
 export const COMPONENTS_DIR = "components";
 export const PATTERNS_DIR = "patterns";
+export const VIEWS_DIR = "views";
 
 /** Folders of agent-owned source, one per gallery page: base components, patterns composed from them. */
 export const SOURCE_DIRS: string[] = SOURCE_FOLDERS;

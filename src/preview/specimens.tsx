@@ -1,8 +1,8 @@
-import { createElement, Fragment, type ComponentType, type FormEvent } from "react";
+import { createElement, Fragment, useCallback, useState, type ComponentType, type FormEvent } from "react";
 import type { Design } from "../../shared/design.ts";
 import { PAGES, type PageId } from "../../shared/frame.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
-import { Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
+import { Flow, Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
 import galleryStyles from "./Gallery.module.css";
 import { CHECKED } from "./a11y.ts";
 
@@ -31,7 +31,7 @@ export interface SpecimenProblem {
   message: string;
 }
 
-const KINDS = new Set(["matrix", "grid", "states", "row", "block"]);
+const KINDS = new Set(["matrix", "grid", "states", "row", "block", "flow"]);
 
 function slug(text: string): string {
   return text
@@ -49,7 +49,7 @@ function blockProblem(block: unknown): string | null {
   if (!block || typeof block !== "object") return "a block is not an object";
   const b = block as Record<string, unknown>;
   if (!KINDS.has(b.kind as string))
-    return `unknown block kind "${String(b.kind)}" (use matrix, grid, states, row or block)`;
+    return `unknown block kind "${String(b.kind)}" (use matrix, grid, states, row, block or flow)`;
   if (b.kind === "matrix") {
     if (!Array.isArray(b.rows) || !Array.isArray(b.columns)) return "a matrix block needs rows and columns arrays";
     if (!isComponent(b.render)) return "a matrix block needs a render component";
@@ -62,6 +62,12 @@ function blockProblem(block: unknown): string | null {
     if (!Array.isArray(b.states)) return "a states block needs a states array";
     if (b.states.some((state: unknown) => !state || !isComponent((state as { render?: unknown }).render))) {
       return "every state needs a label and a render component";
+    }
+  } else if (b.kind === "flow") {
+    if (!Array.isArray(b.screens) || b.screens.length === 0) return "a flow block needs a screens array";
+    const screens = b.screens as { id?: unknown; render?: unknown }[];
+    if (screens.some((screen) => !screen || typeof screen.id !== "string" || !isComponent(screen.render))) {
+      return "every screen needs an id, a label and a render component";
     }
   } else if (!isComponent(b.render)) {
     return `a ${String(b.kind)} block needs a render component`;
@@ -212,7 +218,28 @@ function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
       return <Row>{createElement(block.render, { design })}</Row>;
     case "block":
       return <>{createElement(block.render, { design })}</>;
+    case "flow":
+      return <FlowBlock screens={block.screens} design={design} />;
   }
+}
+
+/** One screen of a flow at a time; screens move on with `go`, and the strip jumps anywhere. */
+function FlowBlock({
+  screens,
+  design,
+}: {
+  screens: Extract<SpecimenBlock, { kind: "flow" }>["screens"];
+  design: Design;
+}) {
+  const [current, setCurrent] = useState<{ id: string; data?: unknown }>({ id: screens[0]?.id ?? "" });
+  const screen = screens.find((item) => item.id === current.id) ?? screens[0];
+  const go = useCallback((id: string, data?: unknown) => setCurrent({ id, data }), []);
+  if (!screen) return null;
+  return (
+    <Flow screens={screens.map(({ id, label }) => ({ id, label }))} current={screen.id} onSelect={(id) => go(id)}>
+      {createElement(screen.render, { design, go, data: current.data })}
+    </Flow>
+  );
 }
 
 export type FrameWidth = "fit" | "mobile" | "tablet" | "desktop";

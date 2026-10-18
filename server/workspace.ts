@@ -19,7 +19,7 @@ type Events = { design: [DesignState]; history: [HistoryEntry[]]; review: [Revie
 
 /**
  * The folder the agent works in: design-system.json plus the source in
- * components/ and patterns/. Validates and type-checks every change, and
+ * components/, patterns/ and views/. Validates and type-checks every change, and
  * records it as git history (or as an iteration of the open review), so undo
  * covers tokens and code alike. It coordinates the parts: setup, history,
  * reviews and snapshots each live in their own module.
@@ -103,7 +103,7 @@ export class Workspace extends EventEmitter<Events> {
     return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
   }
 
-  /** Files the agent may change: the design file, review.json, product.md and anything under components/ or patterns/. */
+  /** Files the agent may change: the design file, review.json, product.md and anything in the source folders. */
   isEditable(target: string): boolean {
     if (!this.isInside(target)) return false;
     const relative = path.relative(this.dir, path.resolve(target)).split(path.sep).join("/");

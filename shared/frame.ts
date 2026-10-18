@@ -18,6 +18,7 @@ import type { ReviewTarget } from "./review.ts";
 export const PAGES = [
   { id: "system", label: "Design system", folder: "components", kind: "component" },
   { id: "patterns", label: "Patterns", folder: "patterns", kind: "pattern" },
+  { id: "views", label: "Views", folder: "views", kind: "view" },
 ] as const;
 export type PageId = (typeof PAGES)[number]["id"];
 export type SourceFolder = (typeof PAGES)[number]["folder"];

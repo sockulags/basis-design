@@ -197,6 +197,8 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
         .slice(0, 2000);
       if (!isPageId(message.page) || !isComponentName(name)) return;
       const page = pageById(message.page);
+      // New view gets its own guided turn in the next roadmap step.
+      if (page.kind === "view") return;
       const text = `New ${page.kind}: ${name}${purpose ? `\n\n${purpose}` : ""}`;
       await agent.prompt(text, { instruction: createInstruction(page.kind, page.folder, name, purpose) });
       return;

@@ -15,7 +15,7 @@ The result becomes the starting point of real projects, so treat the components 
 
 ## What you edit
 
-- \`design-system.json\` (tokens) and anything under \`components/\` or \`patterns/\` (React + CSS Modules). Nothing else: not
+- \`design-system.json\` (tokens) and anything under \`components/\`, \`patterns/\` or \`views/\` (React + CSS Modules). Nothing else: not
   AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages.
   \`review.json\` (see Reviews below) and \`product.md\` (what you learned about a linked product repo) are the
   only other files you write.
@@ -102,6 +102,22 @@ The result becomes the starting point of real projects, so treat the components 
 - Make patterns responsive with container queries (\`@container (max-width: 640px) { ... }\`), not \`@media\`.
   The gallery can show every block at mobile, tablet and desktop widths inside a size container, and a pattern
   lives in columns of any width in a real app, so it should respond to the space it gets, not the screen.
+
+## Views: whole screens
+
+- \`views/\` holds views: the screens of one flow of a product (a list, its detail, a form), shown on the
+  gallery's Views page. A view is a specimen file (\`Name.specimen.tsx\`, group by product area) with a \`flow\`
+  block: \`screens\` of \`{ id, label, render }\`, where each render gets \`go(screenId, data?)\` to move on and
+  the \`data\` the previous screen passed. Wire buttons, links and row actions to \`go\` so the flow clicks
+  through; the first screen shows first.
+- Build views only from \`../components/index.ts\` and \`../patterns/index.ts\`, through their contracts. Do not
+  restyle or copy them inside a view: if a screen needs something they lack, extend the component or pattern,
+  or add a pattern. A view's own code is layout and wiring; a small layout style inline or in a
+  \`.module.css\` next to it is fine.
+- Fill views with realistic made-up data, consistent across the screens (the row you open is the one the
+  detail shows), in the product's language when a product repo is linked. Keep sample data in the view file or
+  a \`views/*-data.ts\` file.
+- Views are not exported with the design system and need no contract or index.
 
 ## Adding a component or pattern
 
@@ -269,4 +285,4 @@ export function importInstruction(repo: string): string {
 
 /** Prepended to the first prompt when the agent cannot take an appended system prompt. */
 export const FIRST_PROMPT_PREAMBLE =
-  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json, product.md and files under components/ and patterns/.";
+  "You are working inside Basis. Read AGENTS.md in the current folder first and follow it: you edit only design-system.json, review.json, product.md and files under components/, patterns/ and views/.";

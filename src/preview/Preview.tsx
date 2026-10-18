@@ -18,6 +18,8 @@ import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
 const INTROS: Partial<Record<PageId, string>> = {
   patterns:
     "Larger building blocks composed from the base components: navigation, data, forms and whole layouts. They change with every token and every component edit.",
+  views:
+    "Whole screens of a product's flows, built from the patterns and components. Click through them, or jump to a screen from the strip above it.",
 };
 
 interface PreviewProps {

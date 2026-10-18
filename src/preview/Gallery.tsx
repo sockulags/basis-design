@@ -29,6 +29,42 @@ export function Section({ id, title, description, onAsk, children }: SectionProp
   );
 }
 
+/**
+ * A flow of screens: a strip naming every screen (the current one pressed) above the screen itself, full width
+ * in a frame of its own.
+ */
+export function Flow({
+  screens,
+  current,
+  onSelect,
+  children,
+}: {
+  screens: { id: string; label: string }[];
+  current: string;
+  onSelect: (id: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className={styles.flow}>
+      <div className={styles.flowStrip} role="group" aria-label="Screens">
+        {screens.map((screen, index) => (
+          <button
+            key={screen.id}
+            type="button"
+            className={styles.flowStep}
+            aria-pressed={screen.id === current}
+            onClick={() => onSelect(screen.id)}
+          >
+            <span className={styles.flowIndex}>{index + 1}</span>
+            {screen.label}
+          </button>
+        ))}
+      </div>
+      <div className={styles.flowScreen}>{children}</div>
+    </div>
+  );
+}
+
 export function Group({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
   return (
     <div className={styles.group}>
