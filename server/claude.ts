@@ -34,7 +34,8 @@ export function findClaude(
   if (explicit && isFile(explicit)) return explicit;
 
   const windows = platform === "win32";
-  const join = windows ? path.win32.join : path.posix.join;
+  // Paths are on this machine's file system; `platform` only decides the names and the PATH separator.
+  const join = path.join;
   const pathVar = env.PATH ?? env.Path ?? "";
   const dirs = pathVar.split(windows ? ";" : ":").filter(Boolean);
   for (const dir of dirs) {
