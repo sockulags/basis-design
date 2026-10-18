@@ -83,18 +83,32 @@ export async function openCapturePage(page: Page, url: string, timeout = 60_000)
   await page.waitForSelector(`html[${READY_ATTRIBUTE}]`, { state: "attached", timeout });
 }
 
-/** Opens one shot's page at the shot's size and photographs it; `failed` when what it renders threw. */
+/**
+ * Opens one shot's page at the shot's size and photographs it; `failed` when what it renders threw. A full-page
+ * shot of a page taller than `maxHeight` shows only its top `maxHeight` pixels; `pageHeight` is the whole page's.
+ */
 export async function takeShot(
   page: Page,
   url: string,
   shot: CaptureShot,
   timeout?: number,
-): Promise<{ png: Buffer; failed: boolean }> {
+  maxHeight?: number,
+): Promise<{ png: Buffer; failed: boolean; pageHeight: number }> {
   await page.setViewportSize({ width: shot.width, height: shot.viewportHeight });
   await openCapturePage(page, url, timeout);
-  const failed = await page.evaluate(() => document.documentElement.hasAttribute("data-basis-error"));
-  const png = await page.screenshot({ fullPage: shot.fullPage, animations: "disabled", caret: "hide" });
-  return { png, failed };
+  const { failed, height } = await page.evaluate(() => ({
+    failed: document.documentElement.hasAttribute("data-basis-error"),
+    height: document.documentElement.scrollHeight,
+  }));
+  const pageHeight = shot.fullPage ? Math.max(height, shot.viewportHeight) : shot.viewportHeight;
+  const cut = shot.fullPage && maxHeight !== undefined && pageHeight > maxHeight;
+  const png = await page.screenshot({
+    fullPage: shot.fullPage,
+    ...(cut ? { clip: { x: 0, y: 0, width: shot.width, height: maxHeight } } : {}),
+    animations: "disabled",
+    caret: "hide",
+  });
+  return { png, failed, pageHeight };
 }
 
 /**

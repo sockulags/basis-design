@@ -13,6 +13,7 @@ import {
   type ProjectEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
+import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH } from "./agent-tools.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
@@ -42,6 +43,8 @@ const initialAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as Agen
   : "claude";
 
 const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+/** What the agent's MCP server for Basis' tools sends with every request (server/agent-tools.ts). */
+const toolsSecret = toolSecret();
 
 const projects = new Projects(home);
 // Earlier versions kept their data in Basis' own folder: the project list there (whose projects stay where they
@@ -65,6 +68,7 @@ const projectOptions: ProjectOptions = {
   previewPort,
   chromeOrigins,
   agent: initialAgent,
+  mcpServers: [toolServer(`http://${host}:${port}${TOOLS_PATH}`, toolsSecret)],
   broadcast: (message) => broadcast(message),
 };
 /** A port in use is the start-up failure people meet most (often a Basis already running); say how to get past it. */
@@ -113,6 +117,10 @@ chromeServer.on("request", (req, res) => {
   }
   if (req.url?.startsWith("/api/")) {
     void handleApi(req, res);
+    return;
+  }
+  if (req.url?.startsWith(`${TOOLS_PATH}/`)) {
+    void handleToolRequest(req, res, toolsSecret, () => (switching ? null : current.screenshots));
     return;
   }
   chromeGuard(req, res, () => chromeVite.middlewares(req, res));

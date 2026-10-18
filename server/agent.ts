@@ -20,6 +20,7 @@ import {
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
 import { loadChat, saveChat } from "./chatlog.ts";
 import { PRODUCT_FILE, relativeInside } from "./paths.ts";
+import { basisTool, basisToolTitle } from "./agent-tools.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import { CLAUDE_MISSING, findClaude } from "./claude.ts";
 import type { Workspace } from "./workspace.ts";
@@ -133,6 +134,8 @@ export class AgentHost extends EventEmitter<Events> {
   private needsPreamble = false;
   private openText?: { id: string; kind: "agent" | "thought" };
   private permissions = new Map<string, (optionId: string | null) => void>();
+  /** Tool calls of Basis' own tools, by chat id: updates may come without the tool's name. */
+  private basisCalls = new Map<string, string>();
   private stderrTail: string[] = [];
   private previewErrors: string[] = [];
   /** Findings of the preview's automatic checks, and the ones there were when the current turn started. */
@@ -150,6 +153,8 @@ export class AgentHost extends EventEmitter<Events> {
     agentId: AgentId,
     /** A product repo linked to the project: the agent may read and search it, never write to it. */
     private repo?: string,
+    /** MCP servers every session gets: Basis' own tools (server/agent-tools.ts). */
+    private readonly mcpServers: acp.McpServer[] = [],
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
@@ -550,7 +555,7 @@ ${message}`
   private async openSession(resume = false): Promise<void> {
     const connection = this.connection;
     if (!connection) throw new Error("Agent is not connected");
-    const base = { cwd: this.workspace.dir, mcpServers: [], _meta: SESSION_META };
+    const base = { cwd: this.workspace.dir, mcpServers: this.mcpServers, _meta: SESSION_META };
     const systemPrompt = { mode: "append" as const, content: [{ type: "text" as const, text: AGENT_BRIEF }] };
     const saved = resume ? this.resumable : undefined;
     this.resumable = undefined;
@@ -630,10 +635,12 @@ ${message}`
         return;
       }
       case "tool_call": {
+        const tool = basisTool(update);
+        if (tool) this.basisCalls.set(`tool-${update.toolCallId}`, tool);
         this.push({
           kind: "tool",
           id: `tool-${update.toolCallId}`,
-          title: update.title,
+          title: tool ? basisToolTitle(tool, update.rawInput) : update.title,
           toolKind: update.kind ?? "other",
           status: update.status ?? "pending",
         });
@@ -643,9 +650,15 @@ ${message}`
         const id = `tool-${update.toolCallId}`;
         const existing = this.transcript.find((item) => item.id === id);
         if (existing?.kind !== "tool") return;
+        const tool = basisTool(update) ?? this.basisCalls.get(id);
+        const title = tool
+          ? update.rawInput !== undefined
+            ? basisToolTitle(tool, update.rawInput)
+            : existing.title
+          : (update.title ?? existing.title);
         this.push({
           ...existing,
-          title: update.title ?? existing.title,
+          title,
           toolKind: update.kind ?? existing.toolKind,
           status: (update.status as ToolStatus | null | undefined) ?? existing.status,
         });
@@ -678,7 +691,9 @@ ${message}`
       call.kind === "edit" ? this.workspace.isEditable(p) : this.workspace.isInside(p) || this.inRepo(p);
     const autoAllow = call.kind != null && SAFE_KINDS.has(call.kind) && paths.length > 0 && paths.every(allowed);
     const allowOnce = options.find((option) => option.kind === "allow_once");
-    if (autoAllow && allowOnce) return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
+    // Basis' own tools only look at the design, so they need no approval.
+    const ownTool = basisTool(call) ?? this.basisCalls.get(`tool-${call.toolCallId}`);
+    if ((autoAllow || ownTool) && allowOnce) return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
 
     const id = this.nextId("permission");
     const title = call.title ?? "The agent wants to run a tool";

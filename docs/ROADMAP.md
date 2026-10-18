@@ -66,7 +66,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       screen from the live preview server at given widths and themes, keeping one browser open and closing it after
       a minute idle. Done when: a script against a throwaway instance captures `Button`, a pattern and a view
       screen in both themes, and a unit test covers the parts that do not need a browser.
-- [ ] **A screenshot tool for the agent.** Basis gives each session its own MCP server (`mcpServers` in
+- [x] **A screenshot tool for the agent.** Basis gives each session its own MCP server (`mcpServers` in
       `server/agent.ts`, empty today) with a `screenshot` tool: `{ target, screen?, widths?, theme? }`, where
       target is a specimen id or a view id, returning PNGs (at most four per call, tall pages cut at a fixed height
       and said so). Decision: stdio transport, since ACP requires every agent to support stdio MCP servers. The
@@ -171,6 +171,34 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: A screenshot tool for the agent. Every session gets an MCP server named `basis` over stdio:
+  `server/agent-tools-mcp.mjs`, run with Basis' own Node, which only speaks MCP and forwards `tools/list` and
+  `tools/call` to `/agent-tools/` on the chrome server with a secret made at each start. The tool's definition and
+  all the work live in `server/agent-tools.ts`, so the script never changes when a tool does. The tool takes
+  `{ target, screen?, widths?, theme? }`: `target` is a specimen's or view's id or title (review.json names them by
+  title, so the agent already knows those) and a screen goes by id or label. A view photographs the bare screen,
+  as the kit does, and the text lists its other screens. Defaults are the narrowest width the target is shown at
+  (375 for a specimen, the flow's narrowest for a view) in both themes. More than four images is refused with what
+  to leave out rather than cut short, so the agent chooses what it misses. Full pages are cut at 2000 px (a
+  Playwright clip, so nothing is decoded) and the text gives the page's whole height; a scroll offset was left
+  out, since a wider width shows more of a tall specimen. Each image is preceded by a line naming its width and
+  theme. Basis approves its own tool: Claude Code titles it `mcp__basis__screenshot`; Codex titles the call
+  `mcp.basis.screenshot` but sends an approval without a title, only the call's id, so AgentHost remembers the
+  ids of Basis' calls. The chat shows "Screenshot of <target>". The brief has a "Seeing your work" section: look
+  after every visual change and before a review, at the narrowest width in both themes, and say what was looked
+  at. Verified on a throwaway instance with a planted fault (every button capped at 84px with hidden overflow) and
+  the prompt "the buttons look broken on phones": Claude found the tool through Claude Code's tool search, read the
+  stylesheet, photographed Buttons at 375 in light, named the clipped labels "Save changes" and "Delete project"
+  (which only the image shows; it never opened the specimen), removed the rule, photographed both themes and
+  opened a review, with no permission prompt. Codex, after the approval fix, photographed at 320 px in both
+  themes, wrote "the 320px previews confirm 'Save changes' and 'Delete project' are clipped", fixed it, and looked
+  again at 320 and 1440. A third Claude turn on the starter view's invite screen looked, changed it, then looked at
+  three screens, and its reply raised what it saw: the member table runs off the right edge on a phone. It also
+  said the tool cannot photograph a state reached by clicking (an error after Send). Two images take about 0.75 s
+  with the browser warm. Found on the way: Codex reads the user's own `~/.codex/skills/` during a design turn
+  (noted under Known limits in DEVELOPMENT.md), and the browser keeper's timing test failed on one CI runner, so
+  its margins are wider now.
 
 - 2026-10-18: Capture any specimen. `capture.html?specimen=<id>&theme=` renders a specimen's blocks with the
   gallery's own block components and the spacing of a gallery section, without the header or the Refine button,

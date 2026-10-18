@@ -22,13 +22,28 @@ import {
  * stays open between calls, since starting one takes about a second, and closes after a minute without any.
  */
 
-/** What to photograph: a specimen by id (a component's, a pattern's or a view's), or one screen of a view. */
-export type ShotTarget = { specimen: string } | { view: string; screen?: string };
+/**
+ * What to photograph: a specimen by id (a component's, a pattern's or a view's), one screen of a view, or an id
+ * that may be either (`{ id }`): a view's id photographs a screen of it, any other id a specimen.
+ */
+export type ShotTarget = { specimen: string } | { view: string; screen?: string } | { id: string; screen?: string };
+
+export interface ShotOptions extends CaptureOptions {
+  /** Without given widths, only the narrowest of the widths the target would get. */
+  narrowest?: boolean;
+  /** At most this many shots; a plan with more is refused, saying what to leave out. */
+  maxShots?: number;
+  /** Full-page shots of pages taller than this are cut at it (`Screenshot.cut`). */
+  maxHeight?: number;
+}
 
 export interface Screenshot extends CaptureShot {
   png: Buffer;
-  /** The image's height in pixels: the page's height for full-page shots. */
+  /** The image's height in pixels: the page's height for full-page shots, unless it was cut. */
   imageHeight: number;
+  /** The page's whole height, which is more than the image's when it was cut at `maxHeight`. */
+  pageHeight: number;
+  cut: boolean;
   /** Set when what the page renders threw. */
   failed: boolean;
 }
@@ -37,6 +52,8 @@ export interface Screenshot extends CaptureShot {
 export interface CapturePlan {
   query: Record<string, string>;
   shots: CaptureShot[];
+  /** For a view screen: the view's screens, so a caller can say which others there are. */
+  screens?: { id: string; label: string }[];
 }
 
 /**
@@ -44,19 +61,54 @@ export interface CapturePlan {
  * of a flow without capture options; a view screen starts from what its flow block asks for. Given widths,
  * themes or height replace those. Throws with the ids there are when the target is not among them.
  */
-export function planCapture(list: CaptureList, target: ShotTarget, options: CaptureOptions = {}): CapturePlan {
+export function planCapture(list: CaptureList, target: ShotTarget, options: ShotOptions = {}): CapturePlan {
   const given: CaptureOptions = {
     ...(options.widths?.length ? { widths: options.widths } : {}),
     ...(options.themes?.length ? { themes: options.themes } : {}),
     ...(options.height !== undefined ? { height: options.height } : {}),
   };
+  const limit = (plan: CapturePlan): CapturePlan => {
+    let shots = plan.shots;
+    if (options.narrowest && !given.widths?.length) {
+      const narrowest = Math.min(...shots.map((shot) => shot.width));
+      shots = shots.filter((shot) => shot.width === narrowest);
+    }
+    const max = options.maxShots;
+    if (max !== undefined && shots.length > max) {
+      const widths = new Set(shots.map((shot) => shot.width)).size;
+      const themes = new Set(shots.map((shot) => shot.theme)).size;
+      throw new Error(
+        `That is ${shots.length} images (${widths} widths in ${themes} themes); at most ${max} per call. Ask for fewer widths or one theme, and look at the rest in another call.`,
+      );
+    }
+    return { ...plan, shots };
+  };
+  if ("id" in target) {
+    // Titles and labels work too, as review.json names specimens and screens by them.
+    const named = (wanted: string) => (item: { id: string; title?: string; label?: string }) =>
+      item.id === wanted || [item.title, item.label].some((name) => name?.toLowerCase() === wanted.toLowerCase());
+    const view = list.views.find(named(target.id));
+    if (view) {
+      const screen = target.screen ? view.screens.find(named(target.screen)) : undefined;
+      return planCapture(list, { view: view.id, screen: screen?.id ?? target.screen }, options);
+    }
+    const specimen = list.specimens.find(named(target.id));
+    if (!specimen) {
+      const ids = (items: { id: string }[]) => items.map((item) => item.id).join(", ") || "none";
+      throw new Error(
+        `No specimen or view "${target.id}". Specimens: ${ids(list.specimens)}. Views: ${ids(list.views)}.`,
+      );
+    }
+    if (target.screen) throw new Error(`"${specimen.id}" is not a view, so it has no screens.`);
+    return planCapture(list, { specimen: specimen.id }, options);
+  }
   if ("specimen" in target) {
     if (!list.specimens.some((specimen) => specimen.id === target.specimen)) {
       throw new Error(
         `No specimen "${target.specimen}". There are: ${list.specimens.map((specimen) => specimen.id).join(", ") || "none"}.`,
       );
     }
-    return { query: { specimen: target.specimen }, shots: captureShots(given) };
+    return limit({ query: { specimen: target.specimen }, shots: captureShots(given) });
   }
   const view = list.views.find((item) => item.id === target.view);
   if (!view) {
@@ -74,7 +126,11 @@ export function planCapture(list: CaptureList, target: ShotTarget, options: Capt
     themes: [...new Set(screen.shots.map((shot) => shot.theme))],
     height: !first || first.fullPage ? "full" : first.viewportHeight,
   };
-  return { query: { view: view.id, screen: screen.id }, shots: captureShots({ ...asked, ...given }) };
+  return limit({
+    query: { view: view.id, screen: screen.id },
+    shots: captureShots({ ...asked, ...given }),
+    screens: view.screens.map(({ id, label }) => ({ id, label })),
+  });
 }
 
 /** The capture page's URL for a plan's query in one theme. */
@@ -195,19 +251,20 @@ export class Screenshots {
   }
 
   /** Photographs a target at each width and theme (see planCapture): each theme in turn, narrowest width first. */
-  capture(target: ShotTarget, options: CaptureOptions = {}): Promise<Screenshot[]> {
+  capture(target: ShotTarget, options: ShotOptions = {}): Promise<{ plan: CapturePlan; shots: Screenshot[] }> {
     return this.browser.use(async ({ context }) => {
       const page = await context.newPage();
       try {
-        const { query, shots } = planCapture(await this.readList(page), target, options);
-        const taken: Screenshot[] = [];
-        for (const shot of shots) {
-          const { png, failed } = await this.settled(() =>
-            takeShot(page, captureUrl(this.pageUrl, query, shot.theme), shot, this.timeoutMs),
+        const plan = planCapture(await this.readList(page), target, options);
+        const shots: Screenshot[] = [];
+        for (const shot of plan.shots) {
+          const { png, failed, pageHeight } = await this.settled(() =>
+            takeShot(page, captureUrl(this.pageUrl, plan.query, shot.theme), shot, this.timeoutMs, options.maxHeight),
           );
-          taken.push({ ...shot, png, imageHeight: pngHeight(png), failed });
+          const imageHeight = pngHeight(png);
+          shots.push({ ...shot, png, imageHeight, pageHeight, cut: imageHeight < pageHeight, failed });
         }
-        return taken;
+        return { plan, shots };
       } finally {
         await page.close();
       }

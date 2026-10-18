@@ -1,5 +1,6 @@
 import http from "node:http";
 import path from "node:path";
+import type * as acp from "@agentclientprotocol/sdk";
 import { createServer as createVite, type Connect, type ViteDevServer } from "vite";
 import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
@@ -16,6 +17,8 @@ export interface ProjectOptions {
   /** Origins allowed to frame the preview (the chrome). */
   chromeOrigins: string[];
   agent: AgentId;
+  /** MCP servers every agent session gets (Basis' own tools). */
+  mcpServers: acp.McpServer[];
   /** Receives everything the project's workspace and agent report, for the bridge to broadcast. */
   broadcast: (message: ServerMessage) => void;
 }
@@ -68,7 +71,7 @@ export class OpenProject {
     const { root, broadcast } = options;
     const workspace = new Workspace(entry.dir);
     await workspace.init();
-    const agent = new AgentHost(workspace, options.agent, entry.repo);
+    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers);
     await agent.restore();
 
     workspace.on("design", (design) => broadcast({ type: "design", design }));

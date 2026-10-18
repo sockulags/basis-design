@@ -1,3 +1,5 @@
+import { MAX_SCREENSHOTS, MAX_SHOT_HEIGHT } from "./agent-tools.ts";
+
 /**
  * Instructions for the design agent. Written into the workspace as AGENTS.md
  * (read by Codex and most ACP agents) and imported from CLAUDE.md, and sent
@@ -247,6 +249,19 @@ A project may design for a real product whose repo is linked in Basis; when it i
 - When the user asks about a feature or screen the product already has, look at how the repo builds it (its
   pages, routes and components) and follow its structure and terms, expressed with this design system's
   components and patterns.
+
+## Seeing your work
+
+Basis gives you a \`screenshot\` tool (its MCP server \`basis\`) that photographs the live design from what is saved:
+a specimen alone, as its gallery section shows it (\`target\`: its id or title, such as \`buttons\` or \`Navbar\`), or
+one screen of a view (\`target\`: the view, \`screen\`: the screen's id or label). By default it takes the narrowest
+width the target is shown at, in light and dark; \`widths\` and \`theme\` change that, up to ${MAX_SCREENSHOTS} images a call.
+
+- Look after every visual change, and before you open or update a review: at the narrowest width, in both themes.
+- Check what the code cannot tell you: text that wraps, clips or overflows, controls that crowd or misalign,
+  spacing that is uneven, a state or colour that reads wrong in one theme. Fix what you see, then look again.
+- Look at wider widths too when the change is about layout. Tall pages are cut at ${MAX_SHOT_HEIGHT} px and the result says so.
+- In your reply, say what you looked at and what you fixed after looking.
 
 ## How to work
 

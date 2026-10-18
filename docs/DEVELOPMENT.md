@@ -54,6 +54,15 @@ component source, patterns and the gallery specimens.
     `read-only`) after `session/new` and `session/resume`. Codex's other modes edit the workspace unasked.
   - The Codex adapter is `@agentclientprotocol/codex-acp` at a pinned version (`CODEX_ACP`); the old
     `@zed-industries/codex-acp` stopped in June 2026 and fails on newer models.
+  - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` tool. The agent
+    starts `server/agent-tools-mcp.mjs` with Node over stdio (the transport every ACP agent supports); the script
+    has no dependencies and only speaks MCP's JSON-RPC, forwarding `tools/list` and `tools/call` to the chrome
+    server at `/agent-tools/` on 127.0.0.1 with a secret made at each start (in the script's env), so no other
+    program or page can use the route. The tool photographs through the open project's `screenshots`: by default
+    the narrowest width in both themes, at most four images, full pages cut at 2000 px with the cut said in the
+    text. `onPermission` approves Basis' own tools without asking: Claude Code titles them `mcp__basis__<tool>`,
+    Codex `mcp.basis.<tool>`, and Codex's approval request carries only the id of the tool call it reported
+    before, so `AgentHost` remembers those ids. The chat shows such a call as "Screenshot of <target>".
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,
     render errors reported by the preview) and sends them back to the agent, at most twice. Every open tab
     reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
@@ -102,10 +111,12 @@ component source, patterns and the gallery specimens.
     device scale 1 with reduced motion (`CAPTURE_CONTEXT`, `takeShot`); two different images mark the shot
     unstable.
   - `server/screenshots.ts` takes screenshots of the live design for Basis itself, from the open project's
-    preview server (`OpenProject.screenshots`): `capture({ specimen } | { view, screen? }, { widths, themes,
-    height })` returns PNG buffers, `list()` what there is. A specimen gets the defaults of a flow without
-    `capture`, a view screen what its flow asks for, and given options replace them. It uses the kit's capture
-    page and render settings, so its images look like the kit's. One browser and context stay open between calls
+    preview server (`OpenProject.screenshots`): `capture({ specimen } | { view, screen? } | { id, screen? },
+    { widths, themes, height })` returns the plan and the PNG buffers, `list()` what there is. `{ id }` takes a
+    view's or a specimen's id or title. A specimen gets the defaults of a flow without `capture`, a view screen
+    what its flow asks for, and given options replace them; the screenshot tool's limits (only the narrowest
+    width, a cap on images, a cut height) are options too. It uses the kit's capture page and render settings,
+    so its images look like the kit's. One browser and context stay open between calls
     (`Keeper`) and close a minute after the last one, or when the project closes.
   - `server/verify.ts` builds `capture.html` with Vite into a temporary folder (the same aliases as the preview,
     `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
@@ -386,7 +397,9 @@ comparison of the whole gallery between two history entries, the icon, and publi
   through CSS variables, is not found by `reach.ts`; its section is then left out of "Also changed".
 - **Codex** runs read-only commands in its sandbox without asking, even in read-only mode (seen with
   `Get-Content` in the workspace). Such reads do not reach Basis' approval as Claude Code's do; whether its
-  sandbox lets them read outside the workspace has not been tested.
+  sandbox lets them read outside the workspace has not been tested. It also loads the user's own Codex setup:
+  on 2026-10-19 it read skills from `~/.codex/skills/` during a design turn. Claude Code is kept from the user's
+  setup by `settingSources: []`; Codex has no such switch in Basis yet.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.
