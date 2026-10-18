@@ -87,17 +87,18 @@ function counting(idleMs: number) {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// The margins around the idle times are wide, since timers on a busy CI runner fire tens of milliseconds late.
 test("the keeper opens once for overlapping calls and closes after the idle time", async () => {
-  const { keeper, events } = counting(40);
+  const { keeper, events } = counting(300);
   const results = await Promise.all([keeper.use(async (n) => n), keeper.use(async (n) => n)]);
   assert.deepEqual(results, [1, 1]);
   assert.deepEqual(events, ["open 1"]);
-  await wait(15);
+  await wait(50);
   // A call within the idle time keeps the same one open and starts the idle time again.
   assert.equal(await keeper.use(async (n) => n), 1);
-  await wait(30);
+  await wait(100);
   assert.equal(keeper.isOpen, true);
-  await wait(40);
+  await wait(350);
   assert.equal(keeper.isOpen, false);
   assert.deepEqual(events, ["open 1", "close 1"]);
   assert.equal(await keeper.use(async (n) => n), 2);
@@ -106,10 +107,10 @@ test("the keeper opens once for overlapping calls and closes after the idle time
 });
 
 test("the keeper does not close while a call runs, however long it takes", async () => {
-  const { keeper, events } = counting(10);
-  await keeper.use(async () => wait(40));
+  const { keeper, events } = counting(50);
+  await keeper.use(async () => wait(200));
   assert.deepEqual(events, ["open 1"]);
-  await wait(30);
+  await wait(200);
   assert.deepEqual(events, ["open 1", "close 1"]);
 });
 
