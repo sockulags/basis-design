@@ -1,4 +1,4 @@
-# Roadmap: product repos, views and quality checks
+# Roadmap
 
 The plan a `/loop` works through, one step per round. Each round picks the first unchecked step, builds it,
 verifies it, ticks it here, and commits and pushes. Decisions made along the way go in the log at the end, so
@@ -6,99 +6,178 @@ the next round (and Lucas) can see why.
 
 ## Goal
 
-Basis becomes a quick way into design and prototyping for the products Lucas works on: link a product repo,
-let the agent bring in its design system, and build views of a feature from the patterns, with checks that
-keep quality up while the agent works alone.
+Round 2 (from 2026-10-18) has three aims, in this order of priority:
 
-## Decisions from Lucas (2026-10-18)
+1. **Better work from the agent.** The agent sees what it built, and the fix loop catches layout faults, unstable
+   views and values outside the scales, the way it already catches contrast and accessibility.
+2. **More the service can do.** The verification kit tells the implementing agent what to build as well as how it
+   must look, the design can be shared as a static site, versions can be compared visually, the product's running
+   pages inform the import, and tokens can go back into the product repo.
+3. **Packaging.** Several starter templates, templates from a folder, git or npm, a Tailwind template, and
+   headless commands for CI. Evals measure whether changes to the brief make the agent better.
 
-- **Linking:** a project points at a product repo. The agent may read it, never write to it; the Basis
-  workspace stays in its own folder under `BASIS_HOME`. Syncing changes forward into the repo is a later,
-  separate step and not part of this plan.
-- **Bringing in the design system:** tokens go into `design-system.json`, and the components and patterns are
-  restyled to resemble the repo's. An inventory of the repo's own components is kept as reference for the agent.
-- **Views:** a **New view** button, like New component: describe the feature or paste the ticket text. The
-  agent builds the screens from the workspace's patterns with realistic made-up data, linked into a clickable
-  flow.
-- **Quality checks** in the fix loop are a given.
-- **Autonomy:** commit and push each verified step, and make the decisions yourself while the app is early.
-  Polish comes later.
+## Decisions from Lucas
+
+- 2026-10-18, round 1: a project links a product repo the agent reads and never writes; tokens go into
+  `design-system.json` and the components are restyled to resemble the repo's; views are built from the patterns;
+  quality checks run in the fix loop; commit and push each verified step and make decisions while the app is early.
+- 2026-10-18, round 2: work through every step below without asking. Where a decision is needed, take it and log
+  it. Commit, push and run real agent turns as needed. Lucas publishes to npm himself; never run `npm publish`.
 
 ## How each round works
 
-1. Read this file and `docs/DEVELOPMENT.md`; take the first unchecked step.
-2. Build it with narrow diffs that match the surrounding code. Add tests for server and parsing logic.
-3. `npx prettier --write src server test shared template` and `npm run check` must pass.
-4. Verify in the browser on a throwaway instance, never on Lucas' workspace or project list:
-   `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`, or
-   `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts` for anything about projects. Use a
-   real agent turn when the step changes what the agent does. For a product repo, use a small fixture repo
+The loop's session is an orchestrator: each round it hands the first unchecked step to one subagent and checks
+the result before the next round. The subagent:
+
+1. Reads this file, `docs/DEVELOPMENT.md` and the code the step names, then builds the step with narrow diffs that
+   match the surrounding code. Tests for server, shared and parsing logic.
+2. Runs `npx prettier --write src server test shared template` and `npm run check`, which must pass, and
+   `npm run test:e2e` when the step touches the UI.
+3. Verifies in the browser on a throwaway instance, never on Lucas' workspace, project list or the Basis he runs
+   on port 5320: `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`, or
+   `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts` for anything about projects. Runs a real
+   agent turn when the step changes what the agent does or sees. For a product repo it uses a small fixture repo
    under `$TEMP` (Tailwind config, CSS variables and a few components), never one of Lucas' real repos.
-5. Update README and `docs/DEVELOPMENT.md` where the step changes behaviour or architecture.
-6. Tick the step, add decisions to the log, then commit (message explains why, body lists the changes, no AI
-   attribution) and push. Stop the test instance.
-7. If a step turns out bigger than one round, split it here into smaller steps first and do the first one.
+4. Updates README and `docs/DEVELOPMENT.md` where behaviour or architecture changed.
+5. Ticks the step, adds its decisions to the log, commits (the message says why, the body lists the changes, no AI
+   attribution) and pushes to `main`. Stops the test instance and removes its scratch folders.
+6. Splits a step that turns out bigger than one round into smaller steps here, and does the first one.
 
-Stop the loop when every step is ticked, or when something needs Lucas: a decision that would change the
-product's direction, data that could be lost, or a failure you cannot get past.
+The orchestrator checks that the commit exists, CI is green and the step is ticked, then starts the next round.
+The loop stops when every step is ticked, or when something would lose data or cannot be got past; then it reports
+to Lucas.
 
-## Steps
+## Round 1 (done)
 
-### Quality checks
+Contrast check, accessibility check of the live gallery, contracts for patterns, linking a product repo, bringing
+in its design system, creating a project from a repo, repo context in every turn, the Views page, New view, views
+in reviews, and the verification kit. The decision log below has the details.
 
-- [x] **Contrast check.** Validate the colour roles pairwise in both themes (text on its surfaces, text on
-      primary and the other filled roles, borders where they carry meaning) against WCAG AA, as problems in the
-      fix loop phrased so the agent can act. Pure function in `shared/`, with tests; report from the server
-      with the other design problems.
-- [x] **Accessibility check of the live gallery.** Run axe-core in the preview on the sections the user sees
-      (live side only, never past versions), report serious and critical violations as problems with the
-      section and selector. Keep it cheap: run after renders settle, not on every update.
-- [x] **Contracts for patterns.** The starter patterns get a baseline contract like `shared/contracts.ts`;
-      patterns the agent adds get theirs in `patterns/contracts.ts`. Type-checked like components, and the
-      template must satisfy them (`template/contract-check.ts`).
+Still open from round 1, for Lucas: **what deviation is acceptable** when something cannot be reproduced exactly
+(fonts across machines, real photos). Decide after trying the kit on a real feature at work.
 
-### Product repos
+## Round 2 steps
 
-- [x] **Link a repo to a project.** A project entry can name a product repo folder (project menu: link,
-      change, unlink). Reads and searches inside the repo are approved automatically; writes there are
-      refused like any path outside the workspace. Every turn tells the agent the repo exists and is
-      read-only.
-- [x] **Bring in its design system.** A guided turn, started from the project menu after linking (and offered
-      right after): the agent surveys the repo (Tailwind config, CSS variables, theme files, component
-      library), writes the tokens, restyles components and patterns to match, writes a component inventory
-      to a new agent-editable file (`product.md`) and opens a review of the key specimens.
-- [x] **Create a project from a repo.** The create dialog can start from a product repo: it links the repo and
-      runs the step above in one go.
-- [x] **Repo context in every turn.** The brief and per-turn context point the agent at `product.md` and the
-      repo, so requests about the product's features use its real terms and structure.
+### The agent's work
 
-### Views
+- [ ] **Capture any specimen.** `capture.html` gets a third mode, `?specimen=<id>&theme=light|dark`, that renders
+      one component's or pattern's specimen alone at the width the browser gives it, the way the gallery renders
+      it, without the gallery's chrome. A server module (beside `server/capture.ts`) captures a specimen or a view
+      screen from the live preview server at given widths and themes, keeping one browser open and closing it after
+      a minute idle. Done when: a script against a throwaway instance captures `Button`, a pattern and a view
+      screen in both themes, and a unit test covers the parts that do not need a browser.
+- [ ] **A screenshot tool for the agent.** Basis gives each session its own MCP server (`mcpServers` in
+      `server/agent.ts`, empty today) with a `screenshot` tool: `{ target, screen?, widths?, theme? }`, where
+      target is a specimen id or a view id, returning PNGs (at most four per call, tall pages cut at a fixed height
+      and said so). Decision: stdio transport, since ACP requires every agent to support stdio MCP servers. The
+      server is a small dependency-free script that speaks MCP's JSON-RPC and forwards calls to Basis over HTTP on
+      127.0.0.1 with a secret made at each start (passed in the server's env), and Basis auto-approves its own
+      tool. The brief says when to look: after a visual change and before opening a review, at the narrowest width
+      and in both themes. Done when: a real Claude turn calls the tool and acts on what it saw, and Codex is tried
+      if it is logged in (log the result either way).
+- [ ] **Layout checks.** A preview check beside `src/preview/a11y.ts`, over the same marked demos, through the
+      same checks channel (only findings a turn introduced reach the agent). Three rules: content wider than its
+      frame at the frame's width (horizontal scroll), text clipped by `overflow: hidden` without `text-overflow` or
+      line clamping, and interactive targets smaller than 24 by 24 CSS pixels (WCAG 2.5.8; inline links in running
+      text are exempt). Findings name the section, theme, width and an example element. The starter template must
+      come out clean; fix the template where it does not. Done when: pure parts have tests, a deliberately broken
+      specimen shows each finding, and the agent fixes one in a real turn.
+- [ ] **Stable views when they are built.** After a turn that changed files in `views/`, the server captures the
+      changed views' screens twice at their first width with the step-one module, and reports a screen that renders
+      differently as a problem in the fix loop ("Screen X of view Y renders differently each time; look for clocks,
+      random values or animations that do not settle"). Decision: a problem rather than a check, since such a
+      screen can never pass the kit. Done when: a view with `Date.now()` is reported and a real turn fixes it.
+- [ ] **Values outside the scales.** Like `shared/fixed-colors.ts`, find literal lengths in the agent's
+      stylesheets for padding, margin, gap, border-radius and font-size where the design has a scale for them.
+      Allowed: 0, 1px and 2px (hairlines), percentages, viewport units, `auto` and values derived from tokens.
+      Findings go with the fixed-colour findings in the fix loop. The starter template must come out clean. Done
+      when: tests cover the parser, and a real turn replaces a literal with a token.
 
-- [x] **Views page.** A third page, `views/`, for whole screens. A view file defines a flow of screens; each
-      screen renders full width and gets a `go(screenId)` prop so buttons and links move through the flow. The
-      gallery shows one screen at a time with a strip to jump between them, and Show at widths apply. Starter
-      template: one small example view built from the starter patterns. Views are not part of the export.
-- [x] **New view.** A sidebar button on the Views page asks for a name and the feature (or ticket text) and
-      starts a guided turn: the agent builds the flow from the workspace's patterns with realistic made-up
-      data, consistent across screens, and opens a review of it.
-- [x] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
-      for specimens.
+### What the service can do
 
-### Verification
+- [ ] **Implementation notes in the kit.** For each view the kit gains `views/<view>.md`: its screens (id, label,
+      the shots), the flow (which screen's `go()` leads where, from literal calls in the source), the components and
+      patterns it imports from the workspace, and the tokens in `design/design.json` it can use. Decision: written
+      from the source without an agent turn, so the notes always match the screenshots. The README and the manifest
+      point at them. Done when: tests cover the source reading, and the kit built from the starter view has notes
+      that are correct.
+- [ ] **A skill for the implementing agent.** The kit carries `SKILL.md` (Claude Code's skill format) with the
+      capture, compare, read the diffs, fix and repeat loop, and the README gives the same text as a paragraph for
+      AGENTS.md. Writing the kit into a folder gets a checkbox that also installs the skill as
+      `.claude/skills/basis-verify/SKILL.md` there; Basis overwrites that file only when it carries Basis' generated
+      marker. Done when: `claude -p` in a throwaway fixture product repo with the kit, asked to build the starter
+      view's first screen, finds the skill, runs the loop and reports the result; log what it did.
+- [ ] **The gallery as a static site.** A new Export tab builds the gallery (all pages, both themes, Show at
+      widths, clickable views) as static files, without the bridge, reviews, history, checks or the agent, to a
+      zip or a folder, like the kit's static copy of the design. Done when: the built site served by a plain static
+      server shows every section without errors, and an e2e test opens it.
+- [ ] **Compare two versions.** From the history menu, compare a past entry with the current one: Basis captures the
+      specimens and view screens whose files differ between the two, renders the past side from its snapshot (the
+      same mechanism the review view uses), and shows each changed item with before, after, a diff image and the
+      share of pixels that changed. Reuse the kit's PNG comparison rather than writing a second one. Done when: two
+      entries that differ in a button and a view show both, and unchanged items are not captured.
+- [ ] **The running product informs the import.** Linking a repo and creating a project from one get an optional
+      field for the product's address (a local dev server or a staging URL) and a few paths. Basis captures those
+      pages at 1440 and 375 into `.basis/product-shots/`, and the import turn tells the agent to look at them
+      alongside the code. Decision: pages a login hides are out of scope for this step. Done when: against a
+      fixture product served locally, the agent's import mentions what it saw in the shots.
+- [ ] **Tokens back into the product repo.** A guided turn from the project menu: the agent writes the repo files
+      it would change (token and theme files only) under `.basis/sync/` in the workspace, at their repo-relative
+      paths, with `sync.json` listing each file and why. Basis shows each change as a diff against the repo; Apply
+      writes it into the repo after checking the repo file has not changed since the turn started, and never
+      deletes. The agent still cannot write to the repo; only the user's Apply does. Done when: on a fixture repo
+      the user-applied change updates its CSS variables or Tailwind theme correctly, and a repo file changed in the
+      meantime is refused.
 
-- [x] **Verification kit.** Every screen of every view photographed at fixed widths (a flow block's `capture`
-      option, 375/768/1440 full page by default), with a static copy of the design, a manifest of the shots and
-      their render settings, and scripts that capture the implementation the same way and compare pixel for
-      pixel with named exceptions. Written into the product repo or downloaded as a zip.
-- [ ] **What deviation is acceptable** when something cannot be reproduced exactly (fonts across machines, real
-      photos): decide after trying the kit on a real feature at work.
+### Packaging
 
-### Later (not in this loop)
+- [ ] **Templates as named packages.** Move `template/` to `templates/app/` with a `template.json` (id, name,
+      description, version), keep history and `CHANGES.md` per template, and record `{ id, version }` in a
+      workspace's `.basis/template.json` (a workspace without an id is `app`). No behaviour changes in this step;
+      the package's `files`, scripts, tests and docs follow the move. Done when: `npm run check` and the e2e tests
+      pass, and an existing workspace starts and updates as before.
+- [ ] **A minimal template and a picker.** A second template, `minimal`: the base components and an empty Views
+      page, no patterns. The create dialog lets the user choose the starter, with `app` the default. The contract
+      checks apply to what a template contains. Done when: a project made from each template starts clean (no
+      problems or findings), and an e2e test creates one from `minimal`.
+- [ ] **Templates from a folder, git or npm.** The picker's "Other" takes a local folder, a git URL or an npm package
+      name. Basis fetches it (`git clone --depth 1`, or `npm pack` into a temp folder, which runs no package
+      scripts), checks it has a `template.json` and only the template folders, and copies it into the new workspace.
+      A local-folder template is followed for updates on start like the built-in ones; git and npm templates are
+      copied once. Done when: each source works against a throwaway template, and an invalid one is refused with a
+      reason.
+- [ ] **Headless commands.** `basis kit [--project <name>] (--out <folder> | --zip <file>)` and
+      `basis check [--project <name>]`, which runs the type check, contracts, design problems and the preview's
+      checks in a headless browser, prints the findings and exits 1 when there are any; `basis --help` lists them.
+      They start what they need on free ports, without the UI, and only read the workspace, so they work while
+      Basis runs. Done when: both work against a throwaway project, and CI runs `basis check` on the starter
+      template.
+- [ ] **Evals for the brief.** `npm run eval` (not shipped in the package) starts a throwaway instance, creates a
+      project from a fixture repo committed under `test/fixtures/`, runs a few fixed tasks with the real agent over
+      the bridge (restyle the buttons in both themes, a new view from a ticket, the import), and scores each: what
+      the checks still report, fix-up turns, time, and screenshots of the result, in a markdown report under
+      `eval-results/` (ignored by git). Done when: it runs end to end once and the baseline is in the decision log.
+- [ ] **A Tailwind template.** Decision: build it, since many products use Tailwind and components written in the
+      product's own stack can move into it directly. Tailwind v4 through its Vite plugin, used only for workspaces
+      made from this template; the design's roles become `@theme` variables so utilities like `bg-primary` follow
+      the theme; the fixed-colour and scale checks understand arbitrary values (`p-[13px]`, `bg-[#fff]`). Split
+      this step first if it is bigger than a round. Done when: a project from it starts clean, the agent restyles
+      a component in a real turn, and the kit works for one of its views.
 
-- Syncing tokens and components forward into the linked repo.
-- Visual comparison of the whole gallery between two history entries.
+### Release
+
+- [ ] **Prepare 0.3.0.** Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.0.md` in the voice of the 0.2.0
+      notes, check CI is green on all platforms, and report to Lucas. Do not publish, tag or release; Lucas
+      publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-18: Round 2 planned. Order follows Lucas' priorities: the agent's own work first (it sees what it built,
+  then more checks), then what the service can do, then packaging. Specimen capture comes first because the
+  screenshot tool, the stability check and version comparison all build on it. The template move is its own step
+  with no behaviour change, so the picker and external templates land on a settled structure. Evals come after the
+  headless commands, which they can reuse. The Tailwind template is last of the build steps because it is the
+  largest and nothing else depends on it.
 
 - 2026-10-18: The verification kit. A design should be a guardrail during feature work, not only a picture: the
   agent implementing a feature proves its pages match the view's screens pixel for pixel, with 0% as the target
