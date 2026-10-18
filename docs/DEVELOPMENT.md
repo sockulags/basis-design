@@ -87,6 +87,27 @@ component source, patterns and the gallery specimens.
   something; `test/guidelines.test.ts` fails when a section exists that the brief does not name, or the other way
   round. Where the big systems disagree the file picks one Basis default, so design systems made here agree.
 - `server/export.ts`: the starter kit, as a zip from `GET /export/starter-kit.zip` or written into a folder.
+- The verification kit (`server/verify.ts`, `server/capture.ts`, `server/verify-kit/`, `src/capture/`):
+  - `capture.html` renders one screen of one view alone (`?view=&screen=&theme=`), or lists every view's
+    screens and the shots their flow blocks ask for (`?list`, into `window.__basisViews`). It reads the tokens
+    from `./design.json`: the preview server answers that path with the open design, and the kit's static copy
+    has the file beside it. It sets `data-basis-ready` on `<html>` once fonts, images and the layout's size
+    have settled, and `data-basis-error` when the screen threw. The chrome origin 404s it like `preview.html`.
+  - `shared/capture.ts` turns a flow block's `capture` option into shots (widths, viewport height per width,
+    full page or a fixed height, themes) and names their files.
+  - `server/capture.ts` launches a headless browser (Playwright's Chromium, else Chrome, else Edge, through
+    `playwright-core`) with flags that keep rendering the same (`CAPTURE_ARGS`), and takes every shot twice at
+    device scale 1 with reduced motion; two different images mark the shot unstable.
+  - `server/verify.ts` builds `capture.html` with Vite into a temporary folder (the same aliases as the preview,
+    `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
+    `basis-verify.json` (every shot and the render settings), a README for the implementing agent, and the two
+    scripts from `server/verify-kit/`. The chrome asks for it over the bridge (`verify-kit`), gets
+    `verify-progress` and `verify-result` back, and downloads a zip from `GET /export/verification-kit.zip`; or
+    the kit is written into `<product>/basis-verify/`, replacing only what Basis generates.
+  - `server/verify-kit/capture.mjs` and `compare.mjs` run in the product's repo with its own Playwright and no
+    other dependencies: the first captures the design (served from `design/`) or the implementation (URLs from
+    `targets.json`) with the manifest's settings, the second decodes the PNGs itself and compares them pixel for
+    pixel, leaving out named exceptions from `exceptions.json`.
 - `server/folders.ts`: choosing folders without typing paths. `pickFolder` opens the system's folder dialog
   (PowerShell's FolderBrowserDialog on Windows, with a hidden topmost owner so it opens in front; `osascript` on
   macOS; zenity or kdialog on Linux, and a message to type the path when neither exists). `suggestRepos` finds
@@ -288,6 +309,13 @@ TypeScript server through tsx). Publishing is the maintainer's call.
   cached past versions when a review ends or the server says hello again.
 - **`.ds-root` fills the viewport** (`min-height: 100vh`) as the page root; review panes and width frames, which
   are `.ds-root` too, reset it.
+- **Capture readiness:** the capture page's `<html>` counts as hidden to Playwright while it has no visible
+  content (the `?list` mode), so wait for `html[data-basis-ready]` with `state: "attached"`. `capture.mjs` repeats
+  the page's settling logic (`markReady` in `src/capture/main.tsx`) for the implementation's pages; change both
+  together.
+- **Screenshots only match on the same machine:** fonts, hinting and antialiasing differ between operating
+  systems, so the kit's README has the implementing agent capture the design and the implementation with the same
+  browser on the same machine; `screens/` is the reference only when nothing else is there.
 - **Section ids** must stay under 80 characters: the chrome truncates longer ones from the preview. Repeated ids
   become `id-2`, `id-3` (they used to grow as `id-2-2-2`, which broke navigation with many duplicates).
 

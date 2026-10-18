@@ -10,6 +10,7 @@ import type {
   ProjectEntry,
   ServerMessage,
   Snapshot,
+  VerifyKitResult,
 } from "../shared/protocol.ts";
 import type { ReviewState } from "../shared/review.ts";
 
@@ -37,6 +38,9 @@ export interface BridgeState {
   previewPort: number | null;
   exportManifest: { folder: string; files: { path: string; bytes: number }[] } | null;
   exportResult: ExportWriteResult | null;
+  /** The verification kit being built (its current step), or null. */
+  verifyProgress: { step: string; done?: number; total?: number } | null;
+  verifyResult: VerifyKitResult | null;
 }
 
 const initial: BridgeState = {
@@ -55,6 +59,8 @@ const initial: BridgeState = {
   previewPort: null,
   exportManifest: null,
   exportResult: null,
+  verifyProgress: null,
+  verifyResult: null,
 };
 
 type Action = ServerMessage | { type: "connected"; connected: boolean };
@@ -112,6 +118,10 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, exportManifest: { folder: action.folder, files: action.files } };
     case "export-result":
       return { ...state, exportResult: action.result };
+    case "verify-progress":
+      return { ...state, verifyProgress: { step: action.step, done: action.done, total: action.total } };
+    case "verify-result":
+      return { ...state, verifyProgress: null, verifyResult: action.result };
     case "review":
       // A review that ends takes the server's copies of past versions with it.
       return { ...state, review: action.review, baselines: action.review ? state.baselines : {} };

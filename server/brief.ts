@@ -160,9 +160,20 @@ The rules that always apply:
   restyle or copy them inside a view: if a screen needs something they lack, extend the component or pattern,
   or add a pattern. A view's own code is layout and wiring; a small layout style inline or in a
   \`.module.css\` next to it is fine.
-- Fill views with realistic made-up data, consistent across the screens (the row you open is the one the
-  detail shows), in the product's language when a product repo is linked. Keep sample data in the view file or
-  a \`views/*-data.ts\` file.
+- A screen is the whole page as the product shows it at that size: its shell, navigation and page padding
+  included, filling the window. The verification kit photographs each screen alone at fixed widths, and the
+  implementation of the feature must match those images pixel for pixel.
+- Fill views with realistic data, consistent across the screens (the row you open is the one the detail
+  shows). When a product repo is linked, use the product's own data where you can find it (fixtures, seeds,
+  example responses, its wording), so the implementation can show exactly the same records. Otherwise make it
+  up in the product's language. Keep data in the view file or a \`views/*-data.ts\` file.
+- Screens must render the same every time: no \`Date.now()\`, \`new Date()\` without a fixed date, random
+  values, or animations and loading states that never settle. Basis captures each screen twice and reports
+  the ones that differ.
+- A flow block may say how its screens are captured: \`capture: { widths: [375, 768, 1440], height: "full",
+  themes: ["light"] }\` (those are the defaults). \`height\` is \`"full"\` for the whole page or a number for
+  exactly one viewport; add \`"dark"\` to \`themes\` when the product has a dark theme. Set widths to the
+  product's breakpoints when you know them.
 - Views are not exported with the design system and need no contract or index.
 - To review a view, show its specimen; \`rows\` picks screens by label or id (\`"rows": ["Shipment"]\`). The panes
   of a review move through the flow together, so before and after always show the same screen.

@@ -1,0 +1,50 @@
+/*
+ * The page a captured screen renders on, and nothing else: no gallery around it, no transitions, no caret. The
+ * base below is what a screen inherits; an implementation that is checked against the screenshots needs the
+ * same (the kit's manifest repeats it as `base`).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  transition: none !important;
+  animation: none !important;
+  caret-color: transparent !important;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+html {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
+.ds-root {
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color-scheme: light;
+}
+
+.ds-root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+.capture-problem {
+  padding: 24px;
+  font:
+    14px/1.5 ui-monospace,
+    Consolas,
+    monospace;
+  color: #b42318;
+}

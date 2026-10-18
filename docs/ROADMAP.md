@@ -84,12 +84,33 @@ product's direction, data that could be lost, or a failure you cannot get past.
 - [x] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
       for specimens.
 
+### Verification
+
+- [x] **Verification kit.** Every screen of every view photographed at fixed widths (a flow block's `capture`
+      option, 375/768/1440 full page by default), with a static copy of the design, a manifest of the shots and
+      their render settings, and scripts that capture the implementation the same way and compare pixel for
+      pixel with named exceptions. Written into the product repo or downloaded as a zip.
+- [ ] **What deviation is acceptable** when something cannot be reproduced exactly (fonts across machines, real
+      photos): decide after trying the kit on a real feature at work.
+
 ### Later (not in this loop)
 
 - Syncing tokens and components forward into the linked repo.
 - Visual comparison of the whole gallery between two history entries.
 
 ## Decision log
+
+- 2026-10-18: The verification kit. A design should be a guardrail during feature work, not only a picture: the
+  agent implementing a feature proves its pages match the view's screens pixel for pixel, with 0% as the target
+  and every allowed difference a named exception with a reason. Screens are captured at fixed widths with a
+  viewport height per width (content sized in vh needs the same one on both sides), full page by default, and
+  each twice, since a screen that renders differently twice can never match. The kit carries a runnable copy of
+  the design rather than only images, because screenshots from another operating system differ in antialiasing:
+  the implementing agent captures both sides on its own machine. Views should use the product's real data from
+  the linked repo where possible, so no separate test data is needed. Lucas will try it at work; widths and the
+  acceptable deviation are adjustable afterwards. The template version stays at 1: the new `capture` option is in
+  `specimen.ts`, which agents do not edit, so untouched workspaces get it on start and no guided turn is needed.
+  A build of the capture page and a capture against the dev preview gave identical images.
 
 - 2026-10-18: Folders without typing paths. Linking a repo meant typing its full path. Basis runs on the same
   computer as the browser, so the server opens the system's own folder dialog, and suggests the git repos it finds

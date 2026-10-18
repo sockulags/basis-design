@@ -93,3 +93,26 @@ test("linking a repo offers the system's folder dialog, and its checkbox is a ch
   expect(box?.width).toBeLessThan(24);
   expect(box?.height).toBeLessThan(24);
 });
+
+test("the verification kit captures every screen of the views and runs as a static site", async ({ page, basis }) => {
+  await open(page, basis);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("tab", { name: "Verification kit" }).click();
+  await page.getByRole("button", { name: "Build .zip" }).click();
+  await expect(page.getByText(/Captured \d+ shots of \d+ screens/)).toBeVisible({ timeout: 90_000 });
+  const response = await page.request.get(`${basis.url}/export/verification-kit.zip`);
+  expect(response.ok()).toBe(true);
+  const files = unzipSync(new Uint8Array(await response.body()));
+  const manifest = JSON.parse(new TextDecoder().decode(files["basis-verify/basis-verify.json"]));
+  const shots = manifest.views.flatMap((view: { screens: { shots: { file: string; stable: boolean }[] }[] }) =>
+    view.screens.flatMap((screen) => screen.shots),
+  );
+  expect(shots.length).toBeGreaterThan(0);
+  for (const shot of shots) {
+    expect(files[`basis-verify/${shot.file}`]?.byteLength).toBeGreaterThan(0);
+    expect(shot.stable).toBe(true);
+  }
+  for (const file of ["design/index.html", "design/design.json", "capture.mjs", "compare.mjs", "README.md"]) {
+    expect(files[`basis-verify/${file}`], file).toBeDefined();
+  }
+});

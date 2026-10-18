@@ -115,6 +115,29 @@ export interface ExportWriteResult {
   error?: string;
 }
 
+/** What a finished verification kit holds, for the Export dialog to report. */
+export interface VerifyKitSummary {
+  /** The browser that took the screenshots, with its version. */
+  browser: string;
+  views: number;
+  screens: number;
+  shots: number;
+  /** Shots whose two captures differed: those screens do not render the same twice. */
+  unstable: string[];
+  /** Shots of screens that threw while rendering. */
+  failed: string[];
+  /** Specimen files that could not be loaded. */
+  problems: string[];
+}
+
+export type VerifyKitResult =
+  | {
+      ok: true;
+      summary: VerifyKitSummary;
+      /** Where it was written; absent for a zip, which is then ready to download. */ dir?: string;
+    }
+  | { ok: false; error: string };
+
 export interface DesignState {
   design: Design;
   /** Validation errors for the file on disk; null when it is valid. The preview keeps the last valid design. */
@@ -186,7 +209,10 @@ export type ServerMessage =
   | { type: "chat-remove"; id: string }
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "export-manifest"; folder: string; files: { path: string; bytes: number }[] }
-  | { type: "export-result"; result: ExportWriteResult };
+  | { type: "export-result"; result: ExportWriteResult }
+  /** How far the verification kit has come; `done`/`total` while it takes screenshots. */
+  | { type: "verify-progress"; step: string; done?: number; total?: number }
+  | { type: "verify-result"; result: VerifyKitResult };
 
 export type ClientMessage =
   /** With `alternatives` (2 or 3), the agent makes that many takes on the prompt to choose between. */
@@ -218,6 +244,8 @@ export type ClientMessage =
   | { type: "preview-errors"; errors: string[]; visible: boolean; checks?: string[]; checking?: boolean }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean }
+  /** Builds the verification kit: into `<project>/basis-verify/` with `project`, else as a zip to download. */
+  | { type: "verify-kit"; project?: string }
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */
   /**

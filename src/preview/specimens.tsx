@@ -53,6 +53,26 @@ function isComponent(value: unknown): value is ComponentType<never> {
   return typeof value === "function" || (typeof value === "object" && value !== null && "$$typeof" in value);
 }
 
+/** What is wrong with a flow block's `capture`, or null when it is absent or well formed. */
+function captureProblem(capture: unknown): string | null {
+  if (capture === undefined) return null;
+  if (!capture || typeof capture !== "object") return "capture must be an object: { widths, height, themes }";
+  const { widths, height, themes } = capture as Record<string, unknown>;
+  if (widths !== undefined && (!Array.isArray(widths) || widths.some((width) => typeof width !== "number"))) {
+    return "capture.widths must be an array of numbers (viewport widths in px)";
+  }
+  if (height !== undefined && height !== "full" && typeof height !== "number") {
+    return 'capture.height must be "full" or a number (viewport height in px)';
+  }
+  if (
+    themes !== undefined &&
+    (!Array.isArray(themes) || themes.some((theme) => theme !== "light" && theme !== "dark"))
+  ) {
+    return 'capture.themes must be an array of "light" and "dark"';
+  }
+  return null;
+}
+
 /** Why a block cannot be rendered, or null when it is well formed. */
 function blockProblem(block: unknown): string | null {
   if (!block || typeof block !== "object") return "a block is not an object";
@@ -78,6 +98,7 @@ function blockProblem(block: unknown): string | null {
     if (screens.some((screen) => !screen || typeof screen.id !== "string" || !isComponent(screen.render))) {
       return "every screen needs an id, a label and a render component";
     }
+    return captureProblem(b.capture);
   } else if (!isComponent(b.render)) {
     return `a ${String(b.kind)} block needs a render component`;
   }

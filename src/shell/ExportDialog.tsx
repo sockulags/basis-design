@@ -5,6 +5,7 @@ import { exportCss, exportJson, exportTailwind } from "../../shared/tokens.ts";
 import { BrowseButton } from "./FolderField.tsx";
 import { readPref, writePref } from "./prefs.ts";
 import styles from "./Shell.module.css";
+import { VerifyKit, type VerifyKitProps } from "./VerifyKit.tsx";
 
 const FORMATS = [
   { id: "css", label: "CSS variables", file: "tokens.css", type: "text/css", build: exportCss },
@@ -12,7 +13,7 @@ const FORMATS = [
   { id: "json", label: "JSON", file: "design-system.json", type: "application/json", build: exportJson },
 ] as const;
 
-type Tab = "kit" | (typeof FORMATS)[number]["id"];
+type Tab = "kit" | "verify" | (typeof FORMATS)[number]["id"];
 
 interface ExportDialogProps {
   design: Design;
@@ -23,6 +24,7 @@ interface ExportDialogProps {
   result: ExportWriteResult | null;
   send: (message: ClientMessage) => void;
   onClose: () => void;
+  verify: Omit<VerifyKitProps, "workspace" | "send">;
 }
 
 /** The folder the kit was last written to, remembered per project so one never writes into another's. */
@@ -147,7 +149,16 @@ function StarterKit({
   );
 }
 
-export function ExportDialog({ design, workspace, problems, manifest, result, send, onClose }: ExportDialogProps) {
+export function ExportDialog({
+  design,
+  workspace,
+  problems,
+  manifest,
+  result,
+  send,
+  onClose,
+  verify,
+}: ExportDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>("kit");
   const [copied, setCopied] = useState(false);
@@ -198,6 +209,9 @@ export function ExportDialog({ design, workspace, problems, manifest, result, se
           <button type="button" role="tab" aria-selected={tab === "kit"} onClick={() => setTab("kit")}>
             Starter kit
           </button>
+          <button type="button" role="tab" aria-selected={tab === "verify"} onClick={() => setTab("verify")}>
+            Verification kit
+          </button>
           {FORMATS.map((item) => (
             <button
               key={item.id}
@@ -212,11 +226,25 @@ export function ExportDialog({ design, workspace, problems, manifest, result, se
         </div>
         {tab === "kit" ? (
           <StarterKit workspace={workspace} problems={problems} manifest={manifest} result={result} send={send} />
+        ) : tab === "verify" ? (
+          <VerifyKit workspace={workspace} send={send} {...verify} />
         ) : (
           <pre className={styles.code}>{code}</pre>
         )}
         <footer className={styles.dialogFooter}>
-          {tab === "kit" ? (
+          {tab === "verify" ? (
+            <>
+              <span className={styles.muted}>basis-verify/ · takes a few seconds per screen</span>
+              <button
+                type="button"
+                className={styles.primaryButton}
+                disabled={verify.progress !== null}
+                onClick={() => send({ type: "verify-kit" })}
+              >
+                {verify.progress ? "Building…" : "Build .zip"}
+              </button>
+            </>
+          ) : tab === "kit" ? (
             <>
               <span className={styles.muted}>{manifest ? `${manifest.folder}.zip` : ""}</span>
               <a className={styles.primaryButton} href="/export/starter-kit.zip" download>

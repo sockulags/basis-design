@@ -1,6 +1,6 @@
 {
   "name": "basis-design",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Prompt a complete design system into existence with your own coding agent over ACP.",
   "keywords": [
     "design-system",
@@ -28,6 +28,7 @@
     "template",
     "index.html",
     "preview.html",
+    "capture.html",
     "vite.config.ts",
     "NOTICE"
   ],
@@ -52,6 +53,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "axe-core": "^4.14.0",
     "fflate": "^0.8.3",
+    "playwright-core": "1.64.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tsx": "^4.23.15",

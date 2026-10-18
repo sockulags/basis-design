@@ -107,6 +107,7 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
   - a README on wiring it up.
 
   The kit needs React 18+ and CSS Modules, nothing else. The other tabs export the token formats one at a time.
+- **Verification kit:** proof that a feature was built as its view shows. The **Verification kit** tab photographs every screen of every view at fixed widths (375, 768 and 1440 pixels, full page, unless the view's flow block sets `capture`) and packages the screenshots with a static, clickable copy of the design and two scripts, as a zip or into `basis-verify/` in the product's folder (the linked repo by default). The agent that implements the feature runs `capture.mjs` to photograph the design and its implementation on the same machine with the same settings, and `compare.mjs` to compare them pixel for pixel, aiming at 0% difference. Parts allowed to differ are named exceptions in `exceptions.json`, each with a reason. Basis takes the screenshots with Playwright's Chromium when it is installed (`npx playwright install chromium`), otherwise with Chrome or Edge; each screen is captured twice, and screens that render differently each time are reported, since nothing can match them.
 
 ## Privacy
 

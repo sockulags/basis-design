@@ -336,6 +336,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
           result={state.exportResult}
           send={send}
           onClose={() => setExporting(false)}
+          verify={{ repo: state.project?.repo, progress: state.verifyProgress, result: state.verifyResult }}
         />
       )}
     </div>

@@ -86,7 +86,7 @@ export class OpenProject {
       root,
       appType: "mpa",
       cacheDir: "node_modules/.vite/preview",
-      optimizeDeps: { entries: ["preview.html"] },
+      optimizeDeps: { entries: ["preview.html", "capture.html"] },
       plugins: [rebasePlugin(root, entry.dir)],
       resolve: {
         alias: {
@@ -112,6 +112,12 @@ export class OpenProject {
     const previewGuard = guard((url) => url === "/" || url === "/index.html");
     previewServer.on("request", (req, res) => {
       if (!isLocalHost(req, options.previewPort)) return refuseHost(res);
+      // The capture page (capture.html) reads the current tokens from here, as the kit's copy reads its own file.
+      if (req.method === "GET" && req.url?.split("?")[0] === "/design.json") {
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        res.end(JSON.stringify(workspace.state.design));
+        return;
+      }
       previewGuard(req, res, () => previewVite.middlewares(req, res));
     });
     await new Promise<void>((resolve, reject) => {

@@ -545,6 +545,16 @@ a.primaryButton {
   color: var(--app-danger);
 }
 
+.kitNote {
+  margin: 0;
+  color: var(--app-muted);
+}
+
+.kitNote code {
+  font-family: var(--app-mono);
+  font-size: 11.5px;
+}
+
 .kitSuccess {
   margin: 0;
   color: var(--app-signal);

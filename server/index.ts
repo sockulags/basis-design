@@ -15,6 +15,7 @@ import {
 } from "../shared/protocol.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
+import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
 import { pickFolder, suggestRepos } from "./folders.ts";
@@ -99,11 +100,15 @@ const chromeVite = await createVite({
   // Vite forwards browser console errors to the terminal when it thinks an agent runs it; for Basis that is noise.
   server: { middlewareMode: true, hmr: { server: chromeServer }, forwardConsole: false },
 });
-const chromeGuard = guard((url) => url === "/preview.html");
+const chromeGuard = guard((url) => url === "/preview.html" || url === "/capture.html");
 chromeServer.on("request", (req, res) => {
   if (!isLocalHost(req, port)) return refuseHost(res);
   if (req.method === "GET" && req.url === "/export/starter-kit.zip") {
     void sendStarterKitZip(res);
+    return;
+  }
+  if (req.method === "GET" && req.url === "/export/verification-kit.zip") {
+    sendVerificationZip(res);
     return;
   }
   if (req.url?.startsWith("/api/")) {
@@ -172,6 +177,59 @@ async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
   }
 }
 
+/** The last verification kit built as a zip, until it is downloaded or another is built. */
+let verificationZip: { name: string; data: Uint8Array } | null = null;
+/** True while a verification kit is being built: one at a time, and no project switch meanwhile. */
+let verifying = false;
+
+function sendVerificationZip(res: http.ServerResponse): void {
+  if (!verificationZip) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("No verification kit has been built. Build one from the Export dialog.");
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="${verificationZip.name}"`,
+    "Content-Length": verificationZip.data.byteLength,
+    "Cache-Control": "no-store",
+  });
+  res.end(verificationZip.data);
+}
+
+/** Builds the verification kit for the open project, reporting progress to every tab. */
+async function verificationKit(project: string | undefined, socket: WebSocket): Promise<void> {
+  if (verifying) {
+    send(socket, { type: "verify-result", result: { ok: false, error: "A verification kit is already being built." } });
+    return;
+  }
+  verifying = true;
+  try {
+    const { files, summary } = await buildVerificationKit({
+      design: current.workspace.state.design,
+      workspaceDir: current.workspace.dir,
+      onProgress: (step, done, total) => broadcast({ type: "verify-progress", step, done, total }),
+    });
+    if (project === undefined) {
+      verificationZip = {
+        name: `${slug(current.workspace.state.design.name)}-verification-kit.zip`,
+        data: zipVerificationKit(files),
+      };
+      broadcast({ type: "verify-result", result: { ok: true, summary } });
+      return;
+    }
+    const written = await writeVerificationKit(files, project);
+    broadcast({
+      type: "verify-result",
+      result: written.ok ? { ok: true, summary, dir: written.dir } : { ok: false, error: written.error },
+    });
+  } catch (error) {
+    broadcast({ type: "verify-result", result: { ok: false, error: (error as Error).message } });
+  } finally {
+    verifying = false;
+  }
+}
+
 chromeServer.on("upgrade", (req, socket, head) => {
   if (req.url !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
   if (!chromeOrigins.includes(req.headers.origin ?? "")) {
@@ -212,6 +270,13 @@ async function switchTo(entry: ProjectEntry, socket: WebSocket): Promise<void> {
   if (switching || entry.id === current.entry.id) return;
   if (current.agent.agent.status === "busy") {
     send(socket, { type: "project-error", message: "The agent is working. Switch projects when it is done." });
+    return;
+  }
+  if (verifying) {
+    send(socket, {
+      type: "project-error",
+      message: "A verification kit is being built. Switch projects when it is done.",
+    });
     return;
   }
   switching = true;
@@ -357,6 +422,9 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       send(socket, { type: "export-result", result });
       return;
     }
+    case "verify-kit":
+      await verificationKit(typeof message.project === "string" ? message.project : undefined, socket);
+      return;
     case "project-switch": {
       const entry = projects.find(String(message.id ?? ""));
       if (entry) await switchTo(entry, socket);
