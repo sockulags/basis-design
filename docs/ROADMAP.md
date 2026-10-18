@@ -210,7 +210,10 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
   snapping by hand: the 375 finding appeared in the review). In the second ("a small × on the selected chip") the fix loop sent it a target-size finding: the ×
   was 24px but its pinned pressed state scaled it to 22px. Claude named the `scale(0.92)` as the cause, removed it,
   marked the press with a darker circle instead, looked at 375 and 900 in both themes, and the checks came back
-  empty. It also noticed the gallery's own state table scrolling at 375 and correctly left it alone.
+  empty. It also noticed the gallery's own state table scrolling at 375 and correctly left it alone. CI's e2e run
+  on Linux then found the member list still scrolling at 375: with Linux's wider fonts the name button (avatar and
+  name, no wrapping) no longer fit the value column of a stacked row. The first column now heads each stacked row at
+  full width without its label, which fits on Windows with 1.5px of extra letter spacing too.
 
 - 2026-10-19: A screenshot tool for the agent. Every session gets an MCP server named `basis` over stdio:
   `server/agent-tools-mcp.mjs`, run with Basis' own Node, which only speaks MCP and forwards `tools/list` and

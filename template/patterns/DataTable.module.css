@@ -194,6 +194,15 @@
     text-transform: uppercase;
   }
 
+  /* The first column names the row (see the guidelines), so it heads the stack at full width, without its label. */
+  .table tbody tr > :is(td:first-child:not(.check), .check + td) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table tbody tr > :is(td:first-child:not(.check), .check + td)::before {
+    content: none;
+  }
+
   .table td.check {
     display: block;
     grid-row: 1;

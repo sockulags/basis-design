@@ -28,7 +28,8 @@ design system's own look.
 
 - DataTable fits a phone without scrolling sideways. Its frame is a size container named `data-table`; under 600px
   each row becomes a stack of label and value pairs (every cell carries `data-label` with its column's header,
-  shown through `::before`), with the row's checkbox beside it. The header row stays as a strip with select all and
+  shown through `::before`), with the row's checkbox beside it. The first column names the row, so it heads the
+  stack at full width without a label. The header row stays as a strip with select all and
   the sortable columns; the other headings are hidden, since every row repeats them. The table, row groups, rows,
   headers and cells have explicit roles (`table`, `rowgroup`, `row`, `columnheader`, `cell`), which keep it a table
   for screen readers once CSS changes its display. See the `@container data-table` block at the end of
