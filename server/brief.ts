@@ -63,6 +63,31 @@ done when it holds in both, not when it looks right in the one you had in mind.
 - Basis checks both themes after every turn: fixed colours in tokens and stylesheets, and accessibility (axe)
   in light and in dark. Findings name the theme they were found in.
 
+## Design guidelines
+
+\`.basis/guidelines.md\` distils WCAG 2.2, the ARIA Authoring Practices, Material, Apple's HIG, GOV.UK, Carbon,
+Atlassian and Nielsen Norman Group into rules for what you build here, with numbers. Before you design or change a
+component, pattern or view, read the two sections that apply to everything, States and Focus, targets and keyboard,
+then its own section: Buttons; Text fields and selects; Checkboxes, radios and switches; Tabs and navigation;
+Overlays; Feedback; Data; Forms; Screens and flows; Writing; AI assistants. For a look-and-feel request, read the
+visual sections it touches: Colour; Dark mode; Depth; Typography; Spacing and shape; Motion; Mood requests. Read
+them rather than relying on memory, and before you reply run the "Before you reply" checklist. Where a guideline and
+the user disagree, do what the user asks and say which guideline it departs from.
+
+The rules that always apply:
+
+- One primary action per view, dialog or panel; one accent hue; one focal point per region.
+- States differ clearly: hover a hint, pressed a step beyond it, focus a ring of at least 2px at 3:1 on every
+  surface, selected and invalid shown by more than colour, disabled legible and with a visible reason.
+- Hit areas at least 24 × 24 px; the boundaries that identify a control at least 3:1; nothing clips text (use
+  min-height and padding, not fixed heights).
+- Native elements first, and the ARIA keyboard pattern for anything composite; icon-only controls have a name.
+- Motion about 70–400 ms on transform and opacity, never blocking the next click, with a reduced-motion path.
+- Patterns and views show their empty, loading and error states, with realistic sample data in the product's
+  language.
+- Sentence case; buttons are a verb plus a noun; errors say what happened and how to fix it.
+- Give the design its own identity; never reproduce the recognisable look of a well-known product.
+
 ## Rules for components
 
 - Components are grouped by family, each file with a matching \`.module.css\` (\`Field.tsx\` holds Field,
@@ -151,18 +176,20 @@ Whether the user asks in chat or through Basis' "New component" and "New pattern
 2. A base component (\`components/\`) is a single control or surface built on the tokens. Anything assembled from
    several base components is a pattern (\`patterns/\`). If the request is in the wrong place, say so and put it
    where it belongs.
-3. Create the file pair (\`Name.tsx\` + \`Name.module.css\`), or add to an existing family file when it clearly
+3. Read the section of \`.basis/guidelines.md\` for this kind of component (and Screens and flows for a pattern that
+   makes up a screen), so it starts out right rather than being fixed later.
+4. Create the file pair (\`Name.tsx\` + \`Name.module.css\`), or add to an existing family file when it clearly
    belongs there. Follow the component rules above: token variables, \`data-ds\`, \`data-force\` states,
    accessibility.
-4. Add its contract: for a base component to \`components/contracts.ts\` (an entry in \`AddedContracts\`), for a
+5. Add its contract: for a base component to \`components/contracts.ts\` (an entry in \`AddedContracts\`), for a
    pattern to \`patterns/contracts.ts\` (an entry in \`AddedPatternContracts\`), with a props interface. Basis
    rejects exports without a contract.
-5. Give a base component its own token group in \`design-system.json\` (\`components.<camelCaseName>\`) for what a
+6. Give a base component its own token group in \`design-system.json\` (\`components.<camelCaseName>\`) for what a
    designer would tune, and style it with those variables. A pattern usually needs none: it inherits the tokens
    of the components it is built from.
-6. Export it from the folder's \`index.ts\` and write its specimen in the same turn, showing every variant and
+7. Export it from the folder's \`index.ts\` and write its specimen in the same turn, showing every variant and
    state, with a group and an \`order\` that place it next to its relatives.
-7. Reply with what you built, its main props and tokens, and one or two refinements worth asking for next.
+8. Reply with what you built, its main props and tokens, and one or two refinements worth asking for next.
 
 ## Reviews: show what you changed
 
@@ -297,7 +324,7 @@ export function viewInstruction(folder: string, name: string, purpose: string): 
     purpose
       ? "The feature (or the ticket describing it) is in the user's message below."
       : "The user gave no description: infer the feature from the name, and ask first if it is ambiguous.",
-    "1. Read product.md if it exists, then components/index.ts, patterns/index.ts and their contracts, so the view uses what exists.",
+    "1. Read product.md if it exists, then components/index.ts, patterns/index.ts and their contracts, so the view uses what exists, and the Screens and flows, Writing and Data sections of .basis/guidelines.md.",
     "2. Work out the screens the feature needs (usually two to five: where it starts, the main task, its result or detail) and how the user moves between them.",
     "3. Write the view: a flow block with those screens, wired with go() so it clicks through, filled with realistic made-up data that stays consistent across screens. Include the states the feature meets (empty, an error, a confirmation) where they matter.",
     "4. If a screen needs something the patterns lack, add or extend a pattern (with its contract and specimen) rather than building it inside the view.",

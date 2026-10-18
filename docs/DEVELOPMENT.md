@@ -50,6 +50,11 @@ component source, patterns and the gallery specimens.
   - `snapshots.ts`: read-only copies of past versions in `.basis/snapshots/<commit>/`.
   - `paths.ts`, `exec.ts`: shared paths, git and tsc helpers.
 - `server/brief.ts`: the agent's instructions, also sent as an appended system prompt.
+- `server/guidelines.md`: design guidelines distilled from WCAG 2.2, the ARIA practices, Material, Apple, GOV.UK,
+  Carbon, Atlassian, Polaris, Spectrum and Nielsen Norman Group, written to `.basis/guidelines.md` on every start.
+  The brief keeps the rules that always apply and sends the agent to the file's sections by name before it designs
+  something; `test/guidelines.test.ts` fails when a section exists that the brief does not name, or the other way
+  round. Where the big systems disagree the file picks one Basis default, so design systems made here agree.
 - `server/export.ts`: the starter kit, as a zip from `GET /export/starter-kit.zip` or written into a folder.
 - `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `tokens.ts` (CSS variables and
   exports), `protocol.ts` (bridge messages), `frame.ts` (chrome-iframe messages, pages, and the parser for

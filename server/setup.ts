@@ -146,6 +146,10 @@ export async function writeGeneratedFiles(dir: string): Promise<void> {
     await readFile(path.join(repoRoot, "shared", "pattern-contracts.ts"), "utf8"),
   );
   await writeFile(
+    path.join(basisDir, "guidelines.md"),
+    await readFile(path.join(repoRoot, "server", "guidelines.md"), "utf8"),
+  );
+  await writeFile(
     path.join(basisDir, "env.d.ts"),
     'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',
   );

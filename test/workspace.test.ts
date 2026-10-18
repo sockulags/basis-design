@@ -65,6 +65,7 @@ describe("history", () => {
     assert.ok(existsSync(path.join(dir, "patterns", "Navbar.tsx")));
     assert.ok(existsSync(path.join(dir, "components", "contracts.ts")));
     assert.ok(existsSync(path.join(dir, "views", "TeamMembers.specimen.tsx")));
+    assert.ok(existsSync(path.join(dir, ".basis", "guidelines.md")));
     assert.deepEqual(
       workspace.entries.map((entry) => entry.source),
       ["init"],

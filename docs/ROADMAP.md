@@ -91,6 +91,15 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Design guidelines for the agent. Researched from primary sources (WCAG 2.2 and its Understanding
+  documents, the APG patterns, Material 3 tokens, Apple HIG, GOV.UK, Carbon, Atlassian, Polaris, Spectrum, NN/g,
+  Laws of UX, HAX, PAIR, and visual-craft writers) and distilled in our own words into `server/guidelines.md`:
+  per component family, screens and flows, writing, AI assistants, colour, dark mode, depth, type, spacing, motion
+  and a "Before you reply" checklist. It is a separate file read per section rather than part of the brief, which
+  only keeps the rules that always apply, so the agent's standing context stays small. Known gaps between the
+  guidelines and the starter template (reduced motion outside Chat, field errors not tied to inputs with
+  aria-describedby) are left for a template pass.
+
 - 2026-10-18: Both themes on every change. Redesigning buttons showed the agent tuning sheens and shadows for one
   theme: shadow and component tokens have one value for both, and the defaults were fixed colours. Now a `shadow`
   role carries each theme's shadow colour and strength, the defaults mix it, the brief has a both-themes section,
