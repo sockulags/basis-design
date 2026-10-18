@@ -38,6 +38,11 @@ const CODEX_ACP = "@agentclientprotocol/codex-acp@2.2.2";
 
 /** How each supported agent is started. Both reuse the user's own CLI login, so no API keys are needed. */
 function launchSpec(id: AgentId): LaunchSpec {
+  // The end-to-end tests run a stand-in agent (test/e2e/fake-agent.mjs), since no CLI is logged in on CI.
+  if (process.env.BASIS_AGENT_SCRIPT) {
+    const script = path.resolve(process.env.BASIS_AGENT_SCRIPT);
+    return { command: process.execPath, args: [script], shell: false, loginHint: "" };
+  }
   if (id === "claude") {
     const pkg = require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
     return {

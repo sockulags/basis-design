@@ -5,3 +5,5 @@ workspace
 *.log
 workspaces
 basis.projects.json
+test-results
+playwright-report
