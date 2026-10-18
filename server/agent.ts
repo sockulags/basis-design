@@ -2,7 +2,6 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
@@ -22,18 +21,27 @@ import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/
 import { loadChat, saveChat } from "./chatlog.ts";
 import { PRODUCT_FILE, relativeInside } from "./paths.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
+import { CLAUDE_MISSING, findClaude } from "./claude.ts";
 import type { Workspace } from "./workspace.ts";
-
-const require = createRequire(import.meta.url);
 
 interface LaunchSpec {
   command: string;
   args: string[];
   shell: boolean;
   loginHint: string;
+  /** Variables the agent needs on top of Basis' own environment. */
+  env?: Record<string, string>;
+  /** Why the agent cannot start, shown instead of starting it. */
+  missing?: string;
+  /** Added when the agent exits on its own, for the failures an update fixes. */
+  exitHint?: string;
 }
 
-/** The Codex adapter Basis was tested with; npx fetches it on first use. */
+/**
+ * The adapters Basis was tested with, at fixed versions: an unpinned one would fetch whatever was published last.
+ * npx fetches each on first use and reuses it after (--prefer-offline, so Basis also starts offline).
+ */
+const CLAUDE_ACP = "@agentclientprotocol/claude-agent-acp@0.92.0";
 const CODEX_ACP = "@agentclientprotocol/codex-acp@2.2.2";
 
 /** How each supported agent is started. Both reuse the user's own CLI login, so no API keys are needed. */
@@ -44,18 +52,21 @@ function launchSpec(id: AgentId): LaunchSpec {
     return { command: process.execPath, args: [script], shell: false, loginHint: "" };
   }
   if (id === "claude") {
-    const pkg = require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
+    // Without --omit=optional the adapter's SDK brings its own copy of Claude Code; Basis runs the user's instead.
+    const claude = findClaude();
     return {
-      command: process.execPath,
-      args: [path.join(path.dirname(pkg), "dist", "index.js")],
-      shell: false,
+      command: "npx",
+      args: ["-y", "--prefer-offline", "--omit=optional", CLAUDE_ACP],
+      shell: true,
+      env: claude ? { CLAUDE_CODE_EXECUTABLE: claude } : undefined,
+      missing: claude ? undefined : CLAUDE_MISSING,
       loginHint: "Run `claude` in a terminal and log in, then restart the agent.",
+      exitHint: "If it keeps happening, update Claude Code with `claude update`.",
     };
   }
   return {
     command: "npx",
-    // A fixed version: an unpinned one would fetch whatever was published last on every start.
-    args: ["-y", CODEX_ACP],
+    args: ["-y", "--prefer-offline", CODEX_ACP],
     shell: true,
     loginHint: "Run `codex login` in a terminal, then restart the agent.",
   };
@@ -185,13 +196,17 @@ export class AgentHost extends EventEmitter<Events> {
     await this.stop();
     this.setState({ id: agentId, status: "starting", detail: "Starting agent…" });
     const spec = launchSpec(agentId);
+    if (spec.missing) {
+      this.fail(spec.missing);
+      return;
+    }
     // Through a shell, the command goes as one line: Node no longer accepts separate arguments there.
     const [command, args] = spec.shell ? [[spec.command, ...spec.args].join(" "), []] : [spec.command, spec.args];
     const proc = spawn(command, args, {
       cwd: this.workspace.dir,
       shell: spec.shell,
       stdio: ["pipe", "pipe", "pipe"],
-      env: agentEnv(),
+      env: { ...agentEnv(), ...spec.env },
       windowsHide: true,
     });
     this.proc = proc;
@@ -209,7 +224,8 @@ export class AgentHost extends EventEmitter<Events> {
       this.connection = undefined;
       this.sessionId = undefined;
       const tail = this.stderrTail.slice(-3).join(" ");
-      this.fail(`The agent exited (code ${code ?? "?"}).${tail ? ` ${tail}` : ""}`);
+      const hint = spec.exitHint ? ` ${spec.exitHint}` : "";
+      this.fail(`The agent exited (code ${code ?? "?"}).${tail ? ` ${tail}` : ""}${hint}`);
     });
 
     const stream = acp.ndJsonStream(

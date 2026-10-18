@@ -18,12 +18,12 @@ npx basis-design
 
 Or install it once with `npm install -g basis-design` and start it with `basis`. Open http://localhost:5320. Basis starts Claude Code by default (shown as Claude in the picker above the chat); switch to Codex there. Basis needs Node.js 22.12 or later and `git` on the PATH.
 
-- **Claude Code:** log in once with `claude` in a terminal. Basis starts it through `@agentclientprotocol/claude-agent-acp`.
+- **Claude Code:** install it and log in once with `claude` in a terminal. Basis runs your own Claude Code through `@agentclientprotocol/claude-agent-acp`, which npx fetches on first use without a copy of Claude Code of its own. If Basis does not find it, set `CLAUDE_CODE_EXECUTABLE` to its path.
 - **Codex:** log in once with `codex login`. Basis starts it through `npx @agentclientprotocol/codex-acp`, at a fixed version that npx fetches on first use.
 
 Usage counts against your own plan. A turn can take up to three agent runs (the turn and up to two fix-ups), and ×2 or ×3 alternatives multiply that.
 
-The first install is large, about 300 MB, because the Claude adapter brings its own copy of Claude Code. To work on Basis itself, clone the repository and run `npm install` and `npm run dev`.
+To work on Basis itself, clone the repository and run `npm install` and `npm run dev`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

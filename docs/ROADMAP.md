@@ -91,6 +91,14 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Basis runs the user's own Claude Code instead of shipping one. The Claude adapter's SDK lists a
+  native Claude Code binary per platform as optional dependencies, and npm installs those for any package that
+  depends on the adapter: about 260 MB of the install. The adapter now comes through npx with `--omit=optional`
+  (62 MB, once) and is pointed at the user's executable, which they already have since they log in with
+  `claude`. A real turn ran on Claude Code 2.1.296 against an SDK built for 2.1.300; much older versions are
+  untested, so an agent that exits says to run `claude update`. It also fits Anthropic's terms better: the user
+  runs their own, unmodified Claude Code.
+
 - 2026-10-18: Template updates for existing workspaces. A workspace owns its copy of the starter template, so
   Basis replaces only what nobody changed: files matching an earlier version from git history
   (`template/history.json`), a component's files together, since a new Navbar.tsx needs its new stylesheet

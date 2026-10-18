@@ -35,9 +35,14 @@ component source, patterns and the gallery specimens.
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
 - `server/agent.ts`: the ACP client (`@agentclientprotocol/sdk`).
-  - It spawns `claude-agent-acp`, or `codex-acp` via npx, and strips inherited `CLAUDE_*` and
-    `ANTHROPIC_BASE_URL` variables when launched from inside a Claude Code session (the agent's OAuth refresh
-    fails otherwise).
+  - It starts `claude-agent-acp` or `codex-acp` through npx at pinned versions (`CLAUDE_ACP`, `CODEX_ACP`), with
+    `--prefer-offline` so a fetched adapter also starts offline. Claude's adapter is fetched with
+    `--omit=optional`, which leaves out the copy of Claude Code (about 260 MB) its SDK would bring, and runs the
+    user's own: `findClaude` (`server/claude.ts`) passes it as `CLAUDE_CODE_EXECUTABLE`, from that variable, the
+    PATH (on Windows the executable behind npm's `claude.cmd` shim, which cannot start without a shell) or the
+    native installer's folder. Without it the agent does not start and says how to install it.
+  - It strips inherited `CLAUDE_*` and `ANTHROPIC_BASE_URL` variables when launched from inside a Claude Code
+    session (the agent's OAuth refresh fails otherwise).
   - It auto-approves reads inside the workspace and edits to the files the agent may change. Paths are compared
     where they really are (`relativeInside` in `server/paths.ts` follows symlinks and junctions, also for files
     not written yet), so a link out of the workspace or the repo is not approved.
@@ -227,8 +232,7 @@ TypeScript server through tsx). Publishing is the maintainer's call.
 - The README's logo is the relative `src/icon.svg`: npmjs.com resolves it through the public repository.
 - `docs/social-preview.png` (1280×640) is the repository's social preview. GitHub takes it only through the
   web UI: Settings, General, Social preview.
-- Bump `version`, update the README, then `npm publish`. The first install is about 300 MB, most of it the copy
-  of Claude Code that the Claude adapter brings.
+- Bump `version`, update the README, then `npm publish`.
 
 ## Gotchas
 
