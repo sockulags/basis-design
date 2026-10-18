@@ -88,8 +88,10 @@ component source, patterns and the gallery specimens.
   round. Where the big systems disagree the file picks one Basis default, so design systems made here agree.
 - `server/export.ts`: the starter kit, as a zip from `GET /export/starter-kit.zip` or written into a folder.
 - The verification kit (`server/verify.ts`, `server/capture.ts`, `server/verify-kit/`, `src/capture/`):
-  - `capture.html` renders one screen of one view alone (`?view=&screen=&theme=`), or lists every view's
-    screens and the shots their flow blocks ask for (`?list`, into `window.__basisViews`). It reads the tokens
+  - `capture.html` renders one screen of one view alone (`?view=&screen=&theme=`), one specimen's blocks as the
+    gallery renders them without the section header (`?specimen=&theme=`, at the width the browser gives it), or
+    lists every specimen, every view's screens and the shots their flow blocks ask for (`?list`, into
+    `window.__basisCapture`). It reads the tokens
     from `./design.json`: the preview server answers that path with the open design, and the kit's static copy
     has the file beside it. It sets `data-basis-ready` on `<html>` once fonts, images and the layout's size
     have settled, and `data-basis-error` when the screen threw. The chrome origin 404s it like `preview.html`.
@@ -97,7 +99,14 @@ component source, patterns and the gallery specimens.
     full page or a fixed height, themes) and names their files.
   - `server/capture.ts` launches a headless browser (Playwright's Chromium, else Chrome, else Edge, through
     `playwright-core`) with flags that keep rendering the same (`CAPTURE_ARGS`), and takes every shot twice at
-    device scale 1 with reduced motion; two different images mark the shot unstable.
+    device scale 1 with reduced motion (`CAPTURE_CONTEXT`, `takeShot`); two different images mark the shot
+    unstable.
+  - `server/screenshots.ts` takes screenshots of the live design for Basis itself, from the open project's
+    preview server (`OpenProject.screenshots`): `capture({ specimen } | { view, screen? }, { widths, themes,
+    height })` returns PNG buffers, `list()` what there is. A specimen gets the defaults of a flow without
+    `capture`, a view screen what its flow asks for, and given options replace them. It uses the kit's capture
+    page and render settings, so its images look like the kit's. One browser and context stay open between calls
+    (`Keeper`) and close a minute after the last one, or when the project closes.
   - `server/verify.ts` builds `capture.html` with Vite into a temporary folder (the same aliases as the preview,
     `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
     `basis-verify.json` (every shot and the render settings), a README for the implementing agent, and the two

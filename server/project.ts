@@ -5,6 +5,7 @@ import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
 import { rebasePlugin } from "./rebase.ts";
+import { Screenshots } from "./screenshots.ts";
 import { Workspace } from "./workspace.ts";
 
 export interface ProjectOptions {
@@ -59,6 +60,8 @@ export class OpenProject {
     private readonly root: string,
     private readonly previewServer: http.Server,
     private readonly previewVite: ViteDevServer,
+    /** Screenshots of specimens and view screens from this project's preview (server/screenshots.ts). */
+    readonly screenshots: Screenshots,
   ) {}
 
   static async open(entry: ProjectEntry, options: ProjectOptions): Promise<OpenProject> {
@@ -125,8 +128,9 @@ export class OpenProject {
       previewServer.listen(options.previewPort, options.host, resolve);
     });
 
+    const screenshots = new Screenshots(`http://${options.host}:${options.previewPort}/capture.html`);
     void agent.start();
-    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite);
+    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, screenshots);
   }
 
   get entry(): ProjectEntry {
@@ -151,6 +155,7 @@ export class OpenProject {
     this.workspace.removeAllListeners();
     this.agent.removeAllListeners();
     await this.agent.stop();
+    await this.screenshots.close();
     await this.workspace.close();
     await this.previewVite.close();
     this.previewServer.closeAllConnections();

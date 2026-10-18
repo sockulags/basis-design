@@ -1,4 +1,4 @@
-import { chromium, type Browser, type LaunchOptions } from "playwright-core";
+import { chromium, type Browser, type BrowserContextOptions, type LaunchOptions, type Page } from "playwright-core";
 import { READY_ATTRIBUTE, shotFile, type CaptureShot, type CaptureView } from "../shared/capture.ts";
 
 /*
@@ -65,8 +65,36 @@ export interface CaptureResult {
 }
 
 /** The height stored in a PNG's IHDR chunk. */
-function pngHeight(png: Buffer): number {
+export function pngHeight(png: Buffer): number {
   return png.length >= 24 ? png.readUInt32BE(20) : 0;
+}
+
+/** The browser context every capture runs in: device scale 1, reduced motion, light as the system's scheme. */
+export const CAPTURE_CONTEXT: BrowserContextOptions = {
+  deviceScaleFactor: 1,
+  reducedMotion: "reduce",
+  colorScheme: "light",
+  viewport: { width: 1440, height: 900 },
+};
+
+/** Opens a capture page URL and waits until it has settled (see `markReady` in src/capture/main.tsx). */
+export async function openCapturePage(page: Page, url: string, timeout = 60_000): Promise<void> {
+  await page.goto(url);
+  await page.waitForSelector(`html[${READY_ATTRIBUTE}]`, { state: "attached", timeout });
+}
+
+/** Opens one shot's page at the shot's size and photographs it; `failed` when what it renders threw. */
+export async function takeShot(
+  page: Page,
+  url: string,
+  shot: CaptureShot,
+  timeout?: number,
+): Promise<{ png: Buffer; failed: boolean }> {
+  await page.setViewportSize({ width: shot.width, height: shot.viewportHeight });
+  await openCapturePage(page, url, timeout);
+  const failed = await page.evaluate(() => document.documentElement.hasAttribute("data-basis-error"));
+  const png = await page.screenshot({ fullPage: shot.fullPage, animations: "disabled", caret: "hide" });
+  return { png, failed };
 }
 
 /**
@@ -78,17 +106,11 @@ export async function captureViews(
   browser: Browser,
   onProgress?: (done: number, total: number) => void,
 ): Promise<CaptureResult> {
-  const context = await browser.newContext({
-    deviceScaleFactor: 1,
-    reducedMotion: "reduce",
-    colorScheme: "light",
-    viewport: { width: 1440, height: 900 },
-  });
+  const context = await browser.newContext(CAPTURE_CONTEXT);
   try {
     const page = await context.newPage();
-    await page.goto(`${pageUrl}?list`);
-    await page.waitForSelector(`html[${READY_ATTRIBUTE}]`, { state: "attached", timeout: 60_000 });
-    const listed = await page.evaluate(() => window.__basisViews);
+    await openCapturePage(page, `${pageUrl}?list`);
+    const listed = await page.evaluate(() => window.__basisCapture);
     const views = listed?.views ?? [];
     const problems = listed?.problems ?? [];
     const total = views.reduce((sum, view) => sum + view.screens.reduce((count, s) => count + s.shots.length, 0), 0);
@@ -97,16 +119,8 @@ export async function captureViews(
       for (const screen of view.screens) {
         for (const shot of screen.shots) {
           const url = `${pageUrl}?view=${encodeURIComponent(view.id)}&screen=${encodeURIComponent(screen.id)}&theme=${shot.theme}`;
-          await page.setViewportSize({ width: shot.width, height: shot.viewportHeight });
-          const take = async () => {
-            await page.goto(url);
-            await page.waitForSelector(`html[${READY_ATTRIBUTE}]`, { state: "attached", timeout: 60_000 });
-            const failed = await page.evaluate(() => document.documentElement.hasAttribute("data-basis-error"));
-            const png = await page.screenshot({ fullPage: shot.fullPage, animations: "disabled", caret: "hide" });
-            return { png, failed };
-          };
-          const first = await take();
-          const second = await take();
+          const first = await takeShot(page, url, shot);
+          const second = await takeShot(page, url, shot);
           shots.push({
             ...shot,
             view: view.id,

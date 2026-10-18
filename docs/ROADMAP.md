@@ -60,7 +60,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ### The agent's work
 
-- [ ] **Capture any specimen.** `capture.html` gets a third mode, `?specimen=<id>&theme=light|dark`, that renders
+- [x] **Capture any specimen.** `capture.html` gets a third mode, `?specimen=<id>&theme=light|dark`, that renders
       one component's or pattern's specimen alone at the width the browser gives it, the way the gallery renders
       it, without the gallery's chrome. A server module (beside `server/capture.ts`) captures a specimen or a view
       screen from the live preview server at given widths and themes, keeping one browser open and closing it after
@@ -171,6 +171,23 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-18: Capture any specimen. `capture.html?specimen=<id>&theme=` renders a specimen's blocks with the
+  gallery's own block components and the spacing of a gallery section, without the header or the Refine button,
+  padded by `space-8` (`space-4` under 720px) so shadows and focus rings are not cut off; it fills the width the
+  browser gives it rather than the gallery's 1080px column. Views are specimens too, so a view id works there and
+  shows its flow with the screen strip, as in the gallery; `{ view, screen }` gives the bare screen as the kit
+  does. `server/screenshots.ts` reuses the kit's page, browser launch, flags and context (the shot-taking moved
+  out of `captureViews` into `takeShot`, so both use the same code); `NEUTRAL_CSS` is not added, since the capture
+  page's own stylesheet already has those rules. A specimen's default shots are those of a flow without `capture`
+  (375, 768 and 1440, full page, light) and a view screen's are what its flow asks for; the screenshot tool can
+  pass its own. Every call reads the page's list first, so an unknown id fails with the ids there are instead of
+  a picture of an error. One browser context stays open with the browser, so the preview's modules stay cached:
+  four shots took about 1.3 s with the browser warm. A page that does not settle in 30 s (a compile error in the
+  preview) is reported as such. Each open project has its own instance, closed with the project; nothing calls it
+  yet. Against a throwaway instance a script captured `buttons`, `navbar` and the starter view's member screen at
+  375 and 1280 in both themes, all rendered correctly, a capture repeated gave the identical image, the browser
+  closed after the idle time, and the verification kit still built (9 stable shots) after the refactor.
 
 - 2026-10-18: Round 2 planned. Order follows Lucas' priorities: the agent's own work first (it sees what it built,
   then more checks), then what the service can do, then packaging. Specimen capture comes first because the

@@ -1,22 +1,25 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { captureShots, READY_ATTRIBUTE, type CaptureView } from "../../shared/capture.ts";
+import { captureShots, READY_ATTRIBUTE, type CaptureList } from "../../shared/capture.ts";
 import { parseDesignText, type Design } from "../../shared/design.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import type { ScreenProps, SpecimenBlock } from "../../template/components/specimen.ts";
-import { loadSpecimens, type LoadedSpecimen } from "../preview/specimens.tsx";
+import { loadSpecimens, SpecimenBlocks, type LoadedSpecimen } from "../preview/specimens.tsx";
 import "./capture.css";
+import styles from "./Specimen.module.css";
 
 /*
  * One screen of a view, alone on the page at the size the browser gives it, for the verification kit's
- * screenshots: `?view=<view id>&screen=<screen id>&theme=light|dark`. `?list` instead reports every view and
- * the shots its screens ask for (window.__basisViews). The design comes from design.json beside this page, so
- * the same page runs on Basis' preview server and as the kit's static copy of the design.
+ * screenshots: `?view=<view id>&screen=<screen id>&theme=light|dark`. `?specimen=<id>&theme=light|dark` renders
+ * one specimen's blocks the way the gallery does, without its section header, for Basis' own screenshots
+ * (server/screenshots.ts). `?list` instead reports every specimen, every view and the shots its screens ask for
+ * (window.__basisCapture). The design comes from design.json beside this page, so the same page runs on Basis'
+ * preview server and as the kit's static copy of the design.
  */
 
 declare global {
   interface Window {
-    __basisViews?: { views: CaptureView[]; problems: string[] };
+    __basisCapture?: CaptureList;
   }
 }
 
@@ -27,9 +30,9 @@ function flows(specimen: LoadedSpecimen): FlowBlock[] {
   return specimen.blocks.filter((block): block is FlowBlock => block.kind === "flow");
 }
 
-function views(): { views: CaptureView[]; problems: string[] } {
+function list(): CaptureList {
   const { specimens, problems } = loadSpecimens();
-  const list = specimens
+  const views = specimens
     .filter((specimen) => specimen.page === "views")
     .map((specimen) => ({
       id: specimen.id,
@@ -39,7 +42,11 @@ function views(): { views: CaptureView[]; problems: string[] } {
       ),
     }))
     .filter((view) => view.screens.length > 0);
-  return { views: list, problems: problems.map((problem) => `${problem.file}: ${problem.message}`) };
+  return {
+    specimens: specimens.map(({ id, title, page }) => ({ id, title, page })),
+    views,
+    problems: problems.map((problem) => `${problem.file}: ${problem.message}`),
+  };
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -114,6 +121,27 @@ function Screen({ design, theme }: { design: Design; theme: "light" | "dark" }) 
   );
 }
 
+/** One specimen alone, as the gallery renders it at the width of its column. */
+function SpecimenAlone({ design, theme }: { design: Design; theme: "light" | "dark" }) {
+  const { specimens } = useMemo(() => loadSpecimens(), []);
+  const specimen = specimens.find((item) => item.id === params.get("specimen"));
+
+  useEffect(() => {
+    void markReady();
+  }, []);
+
+  if (!specimen) return <p className="capture-problem">No specimen "{params.get("specimen")}".</p>;
+  return (
+    <div className="ds-root" data-theme={theme}>
+      <div className={styles.specimen}>
+        <Boundary>
+          <SpecimenBlocks specimen={specimen} design={design} />
+        </Boundary>
+      </div>
+    </div>
+  );
+}
+
 function Page({ design }: { design: Design }) {
   const theme = params.get("theme") === "dark" ? "dark" : "light";
   return (
@@ -122,7 +150,11 @@ function Page({ design }: { design: Design }) {
       {design.typography.fontImports.map((href) => (
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <Screen design={design} theme={theme} />
+      {params.has("specimen") ? (
+        <SpecimenAlone design={design} theme={theme} />
+      ) : (
+        <Screen design={design} theme={theme} />
+      )}
     </>
   );
 }
@@ -130,7 +162,7 @@ function Page({ design }: { design: Design }) {
 async function start(): Promise<void> {
   const root = createRoot(document.getElementById("root")!);
   if (params.has("list")) {
-    window.__basisViews = views();
+    window.__basisCapture = list();
     document.documentElement.setAttribute(READY_ATTRIBUTE, "true");
     return;
   }

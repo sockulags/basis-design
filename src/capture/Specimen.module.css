@@ -1,0 +1,13 @@
+/* A specimen alone: its blocks spaced as in a gallery section, with room around them for shadows and focus rings. */
+
+.specimen {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-8);
+}
+
+@media (max-width: 720px) {
+  .specimen {
+    padding: var(--space-4);
+  }
+}

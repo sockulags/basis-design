@@ -71,5 +71,19 @@ export interface CaptureView {
   screens: { id: string; label: string; shots: CaptureShot[] }[];
 }
 
+/** A specimen the capture page can render alone (`?specimen=<id>`): a component's, a pattern's or a view's. */
+export interface CaptureSpecimen {
+  id: string;
+  title: string;
+  page: string;
+}
+
+/** Everything the capture page can render, as `?list` reports it (window.__basisCapture). */
+export interface CaptureList {
+  specimens: CaptureSpecimen[];
+  views: CaptureView[];
+  problems: string[];
+}
+
 /** The attribute the capture page sets on <html> once a screen has settled and can be photographed. */
 export const READY_ATTRIBUTE = "data-basis-ready";
