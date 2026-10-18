@@ -91,6 +91,13 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Folders without typing paths. Linking a repo meant typing its full path. Basis runs on the same
+  computer as the browser, so the server opens the system's own folder dialog, and suggests the git repos it finds
+  in the usual code folders; pasting still works. Over HTTP rather than the bridge, since these are questions the
+  dialog waits for, limited to POSTs from Basis' own origin. On Windows, PowerShell 7 gives the modern dialog but
+  takes about three seconds to start; the button says to choose in the dialog meanwhile. The dialog's checkbox was
+  the size of a button: the dialog's text-field rule applied to every input.
+
 - 2026-10-18: Basis runs the user's own Claude Code instead of shipping one. The Claude adapter's SDK lists a
   native Claude Code binary per platform as optional dependencies, and npm installs those for any package that
   depends on the adapter: about 260 MB of the install. The adapter now comes through npx with `--omit=optional`

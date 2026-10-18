@@ -17,6 +17,7 @@ import { createInstruction, importInstruction, templateInstruction, viewInstruct
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
+import { pickFolder, suggestRepos } from "./folders.ts";
 import { checkRepo, Projects } from "./projects.ts";
 import { templateChanges } from "./template.ts";
 
@@ -105,8 +106,50 @@ chromeServer.on("request", (req, res) => {
     void sendStarterKitZip(res);
     return;
   }
+  if (req.url?.startsWith("/api/")) {
+    void handleApi(req, res);
+    return;
+  }
   chromeGuard(req, res, () => chromeVite.middlewares(req, res));
 });
+
+/** True while a folder dialog is open: one at a time. */
+let picking = false;
+
+/**
+ * Small requests the chrome makes and waits for: a folder from the system's dialog, repos to suggest. Only POSTs
+ * from the chrome's own origin, so another web page can neither open dialogs on this computer nor read the answer.
+ */
+async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const reply = (status: number, body: unknown) => {
+    res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify(body));
+  };
+  if (req.method !== "POST" || !chromeOrigins.includes(req.headers.origin ?? "")) return reply(403, {});
+  let body: { title?: string; start?: string };
+  try {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    body = raw ? JSON.parse(raw) : {};
+  } catch {
+    return reply(400, {});
+  }
+  if (req.url === "/api/pick-folder") {
+    if (picking) return reply(409, { error: "A folder dialog is already open." });
+    picking = true;
+    try {
+      return reply(200, { path: await pickFolder(body.title ?? "Choose a folder", body.start) });
+    } catch (error) {
+      return reply(200, { path: null, error: (error as Error).message });
+    } finally {
+      picking = false;
+    }
+  }
+  if (req.url === "/api/repos") {
+    return reply(200, { repos: await suggestRepos(undefined, [root, current.entry.dir]) });
+  }
+  reply(404, {});
+}
 
 async function starterKit() {
   return buildStarterKit(current.workspace.state.design, current.workspace.dir);

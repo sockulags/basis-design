@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Design } from "../../shared/design.ts";
 import type { ClientMessage, ExportWriteResult } from "../../shared/protocol.ts";
 import { exportCss, exportJson, exportTailwind } from "../../shared/tokens.ts";
+import { BrowseButton } from "./FolderField.tsx";
 import { readPref, writePref } from "./prefs.ts";
 import styles from "./Shell.module.css";
 
@@ -40,6 +41,7 @@ function StarterKit({
 }: Pick<ExportDialogProps, "workspace" | "problems" | "manifest" | "result" | "send">) {
   const [target, setTarget] = useState(() => readPref(targetPref(workspace)) ?? "");
   const [pending, setPending] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
   // Only show results of writes made while this dialog is open.
   const [stale] = useState(latest);
   const result = latest === stale ? null : latest;
@@ -103,13 +105,20 @@ function StarterKit({
             id="export-target"
             value={target}
             onChange={(event) => setTarget(event.target.value)}
-            placeholder="C:\Code\my-app\src\design-system"
+            placeholder="Browse, or paste the folder's path"
             spellCheck={false}
+          />
+          <BrowseButton
+            title="Choose the folder to write the starter kit into"
+            start={target}
+            onPick={setTarget}
+            onError={setBrowseError}
           />
           <button type="submit" className={styles.chromeButton} disabled={!target.trim() || pending}>
             {pending ? "Writing…" : "Write files"}
           </button>
         </div>
+        {browseError && <p className={styles.kitError}>{browseError}</p>}
         {result?.error && <p className={styles.kitError}>{result.error}</p>}
         {conflicts && (
           <div className={styles.kitConflicts}>

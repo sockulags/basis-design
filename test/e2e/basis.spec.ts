@@ -81,3 +81,15 @@ test("the Navbar keeps its links in a wide gallery and moves them behind a menu 
   await menuButton.click();
   await expect(phone.getByRole("link", { name: "Overview" })).toBeVisible();
 });
+
+test("linking a repo offers the system's folder dialog, and its checkbox is a checkbox", async ({ page, basis }) => {
+  await open(page, basis);
+  await page.locator('[class*="projectButton"]').click();
+  await page.getByRole("button", { name: /Link product repo/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "Browse…" })).toBeVisible();
+  await expect(dialog.getByLabel("Repo folder")).toBeVisible();
+  const box = await dialog.getByRole("checkbox").boundingBox();
+  expect(box?.width).toBeLessThan(24);
+  expect(box?.height).toBeLessThan(24);
+});

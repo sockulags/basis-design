@@ -785,7 +785,8 @@ a.primaryButton {
   font-size: 12px;
 }
 
-.createFields input,
+/* Text fields only: a checkbox or radio given full width and 32px height grows into a large square. */
+.createFields input:not([type="checkbox"], [type="radio"]),
 .createFields textarea {
   width: 100%;
   padding: 6px 10px;
@@ -796,8 +797,67 @@ a.primaryButton {
   font: inherit;
 }
 
-.createFields input {
+.createFields input:not([type="checkbox"], [type="radio"]) {
   height: 32px;
+}
+
+.createFields input:is([type="checkbox"], [type="radio"]) {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 2px 0 0;
+  accent-color: var(--app-signal);
+}
+
+/* A folder path and its Browse button. */
+.folderRow {
+  display: flex;
+  gap: 6px;
+}
+
+.folderRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.folderRow button {
+  flex: none;
+}
+
+.repoSuggestions {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.repoSuggestions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.repoChip {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-ink-2);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.repoChip:hover {
+  border-color: var(--app-muted);
+}
+
+.repoChip[aria-pressed="true"] {
+  border-color: var(--app-signal);
+  color: var(--app-signal);
 }
 
 .createFields textarea {

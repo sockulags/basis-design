@@ -87,6 +87,13 @@ component source, patterns and the gallery specimens.
   something; `test/guidelines.test.ts` fails when a section exists that the brief does not name, or the other way
   round. Where the big systems disagree the file picks one Basis default, so design systems made here agree.
 - `server/export.ts`: the starter kit, as a zip from `GET /export/starter-kit.zip` or written into a folder.
+- `server/folders.ts`: choosing folders without typing paths. `pickFolder` opens the system's folder dialog
+  (PowerShell's FolderBrowserDialog on Windows, with a hidden topmost owner so it opens in front; `osascript` on
+  macOS; zenity or kdialog on Linux, and a message to type the path when neither exists). `suggestRepos` finds
+  git repos up to two levels into the usual code folders under the home folder, the most recently used first.
+  The chrome reaches both through `POST /api/pick-folder` and `POST /api/repos`, which answer only POSTs from its
+  own origin, so another page can neither open dialogs nor read the list. `FolderField` and `BrowseButton`
+  (`src/shell/FolderField.tsx`) use them in the project dialogs and the export.
 - `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `tokens.ts` (CSS variables and
   exports), `protocol.ts` (bridge messages), `frame.ts` (chrome-iframe messages, pages, and the parser for
   untrusted preview input), `review.ts` (review.json format), `contracts.ts`, `annotations.ts`, `diff.ts`.

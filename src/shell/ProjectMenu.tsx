@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ClientMessage, ProjectEntry, TemplateUpdate } from "../../shared/protocol.ts";
+import { FolderField } from "./FolderField.tsx";
 import styles from "./Shell.module.css";
 
 interface ProjectMenuProps {
@@ -341,32 +342,33 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
                 </label>
               </fieldset>
               {fromRepo && (
-                <>
-                  <label htmlFor="project-repo">Repo folder</label>
-                  <input
-                    id="project-repo"
-                    value={dir}
-                    onChange={(event) => setDir(event.target.value)}
-                    placeholder="C:\\Code\\my-app"
-                    spellCheck={false}
-                    autoComplete="off"
-                  />
-                </>
+                <FolderField
+                  id="project-repo"
+                  label="Repo folder"
+                  value={dir}
+                  onChange={setDir}
+                  placeholder="Browse, pick a repo below, or paste its path"
+                  dialogTitle="Choose the product repo"
+                  suggestRepos
+                />
               )}
             </>
           ) : (
             <>
-              <label htmlFor="project-dir">{mode === "repo" ? "Repo folder" : "Folder"}</label>
-              <input
+              <FolderField
                 id="project-dir"
+                label={mode === "repo" ? "Repo folder" : "Folder"}
                 value={dir}
-                onChange={(event) => setDir(event.target.value)}
-                placeholder={mode === "repo" ? "C:\\Code\\my-app" : "C:\\Code\\my-app\\design-system"}
-                spellCheck={false}
-                autoComplete="off"
+                onChange={setDir}
+                placeholder={
+                  mode === "repo" ? "Browse, pick a repo below, or paste its path" : "Browse, or paste its path"
+                }
+                dialogTitle={
+                  mode === "repo" ? "Choose the product repo" : "Choose a Basis workspace or an empty folder"
+                }
+                suggestRepos={mode === "repo"}
                 autoFocus
               />
-              <p className={styles.muted}>Use the full path.</p>
               {mode === "repo" && (
                 <label className={styles.projectCheck}>
                   <input type="checkbox" checked={bringIn} onChange={(event) => setBringIn(event.target.checked)} />
