@@ -1,3 +1,5 @@
+<img src="src/icon.svg" width="72" height="72" alt="">
+
 # Basis
 
 Prompt a complete design system into existence, then refine it down to the last transition.
