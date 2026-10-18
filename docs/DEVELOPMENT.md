@@ -209,8 +209,7 @@ TypeScript server through tsx). Publishing is Lucas' call; nothing is published 
   temp folder, then `BASIS_HOME="$TEMP/x" PORT=5340 ./node_modules/.bin/basis`. Check that the gallery renders,
   the workspace type check is clean and a real agent turn lands. An install hoists dependencies above Basis'
   folder, which a checkout never does.
-- The README's logo is served by jsDelivr from the published package (`src/icon.svg`), so it shows on
-  npmjs.com and GitHub whatever the repository's visibility; it appears once the first version is out.
+- The README's logo is the relative `src/icon.svg`: npmjs.com resolves it through the public repository.
 - `docs/social-preview.png` (1280×640) is the repository's social preview. GitHub takes it only through the
   web UI: Settings, General, Social preview.
 - Bump `version`, update the README, then `npm publish`. The first install is about 300 MB, most of it the copy

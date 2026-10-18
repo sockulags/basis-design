@@ -1,4 +1,4 @@
-<img src="https://cdn.jsdelivr.net/npm/basis-design/src/icon.svg" width="72" height="72" alt="">
+<img src="src/icon.svg" width="72" height="72" alt="">
 
 # Basis
 
