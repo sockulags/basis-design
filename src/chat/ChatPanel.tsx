@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { Annotation } from "../../shared/annotations.ts";
 import {
   AGENT_IDS,
@@ -38,6 +38,8 @@ interface ChatPanelProps {
   onTogglePick: () => void;
   /** True while a review is open. */
   reviewing: boolean;
+  /** The handle that resizes the panel; inside it, so it belongs to the panel's landmark. */
+  resizer?: ReactNode;
 }
 
 const STATUS_TEXT: Record<AgentState["status"], string> = {
@@ -58,6 +60,7 @@ export function ChatPanel({
   onDraft,
   send,
   composerRef,
+  resizer,
   ...composer
 }: ChatPanelProps) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -116,9 +119,14 @@ export function ChatPanel({
         </div>
       )}
 
+      {/* Focusable, so the conversation scrolls from the keyboard too; not role="log", which would read the
+          streamed reply aloud as it arrives. */}
       <div
         ref={scroller}
         className={styles.log}
+        role="region"
+        aria-label="Conversation"
+        tabIndex={0}
         onScroll={(event) => {
           const el = event.currentTarget;
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -213,6 +221,7 @@ export function ChatPanel({
         }}
         {...composer}
       />
+      {resizer}
     </aside>
   );
 }

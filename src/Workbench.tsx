@@ -214,9 +214,10 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
         picking={picking}
         onTogglePick={() => (picking ? finishPicking() : setPicking(true))}
         reviewing={Boolean(review)}
+        resizer={!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
       />
-      {!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
       <main className={styles.main}>
+        <h1 className="visually-hidden">Basis</h1>
         <TopBar
           chatHidden={chatHidden}
           onToggleChat={() => setChatHidden((hidden) => !hidden)}
