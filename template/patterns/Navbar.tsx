@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "../components/index.ts";
 import { Icon } from "./icons.tsx";
 import styles from "./Navbar.module.css";
@@ -25,7 +25,7 @@ export interface NavbarProps {
   elevated?: boolean;
   /**
    * Forces the narrow layout, where links, search and actions move behind a menu button. Without it the bar switches by
-   * itself when it is narrower than 960px.
+   * itself: under 1024px the search becomes a button, under 800px everything moves behind the menu button.
    */
   compact?: boolean;
   /** Controls the menu from outside; otherwise the bar keeps its own open state. */
@@ -51,6 +51,18 @@ export function Navbar({
   const [ownOpen, setOwnOpen] = useState(false);
   const open = menuOpen ?? ownOpen;
   const toggle = onMenuToggle ?? (() => setOwnOpen((value) => !value));
+  const menu = useRef<HTMLDivElement>(null);
+  // The search button opens the panel below the bar; the field there gets focus, so typing can start at once.
+  const focusSearch = useRef(false);
+  const openSearch = () => {
+    focusSearch.current = !open;
+    toggle();
+  };
+  useEffect(() => {
+    if (!open || !focusSearch.current) return;
+    focusSearch.current = false;
+    menu.current?.querySelector("input")?.focus();
+  }, [open]);
 
   const search = searchPlaceholder && (
     <label className={styles.search}>
@@ -102,6 +114,18 @@ export function Navbar({
         </nav>
         <div className={styles.end}>
           {search}
+          {searchPlaceholder && (
+            <button
+              type="button"
+              className={styles.searchButton}
+              aria-expanded={open}
+              aria-controls={menuId}
+              aria-label="Search"
+              onClick={openSearch}
+            >
+              <Icon name="search" size={18} />
+            </button>
+          )}
           {actions && <div className={styles.actions}>{actions}</div>}
           {user && (
             <span className={styles.user} title={user.name}>
@@ -111,7 +135,7 @@ export function Navbar({
         </div>
       </div>
       {open && (
-        <div id={menuId} className={styles.menu}>
+        <div id={menuId} ref={menu} className={styles.menu}>
           {search}
           {actions && <div className={styles.actions}>{actions}</div>}
           <nav className={styles.menuLinks} aria-label="Main">

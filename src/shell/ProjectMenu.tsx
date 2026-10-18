@@ -255,7 +255,7 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
             <h2>{mode === "create" ? "New project" : mode === "repo" ? "Link a product repo" : "Open a folder"}</h2>
             <p>
               {mode === "create"
-                ? "A design system of its own, with its own history and chat. It lives in Basis' workspaces folder."
+                ? "A design system of its own, with its own history and chat. It is saved in ~/.basis/workspaces (or BASIS_HOME)."
                 : mode === "repo"
                   ? `The repo ${current?.name ?? "this project"} designs for. The agent reads it to match the product's look, components and terms; it never writes there.`
                   : "A Basis workspace anywhere on this computer, or an empty or new folder (inside a product repo, say) for Basis to set up."}

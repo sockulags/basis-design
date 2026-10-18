@@ -101,7 +101,7 @@ export default defineSpecimen({
     },
     {
       kind: "block",
-      title: "Narrow · under 960px the links and search move behind the menu",
+      title: "Narrow · under 800px the links and search move behind the menu",
       render: () => (
         <div style={{ ...frame, maxWidth: 380 }}>
           <Navbar

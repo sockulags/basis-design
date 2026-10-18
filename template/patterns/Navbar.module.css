@@ -87,7 +87,8 @@
 .link:focus-visible,
 .link[data-force="focus"],
 .menuLink:focus-visible,
-.menuButton:focus-visible {
+.menuButton:focus-visible,
+.searchButton:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: calc(var(--focus-ring-width) * -1);
 }
@@ -155,7 +156,8 @@
   display: inline-flex;
 }
 
-.menuButton {
+.menuButton,
+.searchButton {
   display: none;
   flex: none;
   place-items: center;
@@ -170,7 +172,8 @@
   transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
-.menuButton:hover {
+.menuButton:hover,
+.searchButton:hover {
   background: var(--color-secondary);
 }
 
@@ -187,32 +190,55 @@
   gap: 2px;
 }
 
-/* Narrow layout, forced by compact or when the bar is under 960px wide: the links, the search and the actions
-   move into the menu behind the menu button. */
-.navbar[data-compact] .menuButton {
+/* Three layouts by the bar's own width. From 1024px everything sits in the bar. From 800px the search becomes a
+   button that opens it below the bar. Under 800px, or with compact, the links, the search and the actions move
+   into the menu behind the menu button. */
+@container (width < 1024px) {
+  .bar .search {
+    display: none;
+  }
+
+  .searchButton,
+  .menu {
+    display: grid;
+  }
+
+  .menu :is(.actions, .menuLinks) {
+    display: none;
+  }
+}
+
+.navbar[data-compact] .menuButton,
+.navbar[data-compact] .menu,
+.navbar[data-compact] .menu .menuLinks {
   display: grid;
 }
 
-.navbar[data-compact] .menu {
-  display: grid;
+.navbar[data-compact] .menu .actions {
+  display: flex;
 }
 
-.navbar[data-compact] .bar :is(.links, .search, .actions) {
+.navbar[data-compact] .bar :is(.links, .search, .actions, .searchButton) {
   display: none;
 }
 
-@container (width < 960px) {
+@container (width < 800px) {
   .bar {
     gap: var(--space-3);
     padding-inline: var(--space-3);
   }
 
   .menuButton,
-  .menu {
+  .menu,
+  .menu .menuLinks {
     display: grid;
   }
 
-  .bar :is(.links, .search, .actions) {
+  .menu .actions {
+    display: flex;
+  }
+
+  .bar :is(.links, .search, .actions, .searchButton) {
     display: none;
   }
 }

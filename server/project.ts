@@ -99,6 +99,8 @@ export class OpenProject {
       },
       server: {
         middlewareMode: true,
+        // Agent-written code logs in the preview; its console belongs in the browser, not in the terminal.
+        forwardConsole: false,
         hmr: { server: previewServer },
         fs: { allow: [root, entry.dir] },
         // 'self': the preview embeds a copy of itself for the accessibility check in the other theme.

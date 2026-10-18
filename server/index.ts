@@ -94,7 +94,8 @@ const chromeVite = await createVite({
   appType: "spa",
   cacheDir: "node_modules/.vite/chrome",
   optimizeDeps: { entries: ["index.html"] },
-  server: { middlewareMode: true, hmr: { server: chromeServer } },
+  // Vite forwards browser console errors to the terminal when it thinks an agent runs it; for Basis that is noise.
+  server: { middlewareMode: true, hmr: { server: chromeServer }, forwardConsole: false },
 });
 const chromeGuard = guard((url) => url === "/preview.html");
 chromeServer.on("request", (req, res) => {
