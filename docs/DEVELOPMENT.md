@@ -20,7 +20,9 @@ component source, patterns and the gallery specimens.
   - **Chrome** on `PORT` (5320) serves `index.html` and is the only origin allowed on the `/bridge` WebSocket.
   - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is the
     open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
-    the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project.
+    the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
+    project entry may name a product `repo`; linking one updates the open project in place (`OpenProject.update`),
+    and `AgentHost` auto-approves reads and searches inside it and tells the agent about it every turn.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
@@ -141,8 +143,9 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
 - **Test changes that touch the agent or the workspace** in a separate instance with a throwaway workspace:
   `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`. `BASIS_WORKSPACE` opens just that
   workspace and never touches the saved project list. To test projects themselves, give the instance its own
-  home instead: `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts`. Stop it and delete the
-  folder afterwards.
+  home instead: `PORT=5330 BASIS_HOME="$TEMP/basis-test-home" npx tsx server/index.ts`. A home of its own starts
+  with a new project in its `workspaces/` folder; before 2026-10-18 it adopted `workspace/` in the repo, which is
+  Lucas' real workspace. Stop it and delete the folder afterwards.
 - **Verify in the built-in browser.** The parent cannot read the iframe's DOM (by design), so check preview
   content with screenshots and zoom, or through what the chrome shows (sidebar, problems list, chips).
 - **Verify the export** by unzipping the kit into a temp app with a `tsconfig` whose `paths` point at Basis'

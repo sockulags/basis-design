@@ -32,6 +32,8 @@ Open http://localhost:5320. Basis starts Claude Code by default; switch to Codex
 
 Each project is a workspace of its own: its own design system, history, chat and review. Switch, create and open projects from the menu with the project's name at the top left.
 
+A project can link the **product repo** it designs for (project menu, **Link product repo…**). The agent reads and searches it without asking, to match the product's look, components and terms, and never writes there: writes outside the workspace are refused.
+
 - **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `workspaces/` in the Basis folder.
 - **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance. Basis refuses a folder that already has other files, so it never starts a history in someone's project.
 - Switching waits while the agent works. The agent of the project you leave stops, and coming back resumes its conversation, so it remembers where you were. The export remembers its target folder per project.

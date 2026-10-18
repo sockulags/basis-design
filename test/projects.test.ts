@@ -28,6 +28,33 @@ async function workspace(dir: string, name: string): Promise<string> {
   return dir;
 }
 
+describe("product repos", () => {
+  test("a project links a repo folder, keeps it across loads, and unlinks it", async () => {
+    const home = await folder();
+    const repo = await folder();
+    const projects = new Projects(home);
+    await projects.load({ fallback: await workspace(path.join(home, "workspace"), "Acme") });
+    const id = projects.active!.id;
+    assert.equal((await projects.setRepo(id, repo)).repo, repo);
+    const again = new Projects(home);
+    await again.load();
+    assert.equal(again.find(id)?.repo, repo);
+    assert.equal((await again.setRepo(id, null)).repo, undefined);
+  });
+
+  test("refuses a missing folder, a relative path and the workspace itself", async () => {
+    const home = await folder();
+    const projects = new Projects(home);
+    const dir = await workspace(path.join(home, "workspace"), "Acme");
+    await projects.load({ fallback: dir });
+    const id = projects.active!.id;
+    await assert.rejects(projects.setRepo(id, path.join(home, "missing")), /does not exist/);
+    await assert.rejects(projects.setRepo(id, "relative/path"), /full path/);
+    await assert.rejects(projects.setRepo(id, dir), /own workspace/);
+    await assert.rejects(projects.setRepo(id, path.join(dir, "components")), /own workspace/);
+  });
+});
+
 describe("the project list", () => {
   test("a new list starts with the old single workspace, named after its design system", async () => {
     const home = await folder();

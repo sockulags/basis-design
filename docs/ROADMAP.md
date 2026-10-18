@@ -59,7 +59,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ### Product repos
 
-- [ ] **Link a repo to a project.** A project entry can name a product repo folder (project menu: link,
+- [x] **Link a repo to a project.** A project entry can name a product repo folder (project menu: link,
       change, unlink). Reads and searches inside the repo are approved automatically; writes there are
       refused like any path outside the workspace. Every turn tells the agent the repo exists and is
       read-only.
@@ -95,6 +95,13 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: A linked repo is stored on the project entry (`repo`). Reads and searches inside it are approved
+  automatically; shell commands there still ask, and the per-turn context steers the agent to its read and
+  search tools. Incident while testing this step: an instance started with a fresh `BASIS_HOME` adopted
+  `workspace/` in the repo (Lucas' real workspace) as its fallback and committed the pattern-contracts
+  migration there, the same entry Lucas' own next start would have made; nothing was lost. A custom home now
+  starts with a new project instead. Also fixed: the project dialog waited forever when the same error came back
+  twice.
 - 2026-10-18: Pattern contracts copy the starter patterns' props, minus gallery-only ones (`force`,
   `forceHover`) and layout switches a product would not rely on. Removing an optional prop still passes (the
   check is structural); changing a prop's type or adding a required one fails. Icon names make the contracts

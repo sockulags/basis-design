@@ -21,7 +21,8 @@ export interface BridgeState {
   /** The project being opened, while Basis switches to it. */
   switching: ProjectEntry | null;
   /** Why the last project request failed, until the next one. */
-  projectError: string | null;
+  /** The last failed project request's answer; a new object each time, so a repeated message is a new answer. */
+  projectError: { message: string } | null;
   design: DesignState | null;
   history: HistoryEntry[];
   agent: AgentState | null;
@@ -82,11 +83,16 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       };
     }
     case "projects":
-      return { ...state, projects: action.projects };
+      // The open project's entry can change too (a product repo linked).
+      return {
+        ...state,
+        projects: action.projects,
+        project: action.projects.find((entry) => entry.id === state.project?.id) ?? state.project,
+      };
     case "project-switching":
       return { ...state, switching: action.project, projectError: null };
     case "project-error":
-      return { ...state, projectError: action.message };
+      return { ...state, projectError: { message: action.message } };
     case "design":
       return { ...state, design: action.design };
     case "history":

@@ -39,7 +39,7 @@ export function guard(blocked: (url: string) => boolean): Connect.NextHandleFunc
  */
 export class OpenProject {
   private constructor(
-    readonly entry: ProjectEntry,
+    private current: ProjectEntry,
     readonly workspace: Workspace,
     readonly agent: AgentHost,
     private readonly root: string,
@@ -51,7 +51,7 @@ export class OpenProject {
     const { root, broadcast } = options;
     const workspace = new Workspace(entry.dir);
     await workspace.init();
-    const agent = new AgentHost(workspace, options.agent);
+    const agent = new AgentHost(workspace, options.agent, entry.repo);
     await agent.restore();
 
     workspace.on("design", (design) => broadcast({ type: "design", design }));
@@ -101,6 +101,16 @@ export class OpenProject {
 
     void agent.start();
     return new OpenProject(entry, workspace, agent, root, previewServer, previewVite);
+  }
+
+  get entry(): ProjectEntry {
+    return this.current;
+  }
+
+  /** Takes a changed list entry for this project (say, a product repo linked); the agent reads it from its next turn. */
+  update(entry: ProjectEntry): void {
+    this.current = entry;
+    this.agent.setRepo(entry.repo);
   }
 
   /** The URL path under which the preview serves a file or folder on disk. */

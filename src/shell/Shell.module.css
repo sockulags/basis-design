@@ -967,6 +967,24 @@ a.primaryButton {
   color: var(--app-text);
 }
 
+.projectRepo {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--app-line);
+  font-size: 12px;
+}
+
+.projectRepoHint {
+  color: var(--app-muted);
+  line-height: 1.45;
+}
+
+.projectRepoActions {
+  display: flex;
+  gap: 6px;
+}
+
 .projectActions {
   display: flex;
   gap: 6px;

@@ -138,6 +138,8 @@ export interface ProjectEntry {
   name: string;
   /** Absolute path of the workspace folder. */
   dir: string;
+  /** Absolute path of a product repo the project designs for; the agent may read it, never write to it. */
+  repo?: string;
 }
 
 export type ServerMessage =
@@ -206,4 +208,6 @@ export type ClientMessage =
   | { type: "project-create"; name: string; copyCurrent: boolean }
   /** Adds a workspace folder (or an empty or new one) to the list and opens it. */
   | { type: "project-open"; dir: string }
-  | { type: "project-remove"; id: string };
+  | { type: "project-remove"; id: string }
+  /** Links a product repo folder to a project, or unlinks it (null). */
+  | { type: "project-repo"; id: string; repo: string | null };

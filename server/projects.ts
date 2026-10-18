@@ -130,6 +130,29 @@ export class Projects {
     return this.add(await designName(dir), dir);
   }
 
+  /**
+   * Links a product repo to a project, or unlinks it with null. The repo must be
+   * an existing folder outside the workspace; Basis only reads it.
+   */
+  async setRepo(id: string, folder: string | null): Promise<ProjectEntry> {
+    const entry = this.find(id);
+    if (!entry) throw new Error("There is no such project.");
+    let repo: string | undefined;
+    if (folder !== null) {
+      const trimmed = folder.trim();
+      if (!trimmed || !path.isAbsolute(trimmed)) throw new Error("Give the full path of the repo's folder.");
+      repo = path.resolve(trimmed);
+      if (!existsSync(repo) || !(await stat(repo)).isDirectory()) throw new Error("That folder does not exist.");
+      if (samePath(repo, entry.dir) || isInside(entry.dir, repo)) {
+        throw new Error("That is the project's own workspace; link the product repo it designs for.");
+      }
+    }
+    const updated: ProjectEntry = { id: entry.id, name: entry.name, dir: entry.dir, ...(repo ? { repo } : {}) };
+    this.saved.projects = this.saved.projects.map((item) => (item.id === id ? updated : item));
+    await this.save();
+    return updated;
+  }
+
   /** Takes a project off the list; its folder stays. The active project cannot be removed. */
   async remove(id: string): Promise<void> {
     if (id === this.saved.active) return;
@@ -164,6 +187,12 @@ async function freeFolder(parent: string, name: string): Promise<string> {
   let dir = path.join(parent, name);
   for (let n = 2; existsSync(dir); n++) dir = path.join(parent, `${name}-${n}`);
   return dir;
+}
+
+/** True when `target` lies inside `dir` (not `dir` itself). */
+function isInside(dir: string, target: string): boolean {
+  const relative = path.relative(dir, target);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function samePath(a: string, b: string): boolean {

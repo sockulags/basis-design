@@ -110,9 +110,21 @@ export class AgentHost extends EventEmitter<Events> {
   constructor(
     private readonly workspace: Workspace,
     agentId: AgentId,
+    /** A product repo linked to the project: the agent may read and search it, never write to it. */
+    private repo?: string,
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
+  }
+
+  setRepo(repo: string | undefined): void {
+    this.repo = repo;
+  }
+
+  private inRepo(target: string): boolean {
+    if (!this.repo) return false;
+    const relative = path.relative(this.repo, path.resolve(target));
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
   }
 
   get agent(): AgentState {
@@ -314,6 +326,7 @@ ${message}`
       : message;
     this.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
+    if (this.repo) blocks.push({ type: "text", text: repoContext(this.repo) });
     const context = this.reviewContext();
     if (context) blocks.push({ type: "text", text: context });
     if (turn.instruction) blocks.push({ type: "text", text: turn.instruction });
@@ -574,7 +587,9 @@ ${message}`
       name: option.name,
       kind: option.kind,
     }));
-    const allowed = (p: string) => (call.kind === "edit" ? this.workspace.isEditable(p) : this.workspace.isInside(p));
+    // Reads may also look in the linked product repo; edits stay inside what the workspace lets the agent change.
+    const allowed = (p: string) =>
+      call.kind === "edit" ? this.workspace.isEditable(p) : this.workspace.isInside(p) || this.inRepo(p);
     const autoAllow = call.kind != null && SAFE_KINDS.has(call.kind) && paths.length > 0 && paths.every(allowed);
     const allowOnce = options.find((option) => option.kind === "allow_once");
     if (autoAllow && allowOnce) return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
@@ -673,6 +688,15 @@ interface Turn {
   annotations: Annotation[];
   label: string;
   instruction?: string;
+}
+
+/** Tells the agent about the product repo linked to the project, on every turn. */
+function repoContext(repo: string): string {
+  return [
+    `This project designs for a product whose repo is linked in Basis: ${repo}.`,
+    "Read and search it whenever the product's look, components, terms or screens matter to the request; use your read and search tools there, since shell commands need the user's approval.",
+    "It is read-only: never write there; Basis refuses writes outside the workspace.",
+  ].join(" ");
 }
 
 /**

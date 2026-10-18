@@ -31,9 +31,11 @@ const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 const projects = new Projects(home);
 await projects.load({
   only: process.env.BASIS_WORKSPACE,
-  // Basis kept a single workspace here before it had projects.
-  fallback: path.join(root, "workspace"),
+  // Basis kept a single workspace here before it had projects. A home of its own (BASIS_HOME, say a test
+  // instance's) never takes it over: it starts with a new project instead.
+  fallback: process.env.BASIS_HOME ? undefined : path.join(root, "workspace"),
 });
+if (!projects.active) await projects.setActive((await projects.create("Basis")).id);
 
 /** Bridge connections; created first, since the project reports events while it opens. */
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
@@ -309,6 +311,21 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       await projects.remove(String(message.id ?? ""));
       broadcast({ type: "projects", projects: projects.list });
       return;
+    case "project-repo": {
+      let entry: ProjectEntry;
+      try {
+        entry = await projects.setRepo(
+          String(message.id ?? ""),
+          typeof message.repo === "string" ? message.repo : null,
+        );
+      } catch (error) {
+        send(socket, { type: "project-error", message: (error as Error).message });
+        return;
+      }
+      if (entry.id === current.entry.id) current.update(entry);
+      broadcast({ type: "projects", projects: projects.list });
+      return;
+    }
   }
 }
 

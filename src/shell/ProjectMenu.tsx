@@ -8,11 +8,11 @@ interface ProjectMenuProps {
   /** Switching, creating and opening wait while the agent works. */
   agentBusy: boolean;
   /** The server's answer to the last failed project request. */
-  error: string | null;
+  error: { message: string } | null;
   send: (message: ClientMessage) => void;
 }
 
-type Dialog = "create" | "open" | null;
+type Dialog = "create" | "open" | "repo" | null;
 
 /**
  * The open project, where the brand used to be, with the list of projects:
@@ -21,10 +21,18 @@ type Dialog = "create" | "open" | null;
 export function ProjectMenu({ project, projects, agentBusy, error, send }: ProjectMenuProps) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
-  /** The error value when the last request went out; a different one is the answer to it. */
-  const [errorBefore, setErrorBefore] = useState<string | null | undefined>(undefined);
+  /** The error when the last request went out; a different one (even with the same text) is the answer to it. */
+  const [errorBefore, setErrorBefore] = useState<{ message: string } | null | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null);
-  const answer = errorBefore !== undefined && error !== errorBefore ? error : null;
+  const answer = errorBefore !== undefined && error !== errorBefore ? (error?.message ?? null) : null;
+
+  // Linking happens in place (no project switch), so the dialog closes once the entry shows the change.
+  const repo = project?.repo;
+  const repoBefore = useRef(repo);
+  useEffect(() => {
+    if (repo !== repoBefore.current && dialog === "repo") setDialog(null);
+    repoBefore.current = repo;
+  }, [repo, dialog]);
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +94,7 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
                     {isOpen && <span className={styles.current}>open</span>}
                   </span>
                   <span className={styles.projectDir}>{entry.dir}</span>
+                  {entry.repo && <span className={styles.projectDir}>Product repo: {entry.repo}</span>}
                 </button>
                 {!isOpen && (
                   <button
@@ -101,6 +110,36 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
               </div>
             );
           })}
+          {project && (
+            <div className={styles.projectRepo}>
+              <span className={styles.projectRepoHint}>
+                {project.repo
+                  ? "The agent reads the linked product repo to match your product; it never writes there."
+                  : "Link the product repo this design system is for, so the agent can match it."}
+              </span>
+              <div className={styles.projectRepoActions}>
+                <button
+                  type="button"
+                  className={styles.chromeButton}
+                  onClick={() => {
+                    setOpen(false);
+                    setDialog("repo");
+                  }}
+                >
+                  {project.repo ? "Change repo…" : "Link product repo…"}
+                </button>
+                {project.repo && (
+                  <button
+                    type="button"
+                    className={styles.chromeButton}
+                    onClick={() => request({ type: "project-repo", id: project.id, repo: null })}
+                  >
+                    Unlink
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           <div className={styles.projectActions}>
             <button
               type="button"
@@ -141,7 +180,7 @@ export function ProjectMenu({ project, projects, agentBusy, error, send }: Proje
 }
 
 interface ProjectDialogProps {
-  mode: "create" | "open";
+  mode: "create" | "open" | "repo";
   current: ProjectEntry | null;
   error: string | null;
   onSubmit: (message: ClientMessage) => void;
@@ -152,7 +191,7 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [copyCurrent, setCopyCurrent] = useState(false);
-  const [dir, setDir] = useState("");
+  const [dir, setDir] = useState(mode === "repo" ? (current?.repo ?? "") : "");
   const [pending, setPending] = useState(false);
   const valid = mode === "create" ? name.trim().length > 0 : dir.trim().length > 0;
 
@@ -171,7 +210,9 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
     onSubmit(
       mode === "create"
         ? { type: "project-create", name: name.trim(), copyCurrent }
-        : { type: "project-open", dir: dir.trim() },
+        : mode === "repo"
+          ? { type: "project-repo", id: current?.id ?? "", repo: dir.trim() }
+          : { type: "project-open", dir: dir.trim() },
     );
   };
 
@@ -191,11 +232,13 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
       >
         <header className={styles.dialogHeader}>
           <div>
-            <h2>{mode === "create" ? "New project" : "Open a folder"}</h2>
+            <h2>{mode === "create" ? "New project" : mode === "repo" ? "Link a product repo" : "Open a folder"}</h2>
             <p>
               {mode === "create"
                 ? "A design system of its own, with its own history and chat. It lives in Basis' workspaces folder."
-                : "A Basis workspace anywhere on this computer, or an empty or new folder (inside a product repo, say) for Basis to set up."}
+                : mode === "repo"
+                  ? `The repo ${current?.name ?? "this project"} designs for. The agent reads it to match the product's look, components and terms; it never writes there.`
+                  : "A Basis workspace anywhere on this computer, or an empty or new folder (inside a product repo, say) for Basis to set up."}
             </p>
           </div>
         </header>
@@ -225,12 +268,12 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
             </>
           ) : (
             <>
-              <label htmlFor="project-dir">Folder</label>
+              <label htmlFor="project-dir">{mode === "repo" ? "Repo folder" : "Folder"}</label>
               <input
                 id="project-dir"
                 value={dir}
                 onChange={(event) => setDir(event.target.value)}
-                placeholder="C:\Code\my-app\design-system"
+                placeholder={mode === "repo" ? "C:\\Code\\my-app" : "C:\\Code\\my-app\\design-system"}
                 spellCheck={false}
                 autoComplete="off"
                 autoFocus
@@ -245,7 +288,15 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
             Cancel
           </button>
           <button type="submit" className={styles.primaryButton} disabled={!valid || pending}>
-            {pending ? "Opening…" : mode === "create" ? "Create project" : "Open folder"}
+            {pending
+              ? mode === "repo"
+                ? "Linking…"
+                : "Opening…"
+              : mode === "create"
+                ? "Create project"
+                : mode === "repo"
+                  ? "Link repo"
+                  : "Open folder"}
           </button>
         </footer>
       </form>
