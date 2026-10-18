@@ -68,6 +68,7 @@ const projectOptions: ProjectOptions = {
   previewPort,
   chromeOrigins,
   agent: initialAgent,
+  home,
   mcpServers: [toolServer(`http://${host}:${port}${TOOLS_PATH}`, toolsSecret)],
   broadcast: (message) => broadcast(message),
 };

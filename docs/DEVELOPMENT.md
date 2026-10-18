@@ -54,6 +54,18 @@ component source, patterns and the gallery specimens.
     `read-only`) after `session/new` and `session/resume`. Codex's other modes edit the workspace unasked.
   - The Codex adapter is `@agentclientprotocol/codex-acp` at a pinned version (`CODEX_ACP`); the old
     `@zed-industries/codex-acp` stopped in June 2026 and fails on newer models.
+  - Codex loads none of the user's setup either (`codexEnv` in `server/codex.ts`). It runs with `CODEX_HOME` set to
+    `<BASIS_HOME>/codex`, since nothing else keeps Codex from reading `~/.codex/AGENTS.md`, and that home also
+    leaves out the user's config (model, sandbox and approval choices, developer instructions, MCP servers,
+    plugins, notify), skills, hooks, rules and memories. Its `auth.json` is a link to the user's, renewed at every
+    start: a symlink, or on Windows without developer mode a hard link, which stays the same file because Codex
+    rewrites `auth.json` in place, so a refreshed token reaches both homes. `CODEX_CONFIG` (`CODEX_SETTINGS`,
+    merged by the adapter into every session) turns off what comes from outside the home or with the login: the
+    skills catalog (`skills.include_instructions`, which also covers `~/.agents/skills`), the bundled skills, apps,
+    plugins, memories and hooks. Without a login file to link (not logged in, or a login kept in the keyring) Codex
+    runs in the user's own home with only those settings, and Basis says so on the console. No Windows sandbox is
+    configured in Basis' home, so on Windows Codex asks before every command: the elevated sandbox is set up per
+    home with an administrator prompt, and the unelevated one cannot start PowerShell installed from the Store.
   - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` tool. The agent
     starts `server/agent-tools-mcp.mjs` with Node over stdio (the transport every ACP agent supports); the script
     has no dependencies and only speaks MCP's JSON-RPC, forwarding `tools/list` and `tools/call` to the chrome
@@ -410,11 +422,13 @@ comparison of the whole gallery between two history entries, the icon, and publi
   "Also changed". None of the starter specimens do.
 - **Reach is static.** A specimen that reads token values from its `design` prop in JavaScript, rather than
   through CSS variables, is not found by `reach.ts`; its section is then left out of "Also changed".
-- **Codex** runs read-only commands in its sandbox without asking, even in read-only mode (seen with
-  `Get-Content` in the workspace). Such reads do not reach Basis' approval as Claude Code's do; whether its
-  sandbox lets them read outside the workspace has not been tested. It also loads the user's own Codex setup:
-  on 2026-10-19 it read skills from `~/.codex/skills/` during a design turn. Claude Code is kept from the user's
-  setup by `settingSources: []`; Codex has no such switch in Basis yet.
+- **Codex** on macOS and Linux runs read-only commands in its sandbox without asking, even in read-only mode.
+  Such reads do not reach Basis' approval as Claude Code's do; whether its sandbox lets them read outside the
+  workspace has not been tested. On Windows it asks before every command instead, reads included (one prompt per
+  `Get-Content`), since Basis' Codex home has no Windows sandbox; approving Codex's single-file reads inside the
+  workspace automatically, as Claude Code's are, would need the kind and path from the tool call it reported
+  before, since the approval request carries neither. A user whose Codex login is not in `auth.json` gets Codex
+  with their own AGENTS.md and config.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

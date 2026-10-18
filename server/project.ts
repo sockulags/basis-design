@@ -17,6 +17,8 @@ export interface ProjectOptions {
   /** Origins allowed to frame the preview (the chrome). */
   chromeOrigins: string[];
   agent: AgentId;
+  /** Basis' own folder (BASIS_HOME), for what the agent keeps outside the workspace (Codex's home for Basis). */
+  home: string;
   /** MCP servers every agent session gets (Basis' own tools). */
   mcpServers: acp.McpServer[];
   /** Receives everything the project's workspace and agent report, for the bridge to broadcast. */
@@ -71,7 +73,7 @@ export class OpenProject {
     const { root, broadcast } = options;
     const workspace = new Workspace(entry.dir);
     await workspace.init();
-    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers);
+    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home);
     await agent.restore();
 
     workspace.on("design", (design) => broadcast({ type: "design", design }));

@@ -82,7 +82,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       text are exempt). Findings name the section, theme, width and an example element. The starter template must
       come out clean; fix the template where it does not. Done when: pure parts have tests, a deliberately broken
       specimen shows each finding, and the agent fixes one in a real turn.
-- [ ] **Keep Codex out of the user's own setup.** Claude's design agent no longer reads the user's Claude Code
+- [x] **Keep Codex out of the user's own setup.** Claude's design agent no longer reads the user's Claude Code
       setup (`settingSources: []`), but Codex still loads `~/.codex/skills/` and the user's AGENTS.md during design
       turns (found while building the screenshot tool). Start Codex so it reads only what Basis gives it, the way
       Claude is started, keeping the user's login. Done when: a real Codex turn no longer lists or reads the user's
@@ -176,6 +176,40 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Keep Codex out of the user's own setup. Codex 0.160.1 (the adapter's) reads `AGENTS.md` from its home
+  folder through a provider with no setting to turn it off, and `thread/start` cannot replace it, so config
+  overrides alone could not do it; Codex now runs with `CODEX_HOME` set to `<BASIS_HOME>/codex`. That home also
+  leaves out what Lucas' `~/.codex` holds besides skills: a `developer_instructions`, `danger-full-access` with
+  `approval_policy = "never"` as defaults, three MCP servers, 22 plugins, memories, a Stop hook that runs a script
+  from his skills, and command rules. Login: Codex keeps it in `$CODEX_HOME/auth.json` by default, and in the
+  keyring under a key made from the home's path otherwise. Copying the file was ruled out, since a token one copy
+  refreshes would leave the other with a refresh token already used; the Basis home gets a link to the user's file
+  instead, renewed at every start (an old link goes first, so a logout is not undone). A symlink needs developer
+  mode on Windows, so there it is a hard link, which stays the same file because Codex's file store truncates and
+  rewrites `auth.json` in place (checked in its source; no rename). A unit test writes through the link and reads
+  the user's file. Without a file to link, Codex runs in the user's home as before, so a keyring login keeps
+  working; that case keeps their AGENTS.md and config and is noted on the console and under Known limits, and was
+  not tried, since it would write into `~/.codex`. `CODEX_CONFIG` turns off what lives outside the home or comes
+  with the login: `skills.include_instructions = false` (which hides `~/.agents/skills` too; Lucas has one),
+  `skills.bundled.enabled = false`, and the `apps`, `plugins`, `memories` and `hooks` features. On Windows the
+  new home has no sandbox: the unelevated one was tried and failed with "CreateProcessAsUserW failed: 5" because
+  PowerShell here comes from the Store, and the elevated one is set up per home with an administrator prompt. So
+  on Windows Codex now asks before every command, reads included, which closes the old limit that its sandboxed
+  reads bypassed Basis' approval but costs one prompt per `Get-Content`; approving Codex's single-file reads in the
+  workspace automatically is left for later (the approval request carries no kind or path, so it needs the tool
+  call reported before). Earlier Codex sessions saved in a workspace's chat live in `~/.codex` and start over
+  once, with the usual notice. Verified on a throwaway instance (`BASIS_HOME` in `$TEMP`): the auth link was a
+  hard link and the user's `auth.json` was unchanged afterwards; asked from what it was given, Codex said it had
+  no skills (none named check-work, plain-voice or write-like-lucas) and no home AGENTS.md, and its session file
+  has no line of Lucas' AGENTS.md, no skills catalog and none of his MCP servers. In a design turn ("a slightly
+  heavier label on the danger button, look at 375 in both themes") it read three files (each approved), edited
+  the stylesheet, photographed Buttons with the screenshot tool (approved by Basis), opened a review and replied
+  that the bold label reads clearly on both fills. A Claude turn on the same instance then photographed Buttons and
+  described the new label. Also fixed in its own commit: the workspace test that failed once on Windows CI ("going
+  back to an iteration", with an extra "Edit on disk") was a real race, where a hand edit's check still running when
+  a turn began recorded the turn's first changes as the hand edit; `beginTurn` now marks the turn first and the
+  settle handler records nothing once a turn has begun, with a test that reproduced it.
 
 - 2026-10-19: Layout checks. `src/preview/layout.ts` runs in the same pass as axe over the same marked demos and
   reports as its own check, `Layout`, with the deciding parts (edges, cut lines, the example, the text) in

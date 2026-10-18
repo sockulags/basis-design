@@ -24,6 +24,7 @@ import { PRODUCT_FILE, relativeInside } from "./paths.ts";
 import { basisTool, basisToolTitle } from "./agent-tools.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import { CLAUDE_MISSING, findClaude } from "./claude.ts";
+import { codexEnv } from "./codex.ts";
 import type { Workspace } from "./workspace.ts";
 
 interface LaunchSpec {
@@ -46,8 +47,11 @@ interface LaunchSpec {
 const CLAUDE_ACP = "@agentclientprotocol/claude-agent-acp@0.92.0";
 const CODEX_ACP = "@agentclientprotocol/codex-acp@2.2.2";
 
-/** How each supported agent is started. Both reuse the user's own CLI login, so no API keys are needed. */
-function launchSpec(id: AgentId): LaunchSpec {
+/**
+ * How each supported agent is started. Both reuse the user's own CLI login, so no API keys are needed. `home` is
+ * Basis' own folder (BASIS_HOME), where Codex gets a home of its own (server/codex.ts).
+ */
+function launchSpec(id: AgentId, home: string): LaunchSpec {
   // The end-to-end tests run a stand-in agent (test/e2e/fake-agent.mjs), since no CLI is logged in on CI.
   if (process.env.BASIS_AGENT_SCRIPT) {
     const script = path.resolve(process.env.BASIS_AGENT_SCRIPT);
@@ -66,10 +70,14 @@ function launchSpec(id: AgentId): LaunchSpec {
       exitHint: "If it keeps happening, update Claude Code with `claude update`.",
     };
   }
+  const env = codexEnv(home);
+  if (!env.CODEX_HOME)
+    console.warn("[basis] Codex has no auth.json to share, so it runs in your own Codex home, with your AGENTS.md.");
   return {
     command: "npx",
     args: ["-y", "--prefer-offline", CODEX_ACP],
     shell: true,
+    env,
     loginHint: "Run `codex login` in a terminal, then restart the agent.",
   };
 }
@@ -105,7 +113,8 @@ const SESSION_META = {
 };
 /**
  * Per agent, the session mode in which it asks before every edit, so edits go through onPermission and Basis'
- * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked.
+ * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked,
+ * except on Windows, where Basis' Codex home has no sandbox (server/codex.ts) and every command asks.
  */
 const ASKING_MODES: Record<AgentId, string> = { claude: "default", codex: "read-only" };
 const MAX_AUTO_FIXES = 2;
@@ -148,14 +157,18 @@ export class AgentHost extends EventEmitter<Events> {
   private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
   /** Set by Stop; ends the current set of alternatives and the fix loop, not just the running turn. */
   private stopping = false;
+  /** What to tell the user when the running agent's login fails (from its LaunchSpec). */
+  private loginHint = "";
 
   constructor(
     private readonly workspace: Workspace,
     agentId: AgentId,
     /** A product repo linked to the project: the agent may read and search it, never write to it. */
-    private repo?: string,
+    private repo: string | undefined,
     /** MCP servers every session gets: Basis' own tools (server/agent-tools.ts). */
-    private readonly mcpServers: acp.McpServer[] = [],
+    private readonly mcpServers: acp.McpServer[],
+    /** Basis' own folder (BASIS_HOME), where Codex gets a home of its own (server/codex.ts). */
+    private readonly home: string,
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
@@ -201,7 +214,8 @@ export class AgentHost extends EventEmitter<Events> {
   async start(agentId: AgentId = this.state.id): Promise<void> {
     await this.stop();
     this.setState({ id: agentId, status: "starting", detail: "Starting agent…" });
-    const spec = launchSpec(agentId);
+    const spec = launchSpec(agentId, this.home);
+    this.loginHint = spec.loginHint;
     if (spec.missing) {
       this.fail(spec.missing);
       return;
@@ -291,7 +305,7 @@ export class AgentHost extends EventEmitter<Events> {
       await this.openSession();
       this.setState({ ...this.state, status: "ready", detail: undefined });
     } catch (error) {
-      this.fail(describeError(error, launchSpec(this.state.id).loginHint));
+      this.fail(describeError(error, this.loginHint));
     }
   }
 
@@ -408,8 +422,7 @@ ${message}`
       if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
       else if (!completed) this.notice(`The agent stopped early (${result.stopReason}).`, "error");
     } catch (error) {
-      if (this.connection === connection)
-        this.notice(describeError(error, launchSpec(this.state.id).loginHint), "error");
+      if (this.connection === connection) this.notice(describeError(error, this.loginHint), "error");
     } finally {
       this.openText = undefined;
       this.cancelPermissions();
