@@ -53,7 +53,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
 - [x] **Accessibility check of the live gallery.** Run axe-core in the preview on the sections the user sees
       (live side only, never past versions), report serious and critical violations as problems with the
       section and selector. Keep it cheap: run after renders settle, not on every update.
-- [ ] **Contracts for patterns.** The starter patterns get a baseline contract like `shared/contracts.ts`;
+- [x] **Contracts for patterns.** The starter patterns get a baseline contract like `shared/contracts.ts`;
       patterns the agent adds get theirs in `patterns/contracts.ts`. Type-checked like components, and the
       template must satisfy them (`template/contract-check.ts`).
 
@@ -95,6 +95,11 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Pattern contracts copy the starter patterns' props, minus gallery-only ones (`force`,
+  `forceHover`) and layout switches a product would not rely on. Removing an optional prop still passes (the
+  check is structural); changing a prop's type or adding a required one fails. Icon names make the contracts
+  generic (`PatternContracts<IconName>`), and `DataTable` stays generic over its rows. Older workspaces get
+  `patterns/contracts.ts` seeded on start.
 - 2026-10-18: axe runs in the preview over marked live demos only. Duplicate-id rules are off (the gallery
   repeats demos on purpose), and only serious and critical violations count. The starter template had three
   findings, now fixed: the loading button hid its label from screen readers, Progress had no accessible name

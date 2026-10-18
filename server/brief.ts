@@ -92,6 +92,9 @@ The result becomes the starting point of real projects, so treat the components 
 - New patterns (a command palette, a kanban board, a pricing table ...) follow the same shape: a file pair,
   a specimen with a sensible group (Navigation, Data, Forms, Feedback, Examples or a new one) and order,
   and an export from \`patterns/index.ts\`.
+- Patterns have contracts like components: \`.basis/pattern-contracts.ts\` is the baseline for the starter
+  patterns (keep their exports and accept at least the listed props), and \`patterns/contracts.ts\` holds the
+  contracts of patterns this design system added; you own it. Views and other patterns build on these APIs.
 - Show a pattern's data states in a \`states\` block (see \`STATES\` in \`components/specimen.ts\`): populated, empty,
   loading, error and long content, whichever apply, plus any state of its own. Every pattern that shows data
   should cover them; they are what reviews and the user check first.
@@ -111,8 +114,9 @@ Whether the user asks in chat or through Basis' "New component" and "New pattern
 3. Create the file pair (\`Name.tsx\` + \`Name.module.css\`), or add to an existing family file when it clearly
    belongs there. Follow the component rules above: token variables, \`data-ds\`, \`data-force\` states,
    accessibility.
-4. For a base component, add its contract to \`components/contracts.ts\`: a props interface and an entry in
-   \`AddedContracts\`. Basis rejects exports without a contract.
+4. Add its contract: for a base component to \`components/contracts.ts\` (an entry in \`AddedContracts\`), for a
+   pattern to \`patterns/contracts.ts\` (an entry in \`AddedPatternContracts\`), with a props interface. Basis
+   rejects exports without a contract.
 5. Give a base component its own token group in \`design-system.json\` (\`components.<camelCaseName>\`) for what a
    designer would tune, and style it with those variables. A pattern usually needs none: it inherits the tokens
    of the components it is built from.

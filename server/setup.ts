@@ -32,6 +32,9 @@ export async function seedWorkspace(dir: string): Promise<string> {
     const fresh = notes.length === 0 && !existsSync(path.join(dir, ".git"));
     await seed(dir, PATTERNS_DIR);
     if (!fresh) notes.push("starter patterns");
+  } else if (!existsSync(path.join(dir, PATTERNS_DIR, "contracts.ts"))) {
+    await seed(dir, PATTERNS_DIR, (name) => name === "contracts.ts");
+    notes.push("pattern contracts");
   }
   if (await updateSpecimenFormat(dir)) notes.push("the states block for specimens");
   return notes.length ? `Basis added ${notes.join(" and ")}` : "";
@@ -106,23 +109,42 @@ export async function writeGeneratedFiles(dir: string): Promise<void> {
     await readFile(path.join(repoRoot, "shared", "contracts.ts"), "utf8"),
   );
   await writeFile(
+    path.join(basisDir, "pattern-contracts.ts"),
+    await readFile(path.join(repoRoot, "shared", "pattern-contracts.ts"), "utf8"),
+  );
+  await writeFile(
     path.join(basisDir, "env.d.ts"),
     'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',
   );
   await writeFile(
     path.join(basisDir, "check.ts"),
     [
-      "// Fails to type-check when components/ stops satisfying its contracts: the Basis baseline",
-      "// (./contracts.ts) and the contracts this design system added (components/contracts.ts).",
+      "// Fails to type-check when components/ or patterns/ stop satisfying their contracts: the Basis",
+      "// baselines (./contracts.ts, ./pattern-contracts.ts) and the contracts this design system added",
+      "// (components/contracts.ts, patterns/contracts.ts).",
       'import type { Contracts } from "./contracts.ts";',
       'import type { AddedContracts } from "../components/contracts.ts";',
       'import * as components from "../components/index.ts";',
+      'import type { PatternContracts } from "./pattern-contracts.ts";',
+      'import type { AddedPatternContracts } from "../patterns/contracts.ts";',
+      'import type { IconName } from "../patterns/icons.tsx";',
+      'import * as patterns from "../patterns/index.ts";',
       "",
       "export const satisfiesContracts: Contracts & AddedContracts = components;",
+      "export const satisfiesPatternContracts: PatternContracts<IconName> & AddedPatternContracts = patterns;",
       "",
       "// Every export of components/index.ts needs a contract; add missing ones to components/contracts.ts.",
       "type Uncovered = Exclude<keyof typeof components, keyof Contracts | keyof AddedContracts>;",
       "export const everyExportHasAContract: [Uncovered] extends [never] ? true : { missingContractFor: Uncovered } = true;",
+      "",
+      "// Every export of patterns/index.ts needs a contract; add missing ones to patterns/contracts.ts.",
+      "type UncoveredPattern = Exclude<",
+      "  keyof typeof patterns,",
+      "  keyof PatternContracts<IconName> | keyof AddedPatternContracts",
+      ">;",
+      "export const everyPatternHasAContract: [UncoveredPattern] extends [never]",
+      "  ? true",
+      "  : { missingContractFor: UncoveredPattern } = true;",
       "",
     ].join("\n"),
   );

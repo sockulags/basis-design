@@ -122,6 +122,19 @@ describe("history", () => {
   });
 });
 
+describe("pattern contracts", () => {
+  test("an older workspace with patterns gets patterns/contracts.ts", async () => {
+    const dir = await folder();
+    (await start(dir)).close();
+    git(dir, ["rm", "-q", "patterns/contracts.ts"]);
+    git(dir, ["-c", "user.name=Test", "-c", "user.email=test@localhost", "commit", "-q", "-m", "older workspace"]);
+    const workspace = await start(dir);
+    assert.ok(existsSync(path.join(dir, "patterns", "contracts.ts")));
+    assert.ok(existsSync(path.join(dir, ".basis", "pattern-contracts.ts")));
+    assert.equal(workspace.entries.at(-1)?.label, "Basis added pattern contracts");
+  });
+});
+
 describe("reviews", () => {
   test("turns become iterations, and approving makes one history entry", async () => {
     const dir = await folder();
