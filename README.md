@@ -11,20 +11,21 @@ The agent runs over the [Agent Client Protocol](https://agentclientprotocol.com)
 ## Run it
 
 ```bash
-npm install
-npm run dev
+npx basis-design
 ```
 
-Open http://localhost:5320. Basis starts Claude Code by default (shown as Claude in the picker above the chat); switch to Codex there. Basis needs Node.js 22.12 or later and `git` on the PATH.
+Or install it once with `npm install -g basis-design` and start it with `basis`. Open http://localhost:5320. Basis starts Claude Code by default (shown as Claude in the picker above the chat); switch to Codex there. Basis needs Node.js 22.12 or later and `git` on the PATH.
 
 - **Claude Code:** log in once with `claude` in a terminal. Basis starts it through `@agentclientprotocol/claude-agent-acp`.
 - **Codex:** log in once with `codex login`. Basis starts it through `npx @agentclientprotocol/codex-acp`, at a fixed version that npx fetches on first use.
 
 Usage counts against your own plan. A turn can take up to three agent runs (the turn and up to two fix-ups), and ×2 or ×3 alternatives multiply that.
 
+The first install is large, about 300 MB, because the Claude adapter brings its own copy of Claude Code. To work on Basis itself, clone the repository and run `npm install` and `npm run dev`.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BASIS_HOME` | the Basis folder | Where the project list (`basis.projects.json`) and new projects (`workspaces/`) live |
+| `BASIS_HOME` | `~/.basis` | Where the project list (`basis.projects.json`) and new projects (`workspaces/`) live |
 | `BASIS_WORKSPACE` | | Opens just this workspace for one run, without touching the project list (for tests and one-off use) |
 | `BASIS_AGENT` | `claude` | Agent started on boot (`claude` or `codex`) |
 | `PORT` | `5320` | Port of the Basis app (bound to 127.0.0.1 only) |
@@ -36,10 +37,10 @@ Each project is a workspace of its own: its own design system, history, chat and
 
 A project can link the **product repo** it designs for (project menu, **Link product repo…**). The agent reads and searches it without asking, to match the product's look, components and terms, and never writes there: writes outside the workspace are refused. **New project…** can also start from a product repo: the project takes the repo folder's name unless you give one, links the repo and starts by bringing in its design. **Bring in its design** (offered when you link, and in the project menu) starts a guided turn: the agent maps the repo's tokens onto `design-system.json`, restyles the components and patterns to resemble the product's, writes what it learned to `product.md` (where the tokens live, an inventory of the product's components and their Basis counterparts, terms to reuse) and opens a review.
 
-- **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `workspaces/` in the Basis folder.
+- **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `~/.basis/workspaces/`.
 - **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance. Basis refuses a folder that already has other files, so it never starts a history in someone's project.
 - Switching waits while the agent works. The agent of the project you leave stops, and coming back resumes its conversation, so it remembers where you were. The export remembers its target folder per project.
-- Removing a project from the list never deletes its folder. The `./workspace` of earlier Basis versions becomes the first project.
+- Removing a project from the list never deletes its folder. Earlier versions kept the project list in the Basis folder; it moves to `~/.basis` on first start, and its projects stay where they are. The `./workspace` of versions before projects becomes the first project.
 
 ## The workspace
 
@@ -126,3 +127,7 @@ npm run check
 ```
 
 `npm run check` runs the type check, oxlint, Prettier and the tests. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) covers the architecture, how to work on Basis, the gotchas and where the work stands.
+
+## License
+
+Basis is licensed under the [Apache License 2.0](LICENSE). The starter components, patterns and views in `template/` are licensed under [MIT-0](template/LICENSE): what you build from them and export is yours, with no attribution required.

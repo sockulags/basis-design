@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { REVIEW_FILE } from "../shared/review.ts";
 import { AGENT_BRIEF, CLAUDE_MD } from "./brief.ts";
 import { COMPONENTS_DIR, PATTERNS_DIR, repoRoot, SOURCE_DIRS, VIEWS_DIR } from "./paths.ts";
+
+const require = createRequire(import.meta.url);
 
 /*
  * Getting a workspace ready on every start: starter source for new
@@ -129,7 +132,12 @@ export async function claimWorkspaceFormat(dir: string): Promise<void> {
 export async function writeGeneratedFiles(dir: string): Promise<void> {
   const basisDir = path.join(dir, ".basis");
   await mkdir(basisDir, { recursive: true });
-  const types = (pkg: string) => path.join(repoRoot, "node_modules", pkg).split(path.sep).join("/");
+  // Resolved, not joined onto Basis' folder: an npm install may hoist them to a node_modules above it.
+  const types = (pkg: string) =>
+    path
+      .dirname(require.resolve(`${pkg}/package.json`))
+      .split(path.sep)
+      .join("/");
   const tsconfig = {
     compilerOptions: {
       target: "ES2022",

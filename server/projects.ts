@@ -37,7 +37,11 @@ export class Projects {
    * workspace for this run: the list holds just it and nothing is saved, so a
    * one-off or test instance never changes which project Basis opens next time.
    */
-  async load({ only, fallback }: { only?: string; fallback?: string } = {}): Promise<void> {
+  async load({
+    only,
+    fallback,
+    legacyList,
+  }: { only?: string; fallback?: string; legacyList?: string } = {}): Promise<void> {
     if (only) {
       const dir = path.resolve(only);
       const name = await designName(dir);
@@ -45,8 +49,10 @@ export class Projects {
       this.saved = { active: slug(name), projects: [{ id: slug(name), name, dir }] };
       return;
     }
+    // A list an earlier version kept elsewhere is read once and saved here; it stays where it was.
+    const source = !existsSync(this.file) && legacyList && existsSync(legacyList) ? legacyList : this.file;
     try {
-      const raw = JSON.parse(await readFile(this.file, "utf8")) as Partial<Saved>;
+      const raw = JSON.parse(await readFile(source, "utf8")) as Partial<Saved>;
       const projects = Array.isArray(raw.projects)
         ? raw.projects.filter((entry): entry is ProjectEntry => Boolean(entry?.id && entry.name && entry.dir))
         : [];

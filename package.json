@@ -1,7 +1,39 @@
 {
-  "name": "basis",
+  "name": "basis-design",
   "version": "0.1.0",
   "description": "Prompt a complete design system into existence with your own coding agent over ACP.",
+  "keywords": [
+    "design-system",
+    "design-tokens",
+    "react",
+    "claude-code",
+    "codex",
+    "agent-client-protocol"
+  ],
+  "license": "Apache-2.0",
+  "author": "Lucas Skog",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sockulags/basis-design.git"
+  },
+  "type": "module",
+  "bin": {
+    "basis": "bin/basis.js"
+  },
+  "files": [
+    "bin",
+    "server",
+    "shared",
+    "src",
+    "template",
+    "index.html",
+    "preview.html",
+    "vite.config.ts",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "tsx server/index.ts",
     "start": "tsx server/index.ts",
@@ -11,32 +43,26 @@
     "format": "prettier --write .",
     "check": "tsc --noEmit && oxlint && prettier --check . && npm test"
   },
-  "author": "Lucas Skog",
-  "type": "module",
-  "engines": {
-    "node": ">=22.12.0"
-  },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.92.0",
     "@agentclientprotocol/sdk": "^1.9.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "axe-core": "^4.14.0",
     "fflate": "^0.8.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
     "ws": "^8.22.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
-    "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "1.88.0",
-    "prettier": "3.9.10",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.4"
-  },
-  "private": true
+    "prettier": "3.9.10"
+  }
 }

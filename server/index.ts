@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { createServer as createVite } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -27,8 +29,11 @@ const root = path.resolve(import.meta.dirname, "..");
 const host = "127.0.0.1";
 const port = Number(process.env.PORT ?? 5320);
 const previewPort = Number(process.env.BASIS_PREVIEW_PORT ?? port + 1);
-/** Holds the project list and the folders of new projects. */
-const home = path.resolve(process.env.BASIS_HOME ?? root);
+/**
+ * Holds the project list and the folders of new projects: ~/.basis, never Basis' own folder, which an update or an
+ * npx cache may replace.
+ */
+const home = path.resolve(process.env.BASIS_HOME ?? path.join(os.homedir(), ".basis"));
 const initialAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as AgentId)
   ? (process.env.BASIS_AGENT as AgentId)
   : "claude";
@@ -36,11 +41,14 @@ const initialAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as Agen
 const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
 
 const projects = new Projects(home);
+// Earlier versions kept their data in Basis' own folder: the project list there (whose projects stay where they
+// are), and before projects a single workspace. A home of its own (BASIS_HOME, say a test instance's) never takes
+// either over: it starts with a new project instead.
+const legacy = process.env.BASIS_HOME ? undefined : root;
 await projects.load({
   only: process.env.BASIS_WORKSPACE,
-  // Basis kept a single workspace here before it had projects. A home of its own (BASIS_HOME, say a test
-  // instance's) never takes it over: it starts with a new project instead.
-  fallback: process.env.BASIS_HOME ? undefined : path.join(root, "workspace"),
+  legacyList: legacy && path.join(legacy, "basis.projects.json"),
+  fallback: legacy && existsSync(path.join(legacy, "workspace")) ? path.join(legacy, "workspace") : undefined,
 });
 if (!projects.active) await projects.setActive((await projects.create("Basis")).id);
 

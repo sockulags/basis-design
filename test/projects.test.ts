@@ -56,6 +56,31 @@ describe("product repos", () => {
 });
 
 describe("the project list", () => {
+  test("a list an earlier version kept in Basis' folder moves to the new home, and is left where it was", async () => {
+    const oldHome = await folder();
+    const first = await workspace(path.join(oldHome, "workspace"), "Acme");
+    const old = new Projects(oldHome);
+    await old.load({ fallback: first });
+    const legacyList = path.join(oldHome, "basis.projects.json");
+    const before = await readFile(legacyList, "utf8");
+
+    const home = path.join(await folder(), ".basis");
+    const projects = new Projects(home);
+    await projects.load({ legacyList });
+    assert.deepEqual(
+      projects.list.map((entry) => entry.dir),
+      [first],
+    );
+    assert.ok(existsSync(path.join(home, "basis.projects.json")));
+    assert.equal(await readFile(legacyList, "utf8"), before);
+
+    // Once the new home has a list, the old one is not read again.
+    await projects.create("Second");
+    const again = new Projects(home);
+    await again.load({ legacyList });
+    assert.equal(again.list.length, 2);
+  });
+
   test("a new list starts with the old single workspace, named after its design system", async () => {
     const home = await folder();
     const old = await workspace(path.join(home, "workspace"), "Acme");

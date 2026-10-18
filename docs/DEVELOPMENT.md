@@ -20,6 +20,9 @@ component source, patterns and the gallery specimens.
   - **Chrome** on `PORT` (5320) serves `index.html` and is the only origin allowed on the `/bridge` WebSocket.
     Both servers answer only requests whose `Host` is `localhost` or `127.0.0.1` with their port
     (`isLocalHost` in `server/project.ts`), so a page that rebinds its own name to 127.0.0.1 gets a 403.
+  - `BASIS_HOME` defaults to `~/.basis`, never Basis' own folder, which an update or the npx cache may replace.
+    Earlier versions kept the list in the repo root; `Projects.load({ legacyList })` reads it once when the home
+    has none and saves it there (the old file stays, and its projects keep their absolute paths).
   - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is the
     open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
     the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
@@ -191,6 +194,23 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   content with screenshots and zoom, or through what the chrome shows (sidebar, problems list, chips).
 - **Verify the export** by unzipping the kit into a temp app with a `tsconfig` whose `paths` point at Basis'
   `@types/react` and a Vite config aliasing react, then running tsc and vite build.
+- **The first `npm run dev` after 2026-10-18** moves Lucas' project list from the repo root to `~/.basis`; the
+  projects themselves stay where they are.
+
+## Releasing
+
+Basis is published to npm as `basis-design`, with the command `basis` (`bin/basis.js`, which loads the
+TypeScript server through tsx). Publishing is Lucas' call; nothing is published without his go-ahead.
+
+- Everything the app needs at run time is a dependency, not a dev dependency: tsx, vite and its React plugin,
+  typescript (the workspace type check) and `@types/react`/`@types/react-dom` (the workspace `tsconfig` points at
+  them). `files` in package.json lists what ships; tests, docs and CI stay out.
+- **Verify the package before publishing**, from a real install: `npm pack`, `npm install <tarball>` in an empty
+  temp folder, then `BASIS_HOME="$TEMP/x" PORT=5340 ./node_modules/.bin/basis`. Check that the gallery renders,
+  the workspace type check is clean and a real agent turn lands. An install hoists dependencies above Basis'
+  folder, which a checkout never does.
+- Bump `version`, update the README, then `npm publish`. The first install is about 300 MB, most of it the copy
+  of Claude Code that the Claude adapter brings.
 
 ## Gotchas
 
@@ -198,6 +218,8 @@ npm test             # node:test via tsx: pure functions plus workspace git flow
   existing `eslint-disable` comments.
 - **Backslashes in generated code:** the Bash tool mangles them inside heredocs and Python `-c` strings, so
   `"\n"` turned into a real newline several times. Use the Edit/Write tools for code containing backslashes.
+- **Paths into node_modules:** resolve packages with `require.resolve`, never by joining `node_modules` onto
+  Basis' folder; an npm install hoists them above it.
 - **CRLF:** files in the Windows checkout are CRLF (`core.autocrlf=true`); seeding normalises templates to LF,
   and Prettier runs with `endOfLine: auto`.
 - **Workspace git:** it runs as user "Basis" with `core.autocrlf=false` (see `server/exec.ts`).
@@ -276,10 +298,12 @@ Lucas is rolling out a larger idea in steps:
     Basis updates, a workspace format version, CI on three systems, and the chrome's own axe findings fixed. A
     new project now starts without accessibility findings (two small texts in the starter patterns used
     `textSubtle`, which is held to 3:1, and failed 4.5:1 in the light theme).
+11. Packaging (2026-10-18): the name stays Basis, published as `basis-design` with the command `basis`; Apache-2.0
+    for the app and MIT-0 for `template/`; projects in `~/.basis`. Verified from a packed and installed tarball.
+    Not published yet.
 
 The next step is Lucas' call. Left for later: syncing tokens and components forward into a linked repo, visual
-comparison of the whole gallery between two history entries, and the packaging for a release (licence, name,
-where projects live by default, an npm package or app, icon).
+comparison of the whole gallery between two history entries, the icon, and publishing.
 
 ## Known limits
 

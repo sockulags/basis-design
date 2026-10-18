@@ -91,6 +91,13 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Packaging. The name stays Basis (no design tool by that name turned up), published on npm as
+  `basis-design`, since `basis` is taken; the command is still `basis`. Apache-2.0 for the app, for its patent
+  grant and because the ACP adapters use it; MIT-0 for `template/`, because those components are copied into the
+  products people build and should carry no conditions. npm first rather than a desktop app: the people who have
+  Claude Code or Codex already work in a terminal, and an app needs signing, updates and a bundled Node. Projects
+  live in `~/.basis`, since an npx cache or an update replaces Basis' own folder.
+
 - 2026-10-18: Release readiness. Anthropic's terms allow a product to run the unmodified Claude Code with the
   user's own login, so Basis keeps subscription sign-in; the picker says "Claude", as the branding rules ask. The
   design agent no longer inherits the user's Claude Code setup: `settingSources: []` rather than `["project"]`,
