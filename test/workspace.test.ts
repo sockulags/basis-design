@@ -106,6 +106,28 @@ describe("history", () => {
     ]);
   });
 
+  test("a turn that starts while a hand edit is still checked keeps its own changes", async () => {
+    const dir = await folder();
+    let slow = false;
+    const workspace = new Workspace(dir, {
+      typecheck: async () => {
+        if (slow) await new Promise((resolve) => setTimeout(resolve, 600));
+        return [];
+      },
+    });
+    await workspace.init();
+    open.push(workspace);
+    slow = true;
+    await setToken(dir, "#123456");
+    // The hand edit settles after 900 ms, and its check then takes 600 ms: the turn starts in the middle.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await turn(workspace, "Agent", () => setToken(dir, "#654321"));
+    assert.deepEqual(
+      workspace.entries.map((entry) => entry.source),
+      ["init", "external", "agent"],
+    );
+  });
+
   test("a turn that changes nothing adds no entry", async () => {
     const dir = await folder();
     const workspace = await start(dir);

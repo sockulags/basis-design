@@ -145,10 +145,11 @@ export class Workspace extends EventEmitter<Events> {
 
   /** Marks the start of an agent turn; `label` is the prompt that started it. */
   async beginTurn(label: string): Promise<void> {
-    // Anything changed by hand since the last entry gets its own entry first.
-    await this.commit("external", {});
+    // Set first, so a hand edit's check still under way (onFsEvent) does not record the agent's changes as its own.
     this.agentActive = true;
     this.turnLabel = label;
+    // Anything changed by hand since the last entry gets its own entry first.
+    await this.commit("external", {});
   }
 
   /** After a turn: re-read, type-check and record one history entry (or iteration) for everything it changed. */
@@ -372,7 +373,8 @@ export class Workspace extends EventEmitter<Events> {
       if (this.agentActive || this.closed) return;
       this.settling = (async () => {
         await this.check();
-        if (!this.closed) await this.commit("external", {});
+        // A turn that started meanwhile records the hand edit itself (beginTurn), and its own changes with it.
+        if (!this.closed && !this.agentActive) await this.commit("external", {});
       })();
     }, 900);
   }
