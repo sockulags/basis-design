@@ -82,6 +82,11 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       text are exempt). Findings name the section, theme, width and an example element. The starter template must
       come out clean; fix the template where it does not. Done when: pure parts have tests, a deliberately broken
       specimen shows each finding, and the agent fixes one in a real turn.
+- [ ] **Keep Codex out of the user's own setup.** Claude's design agent no longer reads the user's Claude Code
+      setup (`settingSources: []`), but Codex still loads `~/.codex/skills/` and the user's AGENTS.md during design
+      turns (found while building the screenshot tool). Start Codex so it reads only what Basis gives it, the way
+      Claude is started, keeping the user's login. Done when: a real Codex turn no longer lists or reads the user's
+      skills, and still works with the screenshot tool.
 - [ ] **Stable views when they are built.** After a turn that changed files in `views/`, the server captures the
       changed views' screens twice at their first width with the step-one module, and reports a screen that renders
       differently as a problem in the fix loop ("Screen X of view Y renders differently each time; look for clocks,
