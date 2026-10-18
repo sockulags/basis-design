@@ -332,7 +332,7 @@ export class AgentHost extends EventEmitter<Events> {
     const sessionId = this.sessionId;
     if (!connection || !sessionId) return false;
     await this.workspace.beginTurn(turn.label);
-    this.checksBefore = new Set(this.checks);
+    this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
     const message = turn.text || "See the attached context.";
     const body = this.needsPreamble
       ? `${FIRST_PROMPT_PREAMBLE}
@@ -473,6 +473,12 @@ ${message}`
     if (introduced.length) {
       sections.push(
         `Your change fails these accessibility checks (WCAG 2 AA). Fix them, unless the user asked for exactly this; then say so instead:\n${list(introduced)}`,
+      );
+    }
+    const fixedColors = this.workspace.state.colorFindings.filter((finding) => !this.checksBefore.has(finding));
+    if (fixedColors.length) {
+      sections.push(
+        `Your change uses colours that stay the same in light and dark, so they will look wrong in one of them. Derive them from the colour roles (var(--color-...), color-mix() with a role, oklch(from var(--color-...) ...)), or add the colour to both themes, unless the user asked for exactly this; then say so instead:\n${list(fixedColors)}`,
       );
     }
     return sections.length

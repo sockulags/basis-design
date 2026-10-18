@@ -143,6 +143,9 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
     ...previewErrors,
   ];
 
+  // The preview's checks, and the colours in the source that ignore the theme (the server finds those).
+  const checks = [...previewChecks, ...(state.design?.colorFindings ?? []).map((finding) => `Themes: ${finding}`)];
+
   const finishPicking = useCallback(() => {
     setPicking(false);
     focusComposer();
@@ -200,7 +203,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
         chat={state.chat}
         connected={state.connected}
         problems={problems}
-        checks={previewChecks}
+        checks={checks}
         draft={draft}
         onDraft={setDraft}
         send={send}

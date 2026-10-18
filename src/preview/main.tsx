@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
 import { clearProblems, describe, hotUpdated, onFindings, onProblems, setProblem } from "./errors.ts";
+import { onOwnFindings, setOtherThemeFindings } from "./a11y.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
 import { requestReveal, stillRendering } from "./progressive.ts";
 import type { Preview as PreviewComponent } from "./Preview.tsx";
@@ -13,11 +14,27 @@ import "./preview.css";
  * It only talks to the chrome that embeds it, and only through postMessage.
  */
 
-const parentOrigin = new URLSearchParams(location.search).get("parent") ?? "";
-const trustedParent = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(parentOrigin) && window.parent !== window;
+const params = new URLSearchParams(location.search);
+/**
+ * This document is the preview's hidden copy in the other theme (see ThemeChecker), embedded by the preview on
+ * the same origin. It renders the same view and reports nothing but its accessibility findings.
+ */
+const themeCheck = params.has("theme-check");
+const parentOrigin = themeCheck ? location.origin : (params.get("parent") ?? "");
+const trustedParent =
+  (themeCheck || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(parentOrigin)) && window.parent !== window;
+
+if (themeCheck) {
+  // A hidden frame does not play transitions, so a theme switch would leave colours halfway between the themes.
+  // The check measures end states only.
+  const still = document.createElement("style");
+  still.textContent = "*, *::before, *::after { transition: none !important; animation: none !important; }";
+  document.head.append(still);
+}
 
 function post(message: FromPreview): void {
-  if (trustedParent) window.parent.postMessage(message, parentOrigin);
+  if (!trustedParent || (themeCheck && message.type !== "ready" && message.type !== "checks")) return;
+  window.parent.postMessage(message, parentOrigin);
 }
 
 // The gallery is a showcase: links must never navigate, whether to "#" (which jumps to the top) or away
@@ -79,6 +96,61 @@ function useScrollSpy(view: string | null): void {
       window.removeEventListener("resize", onScroll);
     };
   }, [view]);
+}
+
+/**
+ * The accessibility check needs the demos rendered in a theme to check them in it, and the user sees one theme at
+ * a time. So the preview keeps a copy of itself in the other theme: a same-origin frame the user never sees
+ * (transparent, inert, behind the page) but laid out at the same size, so axe measures real colours and layout.
+ * Its findings join this document's.
+ */
+function ThemeChecker({ view }: { view: PreviewView }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [generation, setGeneration] = useState(0);
+
+  useEffect(() => {
+    const listen = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.origin !== location.origin) return;
+      const message = event.data as { type?: unknown; checks?: unknown; running?: unknown } | null;
+      if (message?.type === "ready") setGeneration((value) => value + 1);
+      else if (message?.type === "checks" && Array.isArray(message.checks)) {
+        const checks = message.checks.filter((item): item is string => typeof item === "string");
+        setOtherThemeFindings(checks, message.running === true);
+      }
+    };
+    window.addEventListener("message", listen);
+    return () => {
+      window.removeEventListener("message", listen);
+      setOtherThemeFindings([], false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (generation === 0) return;
+    const message: ToPreview = { type: "render", view: { ...view, theme: view.theme === "dark" ? "light" : "dark" } };
+    frame.current?.contentWindow?.postMessage(message, location.origin);
+  }, [generation, view]);
+
+  return (
+    <iframe
+      ref={frame}
+      src={`${location.pathname}?theme-check`}
+      title="Accessibility check in the other theme"
+      aria-hidden
+      tabIndex={-1}
+      inert
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        border: 0,
+        opacity: 0,
+        pointerEvents: "none",
+        zIndex: -1,
+      }}
+    />
+  );
 }
 
 type PreviewType = typeof PreviewComponent;
@@ -155,7 +227,9 @@ function PreviewApp() {
     window.addEventListener("message", onMessage);
     post({ type: "ready" });
     const stop = onProblems((errors) => post({ type: "errors", errors }));
-    const stopChecks = onFindings((checks, running) => post({ type: "checks", checks, running }));
+    const stopChecks = (themeCheck ? onOwnFindings : onFindings)((checks, running) =>
+      post({ type: "checks", checks, running }),
+    );
     return () => {
       window.removeEventListener("message", onMessage);
       stop();
@@ -189,11 +263,13 @@ function PreviewApp() {
   }, []);
 
   if (!view || !Preview) return null;
+  if (themeCheck) return <Preview view={view} post={post} themeCheck />;
   return (
     <>
       <div ref={root}>
         <Preview view={view} post={post} />
       </div>
+      <ThemeChecker view={view} />
       {picks.length > 0 && <PickMarkers picks={picks} />}
       {picking && <PickLayer container={root} design={view.design} picks={picks} onToggle={toggle} onDone={done} />}
     </>

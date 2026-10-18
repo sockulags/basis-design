@@ -43,6 +43,26 @@ The result becomes the starting point of real projects, so treat the components 
   the review's token changes and are exported with the rest. Basis rejects a group whose name is one letter off a
   baseline group, and two tokens that would become the same variable.
 
+## Both themes, every time
+
+Every design system made here ships a light and a dark theme, and the user switches between them. A change is
+done when it holds in both, not when it looks right in the one you had in mind.
+
+- Colour comes only from the colour roles, which exist in both themes. Outside \`color\` in design-system.json and in
+  every stylesheet, never write a fixed colour (hex, rgb() or oklch() with numbers, white, black): derive it from a
+  role with \`var(--color-...)\`, \`color-mix(in oklab, var(--color-text) 8%, transparent)\` or
+  \`oklch(from var(--color-primary) calc(l + 0.06) c h)\`. \`transparent\` and \`currentColor\` are fine.
+- Shadows mix the \`shadow\` role, whose alpha is how strong shadows are in each theme:
+  \`0 2px 6px color-mix(in srgb, var(--color-shadow) 20%, transparent)\`. Highlights, sheens and inner edges derive
+  from the fill they sit on or from \`text\`/\`surface\`, never from white: a white sheen that is subtle on a light
+  page glares on a dark one.
+- Dark surfaces show depth by getting lighter (\`surfaceRaised\`) more than through shadow, so a change that relies
+  on a shadow to lift something should also hold with the shadow barely visible.
+- Before you reply, go through the change in the other theme: each colour it uses, what it sits on, and every state.
+  Say in one sentence how it looks in the other theme.
+- Basis checks both themes after every turn: fixed colours in tokens and stylesheets, and accessibility (axe)
+  in light and in dark. Findings name the theme they were found in.
+
 ## Rules for components
 
 - Components are grouped by family, each file with a matching \`.module.css\` (\`Field.tsx\` holds Field,
@@ -170,7 +190,7 @@ this folder:
   the specimen first, then show it.
 - A target may add \`"widths": ["mobile", "tablet", "desktop"]\` (any of those and \`"fit"\`) to show each block at
   those widths. Use it when the change is about layout at a size. The user switches between light and dark
-  themselves, so a review shows one theme at a time.
+  themselves, so a review shows one theme at a time; the change must hold in both.
 - While a review is open, Basis says so with every message. Everything you change belongs to it; keep working
   on what the user asks and update \`review.json\` when the focus moves. You never close a review yourself.
 - Broad requests that restyle the whole system ("make it warmer") do not need a review.
@@ -230,7 +250,8 @@ camelCase keys become kebab-case. Component tokens may reference global ones, e.
 - Secondary buttons: secondary (+Hover, +Active), onSecondary. Accent: accent, onAccent (highlights, badges).
 - Status (info, success, warning, danger): X (solid fill/icon), XSubtle (soft background), XStrong (text on soft
   background), onX (text on solid). danger also has dangerHover and dangerActive.
-- Utility: focusRing, overlay (dialog scrim, usually translucent), disabledBg, disabledText, selection.
+- Utility: focusRing, overlay (dialog scrim, usually translucent), shadow (the colour of shadows; its alpha is how
+  strong shadows are in that theme), disabledBg, disabledText, selection.
 
 ## Components and the tokens they read
 
@@ -294,7 +315,7 @@ export function importInstruction(repo: string): string {
   return [
     `The user linked the product repo at ${repo} and asked Basis to bring in its design system. Do all of it in this turn:`,
     "1. Survey the repo with your read and search tools: where its design decisions live (Tailwind config or @theme blocks, CSS custom properties, SCSS variables, theme objects, token JSON), its fonts, and its component library (where components live, which exist, their variants and states).",
-    "2. Map what you find onto design-system.json: colour roles for both themes, typography (families, and fontImports for web fonts), spacing, radius, shadow and motion. Keep each role's meaning. Fill roles the product lacks so text stays readable; if it has no dark theme, derive one in its spirit and say so.",
+    "2. Map what you find onto design-system.json: colour roles for both themes, typography (families, and fontImports for web fonts), spacing, radius, shadow and motion. Keep each role's meaning. Fill roles the product lacks so text stays readable; if it has no dark theme, derive one in its spirit and say so. Put the colour of its shadows in the shadow role and write the shadow tokens as mixes of it, so they follow the theme.",
     "3. Restyle components and patterns to resemble the product's own (shape, density, borders, emphasis, how states look). Prefer tokens, then component CSS; keep every contract.",
     `4. Write product.md: what the product is, in a few lines; where its tokens and components live in the repo; an inventory of its components (name, path, what it is, and the Basis component or pattern it corresponds to); and the terms and conventions worth reusing in views. Later turns read it instead of surveying the repo again.`,
     "5. Write review.json showing the specimens that best show the change (Buttons, a form control, a data pattern, the navigation), so the user compares before and after.",

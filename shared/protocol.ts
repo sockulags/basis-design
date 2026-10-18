@@ -121,6 +121,8 @@ export interface DesignState {
   typeErrors: string[] | null;
   /** Problems with review.json; null when it is valid or absent. */
   reviewErrors: string[] | null;
+  /** Colours in tokens and stylesheets that stay the same in both themes (see shared/fixed-colors.ts). */
+  colorFindings: string[];
   workspace: string;
 }
 

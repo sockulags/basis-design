@@ -91,6 +91,12 @@ product's direction, data that could be lost, or a failure you cannot get past.
 
 ## Decision log
 
+- 2026-10-18: Both themes on every change. Redesigning buttons showed the agent tuning sheens and shadows for one
+  theme: shadow and component tokens have one value for both, and the defaults were fixed colours. Now a `shadow`
+  role carries each theme's shadow colour and strength, the defaults mix it, the brief has a both-themes section,
+  fixed colours outside the roles are findings, and axe also runs in the theme the user is not looking at, in a
+  hidden copy of the preview (it renders the gallery a second time; watch for that on large galleries).
+
 - 2026-10-18: Contrast runs in the preview on browser-resolved colours rather than on the server, so oklch,
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are

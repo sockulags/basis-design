@@ -117,7 +117,23 @@ demos and the review's live panes, never past versions, foundations or the offsc
 after anything that changes them, and keeps serious and critical WCAG A/AA violations, one per demo and rule so
 the text stays stable for the comparison. Duplicate-id rules are off, since the gallery repeats demos. While a
 check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the usual
-settle time) before it decides what the turn introduced.
+settle time) before it decides what the turn introduced. The user sees one theme, so the preview keeps a copy of
+itself in the other one (`ThemeChecker` in `src/preview/main.tsx`): a same-origin frame at full size, transparent,
+inert and behind the page, opened with `?theme-check`. It renders the same view without impact copies and posts
+only its own axe findings, which join the preview's. Every finding names its theme, taken from the nearest
+`data-theme`, so the two documents (and the gallery's both-themes frames) agree on the text and repeats drop out.
+The copy turns off transitions and animations, since a hidden frame does not play them and a theme switch would
+leave colours halfway; the preview's CSP allows `'self'` as a frame ancestor for it. The gallery's own labels
+(group titles, column heads, captions) are excluded from axe: they use `textSubtle` at small sizes, which fails
+4.5:1 in the light default, and they are Basis' text, not the agent's.
+
+Fixed colours (`shared/fixed-colors.ts`) are found on the server in `Workspace.check()`: hex, colour functions
+with literal channels, and white/black in tokens outside `color` (typography is skipped) and in the source
+folders' stylesheets (masks and font properties are skipped). Such a colour is the same in both themes. The
+findings are part of `DesignState` (`colorFindings`); the chrome lists them with the preview's checks, and
+`AgentHost` treats them like those: only the ones a turn introduced reach the fix loop. Shadows follow the theme
+through the `shadow` role, whose alpha is each theme's strength, mixed into the shadow tokens with
+`color-mix(in srgb, var(--color-shadow) N%, transparent)`.
 
 ### Large galleries
 

@@ -37,7 +37,7 @@ const COLOR_GROUPS: { title: string; roles: ColorRole[] }[] = [
       "dangerStrong",
     ],
   },
-  { title: "Utility", roles: ["focusRing", "overlay", "disabledBg", "disabledText", "selection"] },
+  { title: "Utility", roles: ["focusRing", "overlay", "shadow", "disabledBg", "disabledText", "selection"] },
 ];
 
 function Ratio({

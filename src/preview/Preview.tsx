@@ -27,6 +27,8 @@ interface PreviewProps {
   view: PreviewView;
   /** Sends a message to the chrome: the sections found, "ask the agent" requests, what changed in a review. */
   post: (message: FromPreview) => void;
+  /** The hidden copy in the other theme, which only runs the accessibility check: it skips what else a review shows. */
+  themeCheck?: boolean;
 }
 
 /**
@@ -34,7 +36,7 @@ interface PreviewProps {
  * section comes from a *.specimen.tsx file in the workspace. Everything inside
  * .ds-root is styled only by the generated tokens.
  */
-export function Preview({ view, post }: PreviewProps) {
+export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   const { design, theme, page, review } = view;
   const onAsk = useCallback((prefix: string) => post({ type: "ask", prefix }), [post]);
   const onImpact = useCallback((ids: string[]) => post({ type: "impact", ids }), [post]);
@@ -101,7 +103,7 @@ export function Preview({ view, post }: PreviewProps) {
         {review ? (
           <>
             <Review view={review} specimens={specimens} design={design} theme={theme} onAsk={onAsk} />
-            {review.baseline && (
+            {review.baseline && !themeCheck && (
               <Impact
                 baseline={review.baseline}
                 specimens={specimens.filter(

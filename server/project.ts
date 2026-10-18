@@ -87,7 +87,8 @@ export class OpenProject {
         middlewareMode: true,
         hmr: { server: previewServer },
         fs: { allow: [root, entry.dir] },
-        headers: { "Content-Security-Policy": `frame-ancestors ${options.chromeOrigins.join(" ")}` },
+        // 'self': the preview embeds a copy of itself for the accessibility check in the other theme.
+        headers: { "Content-Security-Policy": `frame-ancestors 'self' ${options.chromeOrigins.join(" ")}` },
       },
     });
     // New specimen files must be noticed even when the workspace lives outside this repo.

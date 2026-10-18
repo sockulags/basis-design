@@ -82,6 +82,27 @@ describe("history", () => {
     assert.deepEqual(last?.changed, ["color.light.primary"]);
   });
 
+  test("a turn reports colours that ignore the theme, in tokens and stylesheets", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    assert.deepEqual(workspace.state.colorFindings, []);
+    await turn(workspace, "White sheen", async () => {
+      const css = path.join(dir, "components", "Button.module.css");
+      await writeFile(
+        css,
+        `${await readFile(css, "utf8")}\n.sheen { background: linear-gradient(white, transparent); }\n`,
+      );
+      const file = path.join(dir, "design-system.json");
+      const design = JSON.parse(await readFile(file, "utf8"));
+      design.shadow.md = "0 4px 12px rgb(15 27 45 / 0.06)";
+      await writeFile(file, `${JSON.stringify(design, null, 2)}\n`);
+    });
+    assert.deepEqual(workspace.state.colorFindings, [
+      "design-system.json shadow.md uses the fixed colour rgb(15 27 45 / 0.06)",
+      "components/Button.module.css uses the fixed colour white",
+    ]);
+  });
+
   test("a turn that changes nothing adds no entry", async () => {
     const dir = await folder();
     const workspace = await start(dir);

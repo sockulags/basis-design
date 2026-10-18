@@ -1,8 +1,9 @@
 import { EventEmitter } from "node:events";
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.ts";
+import { fixedColorFindings } from "../shared/fixed-colors.ts";
 import type { DesignState, HistoryEntry, Snapshot } from "../shared/protocol.ts";
 import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
 import { git, lines, typecheck } from "./exec.ts";
@@ -29,6 +30,7 @@ export class Workspace extends EventEmitter<Events> {
   private design: Design = DEFAULT_DESIGN;
   private errors: string[] | null = null;
   private typeErrors: string[] | null = null;
+  private colorFindings: string[] = [];
   private history: HistoryEntry[] = [];
   private readonly reviews: Reviews;
   private readonly snapshots: Snapshots;
@@ -86,6 +88,7 @@ export class Workspace extends EventEmitter<Events> {
       errors: this.errors,
       typeErrors: this.typeErrors,
       reviewErrors: this.reviews.errors,
+      colorFindings: this.colorFindings,
       workspace: this.dir,
     };
   }
@@ -288,15 +291,34 @@ export class Workspace extends EventEmitter<Events> {
     }
   }
 
-  /** Type-checks the source folders against the gallery contracts. */
+  /** Type-checks the source folders against the gallery contracts, and looks for colours that ignore the theme. */
   async check(): Promise<string[]> {
-    const errors = await (this.options.typecheck ?? typecheck)(this.dir).catch((error: Error) => [error.message]);
+    const [errors, colorFindings] = await Promise.all([
+      (this.options.typecheck ?? typecheck)(this.dir).catch((error: Error) => [error.message]),
+      this.findFixedColors(),
+    ]);
     const next = errors.length ? errors.slice(0, 50) : null;
-    if (JSON.stringify(next) !== JSON.stringify(this.typeErrors)) {
+    if (
+      JSON.stringify(next) !== JSON.stringify(this.typeErrors) ||
+      JSON.stringify(colorFindings) !== JSON.stringify(this.colorFindings)
+    ) {
       this.typeErrors = next;
+      this.colorFindings = colorFindings;
       this.emit("design", this.state);
     }
     return errors;
+  }
+
+  private async findFixedColors(): Promise<string[]> {
+    const stylesheets: { file: string; css: string }[] = [];
+    for (const dir of SOURCE_DIRS) {
+      const names = await readdir(path.join(this.dir, dir)).catch(() => [] as string[]);
+      for (const name of names.filter((item) => item.endsWith(".css")).sort()) {
+        const css = await readFile(path.join(this.dir, dir, name), "utf8").catch(() => "");
+        stylesheets.push({ file: `${dir}/${name}`, css });
+      }
+    }
+    return fixedColorFindings(this.design, stylesheets);
   }
 
   private onFsEvent(filename: string | Buffer | null): void {
