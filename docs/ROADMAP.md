@@ -87,6 +87,13 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       turns (found while building the screenshot tool). Start Codex so it reads only what Basis gives it, the way
       Claude is started, keeping the user's login. Done when: a real Codex turn no longer lists or reads the user's
       skills, and still works with the screenshot tool.
+- [ ] **Codex reads without a prompt each.** Since Codex runs in Basis' own home without a sandbox on Windows, it
+      asks before every command, reads included, which makes a design turn tedious. Approve Codex's read-only
+      commands automatically when every path they touch is inside the workspace or the linked repo, as Claude
+      Code's reads are; Codex's approval request carries neither the command's kind nor its path, so take them
+      from the tool call reported just before it. Anything that writes, runs scripts or reaches outside still
+      asks. Done when: a real Codex design turn reads files without prompts, and a command outside the workspace
+      still asks.
 - [ ] **Stable views when they are built.** After a turn that changed files in `views/`, the server captures the
       changed views' screens twice at their first width with the step-one module, and reports a screen that renders
       differently as a problem in the fix loop ("Screen X of view Y renders differently each time; look for clocks,
