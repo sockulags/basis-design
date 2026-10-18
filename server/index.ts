@@ -10,7 +10,7 @@ import {
   type ProjectEntry,
   type ServerMessage,
 } from "../shared/protocol.ts";
-import { createInstruction, importInstruction } from "./brief.ts";
+import { createInstruction, importInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, OpenProject, type ProjectOptions } from "./project.ts";
@@ -192,15 +192,18 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     }
     case "create": {
       const name = String(message.name ?? "").trim();
-      const purpose = String(message.purpose ?? "")
-        .trim()
-        .slice(0, 2000);
       if (!isPageId(message.page) || !isComponentName(name)) return;
       const page = pageById(message.page);
-      // New view gets its own guided turn in the next roadmap step.
-      if (page.kind === "view") return;
+      // A view's description is often a whole ticket, so it may run longer.
+      const purpose = String(message.purpose ?? "")
+        .trim()
+        .slice(0, page.kind === "view" ? 8000 : 2000);
       const text = `New ${page.kind}: ${name}${purpose ? `\n\n${purpose}` : ""}`;
-      await agent.prompt(text, { instruction: createInstruction(page.kind, page.folder, name, purpose) });
+      const instruction =
+        page.kind === "view"
+          ? viewInstruction(page.folder, name, purpose)
+          : createInstruction(page.kind, page.folder, name, purpose);
+      await agent.prompt(text, { instruction });
       return;
     }
     case "cancel":

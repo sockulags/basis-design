@@ -29,7 +29,9 @@ export function rebasePlugin(root: string, workspaceDir: string): Plugin {
     resolveId(source) {
       const [url, query] = split(source);
       if (!url!.endsWith(REBASE_SUFFIX)) return null;
-      const file = toFile(url!);
+      // Usually a URL; React's fast refresh imports the module by its absolute file path instead.
+      const direct = normalizePath(url!);
+      const file = direct.startsWith(snapshots) ? direct : toFile(url!);
       return file.startsWith(snapshots) ? file + query : null;
     },
     async load(id) {

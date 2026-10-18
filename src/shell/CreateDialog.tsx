@@ -27,6 +27,7 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const { kind, folder } = pageById(page);
+  const isView = kind === "view";
   const componentName = toComponentName(name);
   const nameProblem =
     name.trim() && !isComponentName(componentName) ? "Start with a letter; use letters and digits." : null;
@@ -61,8 +62,17 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
           <div>
             <h2>New {kind}</h2>
             <p>
-              The agent creates it in <code>{folder}/</code> with a specimen
-              {kind === "component" ? ", a contract and every state" : " built from the base components"}.
+              {isView ? (
+                <>
+                  The agent builds the feature's screens in <code>{folder}/</code> from your patterns and components,
+                  with realistic data, as a flow you can click through, and opens it in a review.
+                </>
+              ) : (
+                <>
+                  The agent creates it in <code>{folder}/</code> with a specimen
+                  {kind === "component" ? ", a contract and every state" : " built from the base components"}.
+                </>
+              )}
             </p>
           </div>
         </header>
@@ -72,7 +82,7 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
             id="create-name"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder={kind === "component" ? "DatePicker" : "PricingTable"}
+            placeholder={kind === "component" ? "DatePicker" : isView ? "ShipmentTracking" : "PricingTable"}
             spellCheck={false}
             autoComplete="off"
             autoFocus
@@ -83,7 +93,8 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
             {nameProblem ?? (componentName && componentName !== name.trim() ? `Created as ${componentName}` : " ")}
           </p>
           <label htmlFor="create-purpose">
-            What is it for? <span className={styles.muted}>Optional</span>
+            {isView ? "The feature, or the ticket text" : "What is it for?"}{" "}
+            <span className={styles.muted}>Optional</span>
           </label>
           <textarea
             id="create-purpose"
@@ -95,12 +106,14 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
                 create();
               }
             }}
-            rows={4}
-            maxLength={2000}
+            rows={isView ? 7 : 4}
+            maxLength={isView ? 8000 : 2000}
             placeholder={
               kind === "component"
                 ? "Pick a single date from a calendar popover; supports min/max and disabled days."
-                : "Three plan cards with a monthly/yearly toggle; the middle plan is highlighted."
+                : isView
+                  ? "As a dispatcher I can see every shipment that is delayed, open one to see why, and notify the customer."
+                  : "Three plan cards with a monthly/yearly toggle; the middle plan is highlighted."
             }
           />
         </div>

@@ -599,7 +599,9 @@ ${message}`
 
   private async onPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     const call = params.toolCall;
-    const paths = (call.locations ?? []).map((location) => location.path);
+    // Some tools (grep) name their path only in their input, not as locations.
+    const located = (call.locations ?? []).map((location) => location.path);
+    const paths = located.length ? located : inputPaths(call.rawInput, this.workspace.dir);
     const options: PermissionChoice[] = params.options.map((option) => ({
       optionId: option.optionId,
       name: option.name,
@@ -767,6 +769,16 @@ function sleep(ms: number): Promise<void> {
 
 function list(items: string[]): string {
   return items.map((item) => `- ${item}`).join("\n");
+}
+
+/** The paths a tool's raw input names (path, file_path), resolved against the workspace. */
+function inputPaths(raw: unknown, dir: string): string[] {
+  if (!raw || typeof raw !== "object") return [];
+  const input = raw as Record<string, unknown>;
+  return ["path", "file_path"]
+    .map((key) => input[key])
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "")
+    .map((value) => path.resolve(dir, value));
 }
 
 function describeRawInput(raw: unknown): string | undefined {

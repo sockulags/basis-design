@@ -16,7 +16,8 @@ The result becomes the starting point of real projects, so treat the components 
 ## What you edit
 
 - \`design-system.json\` (tokens) and anything under \`components/\`, \`patterns/\` or \`views/\` (React + CSS Modules). Nothing else: not
-  AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages.
+  AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages,
+  and change files with your edit and write tools rather than shell commands, which wait for the user's approval.
   \`review.json\` (see Reviews below) and \`product.md\` (what you learned about a linked product repo) are the
   only other files you write.
   \`.basis/snapshots/\` holds read-only copies of past versions for the review view: never read or search them,
@@ -264,6 +265,22 @@ export function createInstruction(
       : "The user gave no description: infer a sensible scope from the name, and ask first if the name is ambiguous.",
     'Follow "Adding a component or pattern" in AGENTS.md step by step.',
   ].join(" ");
+}
+
+/** The guided turn behind "New view": the screens of one feature, as a flow, from what the workspace has. */
+export function viewInstruction(folder: string, name: string, purpose: string): string {
+  return [
+    `The user pressed "New view" in Basis. Build the view ${name} in ${folder}/${name}.specimen.tsx, following "Views: whole screens" in AGENTS.md.`,
+    purpose
+      ? "The feature (or the ticket describing it) is in the user's message below."
+      : "The user gave no description: infer the feature from the name, and ask first if it is ambiguous.",
+    "1. Read product.md if it exists, then components/index.ts, patterns/index.ts and their contracts, so the view uses what exists.",
+    "2. Work out the screens the feature needs (usually two to five: where it starts, the main task, its result or detail) and how the user moves between them.",
+    "3. Write the view: a flow block with those screens, wired with go() so it clicks through, filled with realistic made-up data that stays consistent across screens. Include the states the feature meets (empty, an error, a confirmation) where they matter.",
+    "4. If a screen needs something the patterns lack, add or extend a pattern (with its contract and specimen) rather than building it inside the view.",
+    `5. Write review.json with a title for the feature and show: [{ "specimen": "<the view's title>" }], so the user sees it in a review.`,
+    "Finish with a short summary of the screens and the flow, and what you assumed about the feature.",
+  ].join("\n");
 }
 
 /**

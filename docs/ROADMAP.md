@@ -78,7 +78,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
       screen renders full width and gets a `go(screenId)` prop so buttons and links move through the flow. The
       gallery shows one screen at a time with a strip to jump between them, and Show at widths apply. Starter
       template: one small example view built from the starter patterns. Views are not part of the export.
-- [ ] **New view.** A sidebar button on the Views page asks for a name and the feature (or ticket text) and
+- [x] **New view.** A sidebar button on the Views page asks for a name and the feature (or ticket text) and
       starts a guided turn: the agent builds the flow from the workspace's patterns with realistic made-up
       data, consistent across screens, and opens a review of it.
 - [ ] **Views in reviews.** Review targets can show a view's screens, with alternatives and blink working as
@@ -95,6 +95,13 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: New view is a guided turn (`viewInstruction`); the description may be a whole ticket (8,000
+  characters). From the HAR-212 ticket against the Harbor project the agent built five screens (delayed list,
+  shipment, notify customer, nothing delayed, load error) from existing components and patterns, with consistent
+  made-up data, opened a review and recorded its assumptions in product.md. Fixed on the way: grep names its path
+  only in its input, so auto-approval now falls back to input paths; the rebase plugin missed React fast
+  refresh's self-import by absolute path, which broke the before side of any specimen with top-level components
+  (views have them); the brief now tells the agent to edit with its tools, since it tried `sed` once.
 - 2026-10-18: Views reuse the specimen format with a new `flow` block (screens with `go(screen, data)`), so the
   glob, reviews, widths and the accessibility check work for them unchanged. `views/` is a third page and source
   folder (agent-editable, type-checked, seeded into older workspaces), left out of the starter kit. The starter
