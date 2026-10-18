@@ -67,7 +67,7 @@ product's direction, data that could be lost, or a failure you cannot get past.
       right after): the agent surveys the repo (Tailwind config, CSS variables, theme files, component
       library), writes the tokens, restyles components and patterns to match, writes a component inventory
       to a new agent-editable file (`product.md`) and opens a review of the key specimens.
-- [ ] **Create a project from a repo.** The create dialog can start from a product repo: it links the repo and
+- [x] **Create a project from a repo.** The create dialog can start from a product repo: it links the repo and
       runs the step above in one go.
 - [ ] **Repo context in every turn.** The brief and per-turn context point the agent at `product.md` and the
       repo, so requests about the product's features use its real terms and structure.
@@ -95,6 +95,9 @@ product's direction, data that could be lost, or a failure you cannot get past.
   color-mix and var() references work. Findings travel as their own `checks` channel, do not block Approve,
   and reach the agent only when its turn introduced them (once; a fix-up turn starts from them). Borders are
   not checked, since most systems draw them below 3:1 on purpose; `textSubtle` is held to 3:1.
+- 2026-10-18: Creating a project from a repo checks the folder before anything is created, names the project
+  after the repo folder when no name is given, and starts the bring-in turn once the new project's agent is
+  ready (`AgentHost.whenReady`).
 - 2026-10-18: Bringing in a design system is one guided turn (`importInstruction` in `server/brief.ts`),
   offered by a checkbox when linking and from the project menu. `product.md` is a new agent-editable file in
   history. Against the Harbor fixture the agent mapped every token, matched fonts, radii and density, restyled

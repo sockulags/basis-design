@@ -139,10 +139,7 @@ export class Projects {
     if (!entry) throw new Error("There is no such project.");
     let repo: string | undefined;
     if (folder !== null) {
-      const trimmed = folder.trim();
-      if (!trimmed || !path.isAbsolute(trimmed)) throw new Error("Give the full path of the repo's folder.");
-      repo = path.resolve(trimmed);
-      if (!existsSync(repo) || !(await stat(repo)).isDirectory()) throw new Error("That folder does not exist.");
+      repo = await checkRepo(folder);
       if (samePath(repo, entry.dir) || isInside(entry.dir, repo)) {
         throw new Error("That is the project's own workspace; link the product repo it designs for.");
       }
@@ -187,6 +184,15 @@ async function freeFolder(parent: string, name: string): Promise<string> {
   let dir = path.join(parent, name);
   for (let n = 2; existsSync(dir); n++) dir = path.join(parent, `${name}-${n}`);
   return dir;
+}
+
+/** The absolute path of a repo folder the user gave, or an error saying what is wrong with it. */
+export async function checkRepo(folder: string): Promise<string> {
+  const trimmed = folder.trim();
+  if (!trimmed || !path.isAbsolute(trimmed)) throw new Error("Give the full path of the repo's folder.");
+  const repo = path.resolve(trimmed);
+  if (!existsSync(repo) || !(await stat(repo)).isDirectory()) throw new Error("That folder does not exist.");
+  return repo;
 }
 
 /** True when `target` lies inside `dir` (not `dir` itself). */

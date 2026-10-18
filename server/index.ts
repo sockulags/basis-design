@@ -14,7 +14,7 @@ import { createInstruction, importInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { PreviewReports } from "./previews.ts";
 import { guard, OpenProject, type ProjectOptions } from "./project.ts";
-import { Projects } from "./projects.ts";
+import { checkRepo, Projects } from "./projects.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const host = "127.0.0.1";
@@ -283,14 +283,30 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     }
     case "project-create": {
       const name = String(message.name ?? "").trim();
-      if (!name) return;
+      const repoInput = typeof message.repo === "string" ? message.repo.trim() : "";
+      if (!name && !repoInput) return;
       if (agent.agent.status === "busy") {
         send(socket, { type: "project-error", message: "The agent is working. Create the project when it is done." });
         return;
       }
-      const entry = await projects.create(name, message.copyCurrent === true ? current.entry : undefined);
+      let entry: ProjectEntry;
+      try {
+        // A repo is checked before anything is created, so a typo leaves no half-made project behind.
+        const repo = repoInput ? await checkRepo(repoInput) : undefined;
+        entry = await projects.create(
+          name || path.basename(repo!),
+          message.copyCurrent === true && !repo ? current.entry : undefined,
+        );
+        if (repo) entry = await projects.setRepo(entry.id, repo);
+      } catch (error) {
+        send(socket, { type: "project-error", message: (error as Error).message });
+        return;
+      }
       broadcast({ type: "projects", projects: projects.list });
-      return switchTo(entry, socket);
+      await switchTo(entry, socket);
+      // Starting from a repo means bringing in its design system, once the new project's agent is up.
+      if (entry.repo && current.entry.id === entry.id && (await current.agent.whenReady())) await bringInDesign(socket);
+      return;
     }
     case "project-open": {
       if (agent.agent.status === "busy") {

@@ -117,6 +117,19 @@ export class AgentHost extends EventEmitter<Events> {
     this.state = { id: agentId, status: "stopped" };
   }
 
+  /** Resolves once the agent is ready for a prompt (true), or has failed or stopped instead (false). */
+  whenReady(): Promise<boolean> {
+    if (this.state.status === "ready") return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const check = (state: AgentState) => {
+        if (state.status === "starting" || state.status === "busy") return;
+        this.off("agent", check);
+        resolve(state.status === "ready");
+      };
+      this.on("agent", check);
+    });
+  }
+
   setRepo(repo: string | undefined): void {
     this.repo = repo;
   }

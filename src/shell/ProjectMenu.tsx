@@ -204,11 +204,13 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [copyCurrent, setCopyCurrent] = useState(false);
+  /** A new project can start from a product repo instead (linked, with its design system brought in). */
+  const [fromRepo, setFromRepo] = useState(false);
   /** Linking can start bringing in the repo's design system right away; changing a linked repo does not by default. */
   const [bringIn, setBringIn] = useState(!current?.repo);
   const [dir, setDir] = useState(mode === "repo" ? (current?.repo ?? "") : "");
   const [pending, setPending] = useState(false);
-  const valid = mode === "create" ? name.trim().length > 0 : dir.trim().length > 0;
+  const valid = mode === "create" ? (fromRepo ? dir.trim().length > 0 : name.trim().length > 0) : dir.trim().length > 0;
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -224,7 +226,9 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
     setPending(true);
     onSubmit(
       mode === "create"
-        ? { type: "project-create", name: name.trim(), copyCurrent }
+        ? fromRepo
+          ? { type: "project-create", name: name.trim(), copyCurrent: false, repo: dir.trim() }
+          : { type: "project-create", name: name.trim(), copyCurrent }
         : mode === "repo"
           ? { type: "project-repo", id: current?.id ?? "", repo: dir.trim(), bringIn }
           : { type: "project-open", dir: dir.trim() },
@@ -265,21 +269,54 @@ function ProjectDialog({ mode, current, error, onSubmit, onClose }: ProjectDialo
                 id="project-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Acme dashboard"
+                placeholder={fromRepo ? "The repo folder's name" : "Acme dashboard"}
                 autoComplete="off"
                 autoFocus
               />
               <fieldset className={styles.projectStart}>
                 <legend>Start from</legend>
                 <label>
-                  <input type="radio" name="start" checked={!copyCurrent} onChange={() => setCopyCurrent(false)} />
+                  <input
+                    type="radio"
+                    name="start"
+                    checked={!copyCurrent && !fromRepo}
+                    onChange={() => {
+                      setCopyCurrent(false);
+                      setFromRepo(false);
+                    }}
+                  />
                   Basis' defaults
                 </label>
                 <label>
-                  <input type="radio" name="start" checked={copyCurrent} onChange={() => setCopyCurrent(true)} />A copy
-                  of {current?.name ?? "the open project"} (tokens and components, not its history)
+                  <input
+                    type="radio"
+                    name="start"
+                    checked={copyCurrent && !fromRepo}
+                    onChange={() => {
+                      setCopyCurrent(true);
+                      setFromRepo(false);
+                    }}
+                  />
+                  A copy of {current?.name ?? "the open project"} (tokens and components, not its history)
+                </label>
+                <label>
+                  <input type="radio" name="start" checked={fromRepo} onChange={() => setFromRepo(true)} />A product
+                  repo: linked, and the agent brings in its design system
                 </label>
               </fieldset>
+              {fromRepo && (
+                <>
+                  <label htmlFor="project-repo">Repo folder</label>
+                  <input
+                    id="project-repo"
+                    value={dir}
+                    onChange={(event) => setDir(event.target.value)}
+                    placeholder="C:\\Code\\my-app"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </>
+              )}
             </>
           ) : (
             <>

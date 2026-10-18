@@ -205,7 +205,11 @@ export type ClientMessage =
   | { type: "export-write"; target: string; overwrite: boolean }
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */
-  | { type: "project-create"; name: string; copyCurrent: boolean }
+  /**
+   * With `repo`, the new project links that product repo and starts by bringing in its design system; the name
+   * may then be empty (the repo folder's name is used).
+   */
+  | { type: "project-create"; name: string; copyCurrent: boolean; repo?: string }
   /** Adds a workspace folder (or an empty or new one) to the list and opens it. */
   | { type: "project-open"; dir: string }
   | { type: "project-remove"; id: string }
