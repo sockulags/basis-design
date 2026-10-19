@@ -253,7 +253,7 @@ component source, patterns and the gallery specimens.
 - `src/preview/` (iframe): `main.tsx` (messaging, picker, scroll spy, errors, link guard), `Preview.tsx`
   (foundations and specimen sections, or the review), `specimens.tsx` (glob and validation of
   `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed"),
-  `progressive.ts` (rendering large pages in steps).
+  `progressive.ts` (rendering large pages in steps), `FullScreen.tsx` (a view alone in full screen).
 - `template/components`, `template/patterns` and `template/views`: starter source with specimens (a view is a
   specimen with a `flow` block, rendered by `FlowBlock` in `specimens.tsx`); `template/contract-check.ts`
   proves the template satisfies the contracts, for components (`shared/contracts.ts`) and patterns
@@ -266,6 +266,23 @@ The chrome sends the preview one `PreviewView` (`shared/frame.ts`: design, theme
 it changes, and receives every preview message through one `onMessage` handler in `App.tsx`. A new preview
 feature adds a field to `PreviewView` or a message to `FromPreview` (with its parser case), not a prop at every
 layer.
+
+**Full screen.** Full screen on a view's strip (only in the gallery, through `SpecimenSection`; reviews and
+`capture.html` have no such button) sends `fullscreen-open`. The chrome takes it only while it has transient user
+activation (`navigator.userActivation`, which the browser passes up from a click in the frame), so the preview cannot
+cover the window on its own, and puts it in `PreviewView.fullscreen`. `PreviewFrame` then makes its canvas fill the
+window over the chrome and asks the browser for full screen on the iframe element. The parent asks, so the iframe
+needs no `allow="fullscreen"` and the sandbox stays as it is; where the browser refuses (the Claude desktop app's
+pane), the window-filling canvas is the full screen. The iframe element is what is in full screen, not its
+document, so the reload after a turn stays there. In the preview, `FullScreenLayer` renders the view's current screen over the
+gallery (fixed, scrolling on its own; the gallery underneath does not scroll or take focus, but it is still rendered
+and checked), on a `.ds-root` that is a size container at the full width and a form of its own, like a Show at
+frame. Moves stay in the preview, since every render message brings a new design object and reruns the checks; the
+place (view, screen, theme) is kept in the frame's `sessionStorage` for the next document. Esc in the browser's full
+screen ends it there (`fullscreenchange`); outside it, the preview's or the chrome's Esc, or the bar's Exit, send
+`fullscreen-exit`. On exit every copy of the view's flow in the gallery moves to the screen reached
+(`FullScreen.left` in `specimens.tsx`) and the gallery scrolls to the view. The bar is Basis' and lives in a shadow
+root with its own stylesheet (`FullScreenBar.css`), so the design's CSS and Basis' cannot meet.
 
 ### Reviews
 

@@ -25,6 +25,11 @@ body {
   margin: 0;
 }
 
+/* A view in full screen covers the gallery (FullScreen.tsx), which keeps its place underneath. */
+html[data-basis-fullscreen] {
+  overflow: hidden;
+}
+
 .ds-root {
   min-height: 100vh;
   color-scheme: light;

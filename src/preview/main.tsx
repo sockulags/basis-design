@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
@@ -193,6 +193,12 @@ function useScrollSpy(view: string | null): void {
 function ThemeChecker({ view }: { view: PreviewView }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
+  // The copy checks the gallery, never a view in full screen, so moves there do not reach it.
+  const { design, theme, page, review } = view;
+  const checked = useMemo<PreviewView>(
+    () => ({ design, theme: theme === "dark" ? "light" : "dark", page, review, fullscreen: null }),
+    [design, theme, page, review],
+  );
 
   useEffect(() => {
     // The copy's checks count as running until it first reports, so the fix loop waits for it after a reload.
@@ -215,9 +221,9 @@ function ThemeChecker({ view }: { view: PreviewView }) {
 
   useEffect(() => {
     if (generation === 0) return;
-    const message: ToPreview = { type: "render", view: { ...view, theme: view.theme === "dark" ? "light" : "dark" } };
+    const message: ToPreview = { type: "render", view: checked };
     frame.current?.contentWindow?.postMessage(message, location.origin);
-  }, [generation, view]);
+  }, [generation, checked]);
 
   return (
     <iframe

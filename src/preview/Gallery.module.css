@@ -173,6 +173,11 @@
   color: var(--color-text);
 }
 
+/* Shows the view alone, filling the screen (FullScreen.tsx); at the end of the strip. */
+.flowFullScreen {
+  margin-left: auto;
+}
+
 .flowIndex {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

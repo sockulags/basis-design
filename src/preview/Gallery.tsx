@@ -31,17 +31,19 @@ export function Section({ id, title, description, onAsk, children }: SectionProp
 
 /**
  * A flow of screens: a strip naming every screen (the current one pressed) above the screen itself, full width
- * in a frame of its own.
+ * in a frame of its own. With `onFullScreen`, the strip ends in a button that shows the view alone.
  */
 export function Flow({
   screens,
   current,
   onSelect,
+  onFullScreen,
   children,
 }: {
   screens: { id: string; label: string }[];
   current: string;
   onSelect: (id: string) => void;
+  onFullScreen?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -59,6 +61,11 @@ export function Flow({
             {screen.label}
           </button>
         ))}
+        {onFullScreen && (
+          <button type="button" className={`${styles.flowStep} ${styles.flowFullScreen}`} onClick={onFullScreen}>
+            Full screen
+          </button>
+        )}
       </div>
       <div className={styles.flowScreen}>{children}</div>
     </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
+import { FullScreenLayer, useFullScreen } from "./FullScreen.tsx";
 import { Impact } from "./Impact.tsx";
 import { Review } from "./Review.tsx";
 import { contrastFailures } from "../../shared/contrast.ts";
@@ -38,6 +39,10 @@ interface PreviewProps {
  */
 export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   const { design, theme, page, review } = view;
+  // A view alone over everything else; the copy in the other theme never shows one.
+  const fullScreen = useFullScreen(themeCheck ? null : view.fullscreen, theme, post);
+  const { open, left, exit } = fullScreen;
+  const flows = useMemo(() => (themeCheck ? undefined : { open, left }), [themeCheck, open, left]);
   const onAsk = useCallback((prefix: string) => post({ type: "ask", prefix }), [post]);
   const onImpact = useCallback((ids: string[]) => post({ type: "impact", ids }), [post]);
   const css = useMemo(() => previewCss(design, ".ds-root"), [design]);
@@ -102,6 +107,12 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   useEffect(() => scheduleDemoChecks(), [design, theme, page, review, rendered, frames, sectionsKey, hotVersion]);
 
   const props = { design, onAsk };
+  const inFullScreen = fullScreen.shown && specimens.find((specimen) => specimen.id === fullScreen.shown?.specimen);
+  // A view the agent removed while it was in full screen leaves it.
+  const gone = Boolean(fullScreen.shown && !inFullScreen);
+  useEffect(() => {
+    if (gone) exit();
+  }, [gone, exit]);
   return (
     <>
       <style>{css}</style>
@@ -155,7 +166,14 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
             {onPage.length > 0 && <FrameBar choice={frameChoice} onChange={setFrameChoice} />}
             {onPage.map((specimen, index) =>
               index < rendered ? (
-                <SpecimenSection key={specimen.id} specimen={specimen} design={design} onAsk={onAsk} frames={frames} />
+                <SpecimenSection
+                  key={specimen.id}
+                  specimen={specimen}
+                  design={design}
+                  onAsk={onAsk}
+                  frames={frames}
+                  fullScreen={flows}
+                />
               ) : (
                 <section key={specimen.id} id={specimen.id} className={styles.pending} aria-busy="true">
                   <h2>{specimen.title}</h2>
@@ -178,6 +196,17 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
           </div>
         )}
       </div>
+      {fullScreen.shown && inFullScreen && (
+        <FullScreenLayer
+          specimen={inFullScreen}
+          place={fullScreen.shown}
+          design={design}
+          onAsk={onAsk}
+          onMove={fullScreen.move}
+          onTheme={fullScreen.setTheme}
+          onExit={exit}
+        />
+      )}
     </>
   );
 }

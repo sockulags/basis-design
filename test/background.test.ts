@@ -24,7 +24,13 @@ test("a report from the page keeps only what has the right shape", () => {
   assert.deepEqual(parseReport(null), { errors: [], checks: [], checking: false, generation: 0 });
 });
 
-const view: PreviewView = { design: {} as PreviewView["design"], theme: "light", page: "system", review: null };
+const view: PreviewView = {
+  design: {} as PreviewView["design"],
+  theme: "light",
+  page: "system",
+  review: null,
+  fullscreen: null,
+};
 
 /** Pages that report what the host page would, held open until the session stops. */
 function fakePages(fail = false) {

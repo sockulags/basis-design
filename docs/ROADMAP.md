@@ -27,6 +27,7 @@ Round 2 (from 2026-10-18) has three aims, in this order of priority:
   pushed. A project folder inside a product repo links that repo by itself. Several projects run at once with
   their agents working in the background while one is shown. Threads are separate chats in one project whose turns
   take turns, not parallel worktrees.
+- 2026-10-19, later: views in full screen come next, ahead of the rest of round 2.
 
 ## How each round works
 
@@ -103,6 +104,14 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 - [x] **Threads in a project.** Several chats per project, each its own agent session, listed in the chat panel;
       their turns queue across threads so history and reviews stay consistent. Done when: two threads in one
       project keep separate conversations across a restart.
+
+- [x] **Views in full screen.** A view can be shown alone, filling the whole screen, so it looks as it would in the
+      product: Full screen on a view's screen strip hides Basis' chrome (top bar, sidebar, chat, the strip) and
+      shows the current screen at the screen's real width through the browser's full-screen mode, with no
+      gallery frame around it. The flow stays clickable. A small bar that stays out of the way until the pointer
+      nears it switches screens and themes and exits; Esc exits too, back to the same screen in the gallery. Agent
+      turns show when they end, as in the gallery. Done when: an e2e test opens a view in full screen, moves through
+      its flow and exits, and in a real browser the view fills the screen at its width with no Basis chrome.
 
 ### The agent's work
 
@@ -231,6 +240,46 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Views in full screen. Full screen at the end of a view's screen strip (in the gallery only, not in
+  reviews or `capture.html`) shows that view's current screen alone over everything. Decisions: the chrome, not the
+  preview, asks the browser for full screen, on the iframe element; a parent may do that without
+  `allow="fullscreen"`, so the sandbox and the frame's permissions stay as they were, and the chrome takes the
+  preview's request only while it has transient user activation (which the browser passes up from the click in the
+  frame), so agent code cannot cover the window on its own. The chrome's canvas fills the window at once; where the
+  browser refuses full screen (the Claude desktop app's pane did), that is the full screen. Since the frame's
+  element is what is in full screen, the reload after a turn stays there: tried with `location.reload()` in the
+  frame, the browser kept full screen and the view came back on the same screen and theme, so no "full screen was
+  dropped" state was needed. What a screen passed along with `go()` does not survive a reload (the member screen
+  then shows its default member), as on the kit's capture page. The view renders over the gallery rather than
+  instead of it: the gallery keeps its scroll position and keeps being checked as before (the overlay is not marked
+  for the checks, and its errors show but are not reported twice), and the view gets a `.ds-root` of its own that is
+  a size container at the full width and a form of its own, like a Show at frame, with no padding, as the kit
+  captures a screen. Checked in Chromium that `container-type` does not make it a containing block, so a fixed
+  element in a view stays fixed to the viewport. Moves stay in the preview: every render message brings a new design
+  object and reruns the checks in both documents, so reporting each screen change to the chrome would run axe after
+  every click; the place is kept in the frame's `sessionStorage` for the next document instead, and the chrome only
+  knows where the view opened. The bar's Light and Dark are the full-screen view's own (starting from the gallery's),
+  so leaving puts the gallery back as it was; on exit every copy of the view's flow in the gallery moves to the screen
+  reached and the gallery scrolls to the view. The bar is Basis' chrome (its colours, a Light/Dark toggle like the
+  top bar's) in a shadow root, top centre: it shows for 1.8 s at the start, when the pointer comes within 48 px of
+  the top (and stays until it is 96 px away) and on keyboard focus (`:focus-visible`, so a mouse click on the
+  screen menu does not pin it). It also says "Changes show when the agent is done" while a turn holds the preview,
+  since the chrome's own note is covered. Focus stays in the view and its bar; Esc leaves unless the design handled
+  it first. A view removed while it was in full screen leaves full screen. "Open in a new window" was left out: the
+  view would run as a top-level page on the preview origin, outside the iframe's sandbox (popups, top navigation,
+  downloads), with no parent to send it the design, the review or the hold; doing it safely would mean serving that
+  page with a CSP `sandbox` header and following the hold over HMR, which is a step of its own. Verified with a unit
+  test of the new parser cases (`test/frame.test.ts`), an e2e test (open from the strip, the frame covers the
+  window and the screen has its full width, move by a button in the screen and by the bar's screen menu, switch to
+  Dark, Esc, back in the gallery on Invite), the whole e2e suite (the starter still has no layout findings, the kit
+  captures as before), and on a throwaway instance: headless and headed Chromium through Playwright (the browser's
+  full screen on the iframe, the view at the screen's 3440 px with no chrome; Playwright's headed window keeps its
+  own tab and address bars, so its screenshot is of the page), the fallback with full screen refused, and the
+  desktop app's pane, where the view filled the window and at the pane's 480 px switched to its phone layout. Seen
+  along the way: a click at the top edge with no pointer movement before it (as the pane sends them) only brings the
+  bar out, and while a view is in full screen the gallery underneath is laid out at the full width, so checks that
+  run then (after a turn that ends in full screen) measure Fit frames at that width.
 
 - 2026-10-19: Threads in a project, in one round. A thread is a chat with its own agent session, and every thread of
   a project lives in the project's one agent process (`Thread` in `server/agent.ts`): ACP lets a process hold

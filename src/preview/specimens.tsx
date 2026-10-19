@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useContext,
+  useEffect,
   useState,
   type ComponentType,
   type FormEvent,
@@ -212,7 +213,7 @@ export async function loadRebasedSpecimen(
   return specimens.find((item) => item.id === live.id) ?? specimens.find((item) => item.title === live.title) ?? null;
 }
 
-function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
+function Block({ block, design, specimen }: { block: SpecimenBlock; design: Design; specimen: string }) {
   switch (block.kind) {
     case "matrix": {
       const rows = block.rows.map((label) => ({ id: label, label }));
@@ -250,7 +251,7 @@ function Block({ block, design }: { block: SpecimenBlock; design: Design }) {
     case "block":
       return <>{createElement(block.render, { design })}</>;
     case "flow":
-      return <FlowBlock screens={block.screens} design={design} />;
+      return <FlowBlock screens={block.screens} design={design} specimen={specimen} />;
   }
 }
 
@@ -267,23 +268,45 @@ export const FlowSync = createContext<{ position: FlowPosition | null; move: (ne
   null,
 );
 
+/**
+ * Lets the gallery's flows open in full screen (see FullScreen.tsx). `left` is the view that last left full screen
+ * and where its flow was then; every copy of that view's flow in the gallery moves there.
+ */
+export interface FlowsInFullScreen {
+  open: (specimen: string, position: FlowPosition) => void;
+  left: { specimen: string; position: FlowPosition } | null;
+}
+
+const FullScreen = createContext<FlowsInFullScreen | null>(null);
+
+type Screens = Extract<SpecimenBlock, { kind: "flow" }>["screens"];
+
+/** Every screen of a specimen's flows, in order, as the capture page lists a view's screens. */
+export function flowScreens(specimen: LoadedSpecimen): Screens {
+  return specimen.blocks.flatMap((block) => (block.kind === "flow" ? block.screens : []));
+}
+
 /** One screen of a flow at a time; screens move on with `go`, and the strip jumps anywhere. */
-function FlowBlock({
-  screens,
-  design,
-}: {
-  screens: Extract<SpecimenBlock, { kind: "flow" }>["screens"];
-  design: Design;
-}) {
+function FlowBlock({ screens, design, specimen }: { screens: Screens; design: Design; specimen: string }) {
   const shared = useContext(FlowSync);
+  const fullScreen = useContext(FullScreen);
   const [own, setOwn] = useState<FlowPosition>({ id: screens[0]?.id ?? "" });
   const current = shared?.position ?? own;
   const move = shared?.move ?? setOwn;
   const screen = screens.find((item) => item.id === current.id) ?? screens[0];
   const go = useCallback((id: string, data?: unknown) => move({ id, data }), [move]);
+  const left = fullScreen?.left;
+  useEffect(() => {
+    if (left?.specimen === specimen) setOwn(left.position);
+  }, [left, specimen]);
   if (!screen) return null;
   return (
-    <Flow screens={screens.map(({ id, label }) => ({ id, label }))} current={screen.id} onSelect={(id) => go(id)}>
+    <Flow
+      screens={screens.map(({ id, label }) => ({ id, label }))}
+      current={screen.id}
+      onSelect={(id) => go(id)}
+      onFullScreen={fullScreen ? () => fullScreen.open(specimen, { ...current, id: screen.id }) : undefined}
+    >
       {createElement(screen.render, { design, go, data: current.data })}
     </Flow>
   );
@@ -315,7 +338,17 @@ const preventSubmit = (event: FormEvent) => event.preventDefault();
  * pattern's @container rules respond to it) and a form of its own (so named
  * radio groups in the copies stay apart).
  */
-function Framed({ block, design, frames }: { block: SpecimenBlock; design: Design; frames: Frames }) {
+function Framed({
+  block,
+  design,
+  frames,
+  specimen,
+}: {
+  block: SpecimenBlock;
+  design: Design;
+  frames: Frames;
+  specimen: string;
+}) {
   const themes = frames.bothThemes ? (["light", "dark"] as const) : [frames.theme];
   const widths = FRAME_WIDTHS.filter((width) => frames.widths.includes(width.id));
   return (
@@ -338,7 +371,7 @@ function Framed({ block, design, frames }: { block: SpecimenBlock; design: Desig
                   style={width.px ? { width: width.px } : undefined}
                   onSubmit={preventSubmit}
                 >
-                  <Block block={block} design={design} />
+                  <Block block={block} design={design} specimen={specimen} />
                 </form>
               </div>
             </figure>
@@ -364,9 +397,9 @@ export function SpecimenBlocks({
     <>
       {specimen.blocks.map((block, index) => {
         const content = framed ? (
-          <Framed block={block} design={design} frames={frames} />
+          <Framed block={block} design={design} frames={frames} specimen={specimen.id} />
         ) : (
-          <Block block={block} design={design} />
+          <Block block={block} design={design} specimen={specimen.id} />
         );
         return block.title ? (
           <Group key={index} title={block.title}>
@@ -385,17 +418,22 @@ export function SpecimenSection({
   design,
   onAsk,
   frames,
+  fullScreen,
 }: {
   specimen: LoadedSpecimen;
   design: Design;
   onAsk: (prefix: string) => void;
   frames?: Frames;
+  /** The gallery's flows can open in full screen. */
+  fullScreen?: FlowsInFullScreen;
 }) {
   return (
     <Section id={specimen.id} title={specimen.title} description={specimen.description ?? ""} onAsk={onAsk}>
       {/* What the checks cover (see a11y.ts); display: contents keeps the layout as it was. */}
       <div {...{ [CHECKED]: specimen.title }} style={{ display: "contents" }}>
-        <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
+        <FullScreen.Provider value={fullScreen ?? null}>
+          <SpecimenBlocks specimen={specimen} design={design} frames={frames} />
+        </FullScreen.Provider>
       </div>
     </Section>
   );

@@ -80,6 +80,49 @@ test("the Patterns and Views pages list their sections", async ({ page, basis })
   await expect(page.getByRole("link", { name: "Team members" })).toBeVisible();
 });
 
+test("a view opens in full screen, moves through its flow there and comes back to the screen it reached", async ({
+  page,
+  basis,
+}) => {
+  await open(page, basis);
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  const frame = gallery(page);
+  await frame.getByRole("button", { name: "Full screen", exact: true }).click();
+
+  // The frame covers the whole window, Basis' chrome included, and the screen has its full width.
+  const view = frame.getByRole("region", { name: "Team members, full screen" });
+  await expect(view.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
+  const { width, height } = page.viewportSize()!;
+  await expect
+    .poll(() => page.locator('iframe[src*="preview.html"]').boundingBox())
+    .toEqual({
+      x: 0,
+      y: 0,
+      width,
+      height,
+    });
+  expect((await view.locator("form.ds-root").boundingBox())?.width).toBe(width);
+
+  // Through the flow by its own buttons, then by the bar, which shows when the pointer nears the top.
+  await view.getByRole("button", { name: /Grace Hopper/ }).click();
+  await expect(view.getByRole("heading", { name: "Grace Hopper", exact: true })).toBeVisible();
+  await page.mouse.move(width / 2, 4);
+  const bar = view.getByRole("toolbar", { name: "Full screen" });
+  await bar.getByRole("combobox", { name: "Screen" }).selectOption("invite");
+  await expect(view.getByRole("heading", { name: "Invite a member", exact: true })).toBeVisible();
+  await bar.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect(view.locator("form.ds-root")).toHaveAttribute("data-theme", "dark");
+
+  // Esc leaves, back to the gallery on the screen reached.
+  await page.keyboard.press("Escape");
+  await expect(view).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement)).toBeNull();
+  expect((await page.locator('iframe[src*="preview.html"]').boundingBox())?.width).toBeLessThan(width);
+  const strip = frame.getByRole("group", { name: "Screens" });
+  await expect(strip.getByRole("button", { name: /Invite/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(frame.getByRole("heading", { name: "Invite a member", exact: true })).toBeVisible();
+});
+
 test("the Navbar keeps its links in a wide gallery and moves them behind a menu on a phone", async ({
   page,
   basis,

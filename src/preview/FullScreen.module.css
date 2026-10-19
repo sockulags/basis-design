@@ -1,0 +1,21 @@
+/* A view in full screen (FullScreen.tsx): over the gallery, scrolling on its own, the screen edge to edge. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.layer:focus {
+  outline: none;
+}
+
+/* The screen's root, as the page a product renders it in: no padding, the design's background, and a size
+   container at the full width so the patterns' container queries see what a product's page would give them.
+   isolation keeps the design's own z-indexes under the bar without making the root a containing block. */
+.screen {
+  isolation: isolate;
+  margin: 0;
+  container-type: inline-size;
+}

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
-import { isPageId, type FromPreview, type NavSection, type PageId, type PreviewView } from "../shared/frame.ts";
+import {
+  isPageId,
+  type FromPreview,
+  type FullScreenView,
+  type NavSection,
+  type PageId,
+  type PreviewView,
+} from "../shared/frame.ts";
 import type { ClientMessage, Tagged } from "../shared/protocol.ts";
 import type { BridgeState } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
@@ -60,6 +67,8 @@ export function Workbench({
   /** The preview document's generation (see shared/hold.ts), so the fix loop can tell a report from after a reload. */
   const [previewGeneration, setPreviewGeneration] = useState(0);
   const [sections, setSections] = useState<NavSection[]>([]);
+  /** A view shown alone over everything, Basis' chrome included (see PreviewFrame and src/preview/FullScreen.tsx). */
+  const [fullscreen, setFullscreen] = useState<FullScreenView | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<PreviewFrameHandle>(null);
   const live = state.design?.design;
@@ -198,14 +207,22 @@ export function Workbench({
           return setSections(message.sections);
         case "impact":
           return setImpact(message.ids);
+        case "fullscreen-open":
+          // Only right after a click in the gallery (the browser passes it up from the frame), so the preview cannot
+          // cover the window on its own; the browser's own full screen asks the same.
+          if (navigator.userActivation && !navigator.userActivation.isActive) return;
+          setPicking(false);
+          return setFullscreen({ view: message.view, screen: message.screen, theme: message.theme });
+        case "fullscreen-exit":
+          return setFullscreen(null);
       }
     },
     [ask, finishPicking, setImpact],
   );
 
   const view = useMemo<PreviewView | null>(
-    () => (design ? { design, theme, page, review: reviewing.view } : null),
-    [design, theme, page, reviewing.view],
+    () => (design ? { design, theme, page, review: reviewing.view, fullscreen } : null),
+    [design, theme, page, reviewing.view, fullscreen],
   );
 
   const step = (direction: -1 | 1) => {
@@ -338,6 +355,7 @@ export function Workbench({
               inspecting={Boolean(inspectEntry)}
               waiting={state.previewWaiting}
               onMessage={onPreviewMessage}
+              onFullScreenEnd={() => setFullscreen(null)}
             />
           ) : (
             <p className={styles.loading}>Connecting to the Basis server…</p>

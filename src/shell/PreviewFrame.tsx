@@ -18,6 +18,8 @@ interface PreviewFrameProps {
   waiting: boolean;
   /** Every message from the preview, already validated: "ready" when a fresh document loads, then the rest. */
   onMessage: (message: FromPreview) => void;
+  /** Full screen ended in the chrome: Esc, or the browser's own controls. */
+  onFullScreenEnd: () => void;
 }
 
 /**
@@ -26,7 +28,7 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  { port, view, picking, inspecting, waiting, onMessage },
+  { port, view, picking, inspecting, waiting, onMessage, onFullScreenEnd },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -89,8 +91,46 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
     };
   }, [blinking, post]);
 
+  // A view in full screen: the frame fills the window over the chrome at once, and the browser's full screen takes
+  // it over the whole screen where the browser allows (a click in the frame counts for the chrome too). The iframe
+  // element is what is in full screen, not its document, so the reload after a turn stays there.
+  const full = view.fullscreen !== null;
+  const end = useRef(onFullScreenEnd);
+  useEffect(() => {
+    end.current = onFullScreenEnd;
+  });
+  useEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    if (full) {
+      if (!document.fullscreenElement) element.requestFullscreen?.().catch(() => undefined);
+      return;
+    }
+    if (document.fullscreenElement === element) void document.exitFullscreen().catch(() => undefined);
+  }, [full]);
+  useEffect(() => {
+    if (!full) return;
+    const onChange = () => {
+      if (!document.fullscreenElement) end.current();
+    };
+    // Outside the browser's full screen, Esc is the page's; in the frame the preview handles it.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") end.current();
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+
   return (
-    <div className={styles.canvas} data-inspecting={inspecting || undefined}>
+    <div
+      className={styles.canvas}
+      data-inspecting={(inspecting && !full) || undefined}
+      data-fullscreen={full || undefined}
+    >
       <iframe
         ref={frame}
         className={styles.frame}
@@ -98,7 +138,7 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
         title="Design system preview"
         sandbox="allow-scripts allow-same-origin"
       />
-      {waiting && (
+      {waiting && !full && (
         <p className={styles.waiting} role="status">
           Changes show when the agent is done
         </p>

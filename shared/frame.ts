@@ -81,6 +81,16 @@ export interface ReviewView {
 }
 
 /**
+ * A view shown alone, filling the screen: the specimen, and the screen and theme it opened on. Where it goes from
+ * there is the preview's to keep (see src/preview/FullScreen.tsx), so moving through it sends nothing.
+ */
+export interface FullScreenView {
+  view: string;
+  screen: string;
+  theme: "light" | "dark";
+}
+
+/**
  * Everything the preview renders, sent as one value whenever any of it
  * changes. A new preview feature adds a field here rather than a prop at
  * every layer between the chrome and the gallery.
@@ -90,6 +100,8 @@ export interface PreviewView {
   theme: "light" | "dark";
   page: PageId;
   review: ReviewView | null;
+  /** A view in full screen over everything else, or null. */
+  fullscreen: FullScreenView | null;
 }
 
 export type ToPreview =
@@ -113,7 +125,11 @@ export type FromPreview =
   | { type: "errors"; errors: string[] }
   /** Findings of the automatic checks (contrast, accessibility, layout), and whether one is still running. */
   | { type: "checks"; checks: string[]; running: boolean }
-  | { type: "sections"; sections: NavSection[] };
+  | { type: "sections"; sections: NavSection[] }
+  /** Full screen asked for from a view's screen strip; the chrome takes it only right after a click. */
+  | ({ type: "fullscreen-open" } & FullScreenView)
+  /** The full-screen bar's Exit, or Esc where the browser leaves it to the page. */
+  | { type: "fullscreen-exit" };
 
 const text = (value: unknown, max: number): string | null => (typeof value === "string" ? value.slice(0, max) : null);
 
@@ -142,6 +158,13 @@ function annotation(value: unknown): Annotation | null {
     tokens: record(raw.tokens),
     styles: record(raw.styles),
   };
+}
+
+function fullScreenView(raw: Record<string, unknown>): FullScreenView | null {
+  const view = text(raw.view, 80);
+  const screen = text(raw.screen, 80);
+  if (!view || !/^[a-z0-9-]+$/.test(view) || !screen) return null;
+  return { view, screen, theme: raw.theme === "dark" ? "dark" : "light" };
 }
 
 /** Narrows an untrusted message from the preview to a known, size-limited shape, or null. */
@@ -220,6 +243,12 @@ export function parseFromPreview(data: unknown): FromPreview | null {
             }),
           }
         : null;
+    case "fullscreen-open": {
+      const place = fullScreenView(raw);
+      return place ? { type: "fullscreen-open", ...place } : null;
+    }
+    case "fullscreen-exit":
+      return { type: "fullscreen-exit" };
     default:
       return null;
   }

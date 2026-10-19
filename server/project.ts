@@ -87,7 +87,13 @@ export class OpenProject {
       previewPort,
       chromeOrigin,
       // The page the turn changed most, as the gallery reloaded after it shows it; the user's own page is unknown here.
-      () => ({ design: workspace.state.design, theme: "light", page: pageForFiles(workspace.turnFiles), review: null }),
+      () => ({
+        design: workspace.state.design,
+        theme: "light",
+        page: pageForFiles(workspace.turnFiles),
+        review: null,
+        fullscreen: null,
+      }),
       (report) =>
         report
           ? this.report(this.background, report.errors, false, report.checks, report.checking, report.generation)

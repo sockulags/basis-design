@@ -271,6 +271,14 @@
   min-height: 0;
 }
 
+/* A view in full screen (PreviewFrame): the preview covers the window, until the browser's full screen takes over. */
+.canvas[data-fullscreen] {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--app-ink);
+}
+
 .loading {
   padding: 40px;
   color: var(--app-subtle);
