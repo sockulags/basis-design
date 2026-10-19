@@ -35,8 +35,8 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
   const [chatHidden, setChatHidden] = usePref("chat-hidden", asFlag);
   const [sidebarCollapsed, setSidebarCollapsed] = usePref("sidebar-collapsed", asFlag);
   const [page, setPage] = usePref("page", asPage);
-  // The unsent message survives a reload.
-  const [draft, setDraft] = usePref("draft", (stored) => stored ?? "", { delay: 300 });
+  // The unsent message survives a reload, one per project (the workbench is mounted once per project).
+  const [draft, setDraft] = usePref(`draft:${state.project?.id ?? ""}`, (stored) => stored ?? "", { delay: 300 });
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -243,6 +243,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
             <ProjectMenu
               project={state.project}
               projects={state.projects}
+              status={state.status}
               agentBusy={state.agent?.status === "busy"}
               error={state.projectError}
               templateUpdate={state.design?.templateUpdate ?? null}
@@ -339,6 +340,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
       {exporting && live && state.design && (
         <ExportDialog
           design={live}
+          projectId={state.project?.id}
           workspace={state.design.workspace}
           problems={problems.length}
           manifest={state.exportManifest}

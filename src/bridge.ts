@@ -8,8 +8,10 @@ import type {
   HistoryEntry,
   ExportWriteResult,
   ProjectEntry,
+  ProjectStatus,
   ServerMessage,
   Snapshot,
+  Tagged,
   VerifyKitResult,
 } from "../shared/protocol.ts";
 import type { ReviewState } from "../shared/review.ts";
@@ -19,6 +21,8 @@ export interface BridgeState {
   /** The open project, and every project on the list. */
   project: ProjectEntry | null;
   projects: ProjectEntry[];
+  /** What the projects in the background are up to, by id (see ProjectStatus). */
+  status: Record<string, ProjectStatus>;
   /** The project being opened, while Basis switches to it. */
   switching: ProjectEntry | null;
   /** Why the last project request failed, until the next one. */
@@ -49,6 +53,7 @@ const initial: BridgeState = {
   connected: false,
   project: null,
   projects: [],
+  status: {},
   switching: null,
   projectError: null,
   design: null,
@@ -66,9 +71,11 @@ const initial: BridgeState = {
   verifyResult: null,
 };
 
-type Action = ServerMessage | { type: "connected"; connected: boolean };
+type Action = Tagged<ServerMessage> | { type: "connected"; connected: boolean; projectId?: undefined };
 
 function reduce(state: BridgeState, action: Action): BridgeState {
+  // A message of another project than the one this tab shows (the one it just left) is not for it.
+  if (action.type !== "hello" && action.projectId !== undefined && action.projectId !== state.project?.id) return state;
   switch (action.type) {
     case "connected":
       return { ...state, connected: action.connected };
@@ -80,6 +87,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         connected: true,
         project: action.project,
         projects: action.projects,
+        status: action.status,
         switching: null,
         previewPort: action.previewPort,
         design: action.design,
@@ -99,6 +107,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         projects: action.projects,
         project: action.projects.find((entry) => entry.id === state.project?.id) ?? state.project,
       };
+    case "project-status":
+      return { ...state, status: action.status };
     case "project-switching":
       return { ...state, switching: action.project, projectError: null };
     case "project-error":
@@ -140,18 +150,29 @@ function reduce(state: BridgeState, action: Action): BridgeState {
   }
 }
 
-/** Keeps a WebSocket to the Basis server open and mirrors its state. */
-export function useBridge(): { state: BridgeState; send: (message: ClientMessage) => void } {
+/**
+ * Keeps a WebSocket to the Basis server open and mirrors the state of the project this tab shows. What the chrome
+ * sends names the project it was sent from (App tags it), so a message sent while the next one opens still
+ * reaches the project it was meant for.
+ */
+export function useBridge(): { state: BridgeState; send: (message: Tagged<ClientMessage>) => void } {
   const [state, dispatch] = useReducer(reduce, initial);
   const socket = useRef<WebSocket | null>(null);
+  /** The project of the last hello: what this tab shows, and asks for again when it reconnects. */
+  const shown = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     let closed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
-      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/bridge`);
+      const query = shown.current ? `?project=${encodeURIComponent(shown.current)}` : "";
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/bridge${query}`);
       socket.current = ws;
-      ws.onmessage = (event) => dispatch(JSON.parse(String(event.data)) as ServerMessage);
+      ws.onmessage = (event) => {
+        const message = JSON.parse(String(event.data)) as Tagged<ServerMessage>;
+        if (message.type === "hello") shown.current = message.project.id;
+        dispatch(message);
+      };
       ws.onclose = () => {
         dispatch({ type: "connected", connected: false });
         if (!closed) retry = setTimeout(connect, 1000);
@@ -171,7 +192,7 @@ export function useBridge(): { state: BridgeState; send: (message: ClientMessage
     };
   }, []);
 
-  const send = useCallback((message: ClientMessage) => {
+  const send = useCallback((message: Tagged<ClientMessage>) => {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message));
   }, []);
 

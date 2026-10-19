@@ -186,9 +186,22 @@ export interface ProjectEntry {
   repo?: string;
 }
 
+/**
+ * What a project open in the background is up to, for the project menu: its agent works, waits for an answer to a
+ * permission request, or finished a turn nobody has looked at yet. Projects with none of these have no status.
+ */
+export type ProjectStatus = "working" | "waiting" | "done";
+
+/**
+ * A message on the bridge with the project it belongs to. Several projects run at once, and a tab shows one: the
+ * server tags each project's messages with its id, so a tab that has moved on drops them, and the chrome tags what it
+ * sends with the project it showed, so a message sent just before a switch still reaches that project.
+ */
+export type Tagged<T> = T & { projectId?: string };
+
 export type ServerMessage =
   | {
-      /** Everything about the open project; sent on connect and again after switching projects. */
+      /** Everything about the project this tab shows; sent on connect and again after switching projects. */
       type: "hello";
       /** Port of the sandboxed preview origin. */
       previewPort: number;
@@ -201,8 +214,12 @@ export type ServerMessage =
       review: ReviewState | null;
       /** Whether the running turn holds changes back from the preview (see "preview-waiting"). */
       previewWaiting: boolean;
+      /** What the projects in the background are up to, by id. */
+      status: Record<string, ProjectStatus>;
     }
   | { type: "projects"; projects: ProjectEntry[] }
+  /** What the projects are up to changed (see ProjectStatus); sent to every tab. */
+  | { type: "project-status"; status: Record<string, ProjectStatus> }
   /** A project is being opened; a hello for it follows. */
   | { type: "project-switching"; project: ProjectEntry }
   /** Why a project request could not be done, for the dialog that made it. */
@@ -267,6 +284,7 @@ export type ClientMessage =
    * `skill`, writing into a folder also installs the kit's SKILL.md in its `.claude/skills/basis-verify/`.
    */
   | { type: "verify-kit"; project?: string; skill?: boolean }
+  /** Shows another project in this tab; the one it showed goes on in the background. */
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */
   /**

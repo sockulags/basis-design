@@ -12,12 +12,13 @@ import {
   type ClientMessage,
   type ProjectEntry,
   type ServerMessage,
+  type Tagged,
 } from "../shared/protocol.ts";
-import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH } from "./agent-tools.ts";
+import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH, toolsUrl } from "./agent-tools.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
-import { PreviewReports } from "./previews.ts";
+import { OpenProjects } from "./open-projects.ts";
 import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
 import { pickFolder, suggestRepos } from "./folders.ts";
 import { checkRepo, Projects } from "./projects.ts";
@@ -38,7 +39,8 @@ const previewPort = Number(process.env.BASIS_PREVIEW_PORT ?? port + 1);
  * npx cache may replace.
  */
 const home = path.resolve(process.env.BASIS_HOME ?? path.join(os.homedir(), ".basis"));
-const initialAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as AgentId)
+/** The agent a project starts with when it opens: BASIS_AGENT at first, then the one last picked in any project. */
+let defaultAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as AgentId)
   ? (process.env.BASIS_AGENT as AgentId)
   : "claude";
 
@@ -60,18 +62,37 @@ if (!projects.active) await projects.setActive((await projects.create("Basis")).
 
 /** Bridge connections; created first, since the project reports events while it opens. */
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
-/** Render problems per open tab; the fix loop gets the current tab's (see PreviewReports). */
-const previewReports = new PreviewReports<WebSocket>();
-const projectOptions: ProjectOptions = {
-  root,
-  host,
-  previewPort,
-  chromeOrigins,
-  agent: initialAgent,
-  home,
-  mcpServers: [toolServer(`http://${host}:${port}${TOOLS_PATH}`, toolsSecret)],
-  broadcast: (message) => broadcast(message),
-};
+
+/**
+ * How a project opens: the first one open on PORT + 1 (or BASIS_PREVIEW_PORT), the others on free ports, since
+ * ports in a row could run into another Basis. Its messages go to the tabs that show it, and its screenshot tool
+ * names it.
+ */
+function projectOptions(entry: ProjectEntry, slot: number): ProjectOptions {
+  return {
+    root,
+    host,
+    previewPort: slot === 0 ? previewPort : 0,
+    slot,
+    chromeOrigins,
+    agent: defaultAgent,
+    home,
+    mcpServers: [toolServer(toolsUrl(`http://${host}:${port}`, entry.id), toolsSecret)],
+    broadcast: (message) => sendProject(entry.id, message),
+  };
+}
+
+/** The projects open now: one in each tab, the rest working or idle in the background (server/open-projects.ts). */
+const open = new OpenProjects<OpenProject, WebSocket>(
+  async (entry, slot) => {
+    const project = await OpenProject.open(entry, projectOptions(entry, slot));
+    // Working, waiting for an answer, done: what the project menu shows of each project.
+    project.agent.on("agent", () => open.update(entry.id));
+    project.agent.on("chat", () => open.update(entry.id));
+    return project;
+  },
+  { onStatus: (status) => broadcast({ type: "project-status", status }) },
+);
 /** A port in use is the start-up failure people meet most (often a Basis already running); say how to get past it. */
 function exitIfPortInUse(error: unknown): void {
   const err = error as NodeJS.ErrnoException & { port?: number };
@@ -83,18 +104,17 @@ function exitIfPortInUse(error: unknown): void {
   process.exit(1);
 }
 
-let current = await OpenProject.open(projects.active!, projectOptions).catch((error: unknown) => {
+// The project shown last opens at start, so the first tab finds it ready.
+await open.open(projects.active!).catch((error: unknown) => {
   exitIfPortInUse(error);
   console.error(`Could not open ${projects.active!.name}: ${(error as Error).message}`);
   process.exit(1);
 });
-/** True while one project closes and the next opens; requests wait for the new hello. */
-let switching = false;
 
 /*
  * Two origins. The chrome (chat, history, controls) runs on `port` and is the
- * only page allowed on the bridge. The preview of the open project runs on
- * `previewPort` (see OpenProject).
+ * only page allowed on the bridge. Each open project's preview runs on a port
+ * of its own (see OpenProject).
  */
 const chromeServer = http.createServer();
 const chromeVite = await createVite({
@@ -108,8 +128,10 @@ const chromeVite = await createVite({
 const chromeGuard = guard((url) => url === "/preview.html" || url === "/capture.html");
 chromeServer.on("request", (req, res) => {
   if (!isLocalHost(req, port)) return refuseHost(res);
-  if (req.method === "GET" && req.url === "/export/starter-kit.zip") {
-    void sendStarterKitZip(res);
+  if (req.method === "GET" && req.url?.split("?")[0] === "/export/starter-kit.zip") {
+    // The tab names its project; without one, the project shown last.
+    const id = new URL(req.url, "http://local").searchParams.get("project") ?? projects.active?.id ?? "";
+    void sendStarterKitZip(res, open.get(id));
     return;
   }
   if (req.method === "GET" && req.url === "/export/verification-kit.zip") {
@@ -121,7 +143,7 @@ chromeServer.on("request", (req, res) => {
     return;
   }
   if (req.url?.startsWith(`${TOOLS_PATH}/`)) {
-    void handleToolRequest(req, res, toolsSecret, () => (switching ? null : current.screenshots));
+    void handleToolRequest(req, res, toolsSecret, (project) => open.get(project)?.screenshots ?? null);
     return;
   }
   chromeGuard(req, res, () => chromeVite.middlewares(req, res));
@@ -160,19 +182,24 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
     }
   }
   if (req.url === "/api/repos") {
-    return reply(200, { repos: await suggestRepos(undefined, [root, current.entry.dir]) });
+    return reply(200, { repos: await suggestRepos(undefined, [root, ...projects.list.map((entry) => entry.dir)]) });
   }
   reply(404, {});
 }
 
-async function starterKit() {
-  return buildStarterKit(current.workspace.state.design, current.workspace.dir);
+async function starterKit(project: OpenProject) {
+  return buildStarterKit(project.workspace.state.design, project.workspace.dir);
 }
 
-async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
+async function sendStarterKitZip(res: http.ServerResponse, project: OpenProject | undefined): Promise<void> {
+  if (!project) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("That project is not open in Basis.");
+    return;
+  }
   try {
-    const folder = slug(current.workspace.state.design.name);
-    const zip = zipStarterKit(await starterKit(), folder);
+    const folder = slug(project.workspace.state.design.name);
+    const zip = zipStarterKit(await starterKit(project), folder);
     res.writeHead(200, {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${folder}.zip"`,
@@ -188,7 +215,7 @@ async function sendStarterKitZip(res: http.ServerResponse): Promise<void> {
 
 /** The last verification kit built as a zip, until it is downloaded or another is built. */
 let verificationZip: { name: string; data: Uint8Array } | null = null;
-/** True while a verification kit is being built: one at a time, and no project switch meanwhile. */
+/** True while a verification kit is being built: one at a time, whichever project it is for. */
 let verifying = false;
 
 function sendVerificationZip(res: http.ServerResponse): void {
@@ -206,43 +233,49 @@ function sendVerificationZip(res: http.ServerResponse): void {
   res.end(verificationZip.data);
 }
 
-/** Builds the verification kit for the open project, reporting progress to every tab. */
-async function verificationKit(project: string | undefined, skill: boolean, socket: WebSocket): Promise<void> {
+/** Builds a project's verification kit, reporting progress to the tabs that show it. */
+async function verificationKit(
+  target: OpenProject,
+  project: string | undefined,
+  skill: boolean,
+  socket: WebSocket,
+): Promise<void> {
   if (verifying) {
     send(socket, { type: "verify-result", result: { ok: false, error: "A verification kit is already being built." } });
     return;
   }
   verifying = true;
+  const id = target.entry.id;
   try {
     const { files, summary } = await buildVerificationKit({
-      design: current.workspace.state.design,
-      workspaceDir: current.workspace.dir,
-      onProgress: (step, done, total) => broadcast({ type: "verify-progress", step, done, total }),
+      design: target.workspace.state.design,
+      workspaceDir: target.workspace.dir,
+      onProgress: (step, done, total) => sendProject(id, { type: "verify-progress", step, done, total }),
     });
     if (project === undefined) {
       verificationZip = {
-        name: `${slug(current.workspace.state.design.name)}-verification-kit.zip`,
+        name: `${slug(target.workspace.state.design.name)}-verification-kit.zip`,
         data: zipVerificationKit(files),
       };
-      broadcast({ type: "verify-result", result: { ok: true, summary } });
+      sendProject(id, { type: "verify-result", result: { ok: true, summary } });
       return;
     }
     const written = await writeVerificationKit(files, project, { skill });
-    broadcast({
+    sendProject(id, {
       type: "verify-result",
       result: written.ok
         ? { ok: true, summary, dir: written.dir, skill: written.skill }
         : { ok: false, error: written.error },
     });
   } catch (error) {
-    broadcast({ type: "verify-result", result: { ok: false, error: (error as Error).message } });
+    sendProject(id, { type: "verify-result", result: { ok: false, error: (error as Error).message } });
   } finally {
     verifying = false;
   }
 }
 
 chromeServer.on("upgrade", (req, socket, head) => {
-  if (req.url !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
+  if (req.url?.split("?")[0] !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
   if (!chromeOrigins.includes(req.headers.origin ?? "")) {
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
@@ -251,90 +284,142 @@ chromeServer.on("upgrade", (req, socket, head) => {
   sockets.handleUpgrade(req, socket, head, (ws) => sockets.emit("connection", ws, req));
 });
 
-function send(ws: WebSocket, message: ServerMessage): void {
+function send(ws: WebSocket, message: Tagged<ServerMessage>): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
 }
 
+/** Sends to every tab, whatever project it shows. */
 function broadcast(message: ServerMessage): void {
   for (const ws of sockets.clients) send(ws, message);
 }
 
-function hello(ws: WebSocket): void {
+/** Sends one project's message to the tabs that show it, tagged with the project. */
+function sendProject(id: string, message: ServerMessage): void {
+  for (const ws of open.viewers(id)) send(ws, { ...message, projectId: id });
+}
+
+function hello(ws: WebSocket, project: OpenProject): void {
   send(ws, {
     type: "hello",
-    previewPort,
-    project: current.entry,
+    projectId: project.entry.id,
+    previewPort: project.previewPort,
+    project: project.entry,
     projects: projects.list,
-    design: current.workspace.state,
-    history: current.workspace.entries,
-    agent: current.agent.agent,
-    chat: current.agent.chat,
-    review: current.workspace.review,
-    previewWaiting: current.hold.waiting,
+    design: project.workspace.state,
+    history: project.workspace.entries,
+    agent: project.agent.agent,
+    chat: project.agent.chat,
+    review: project.workspace.review,
+    previewWaiting: project.hold.waiting,
+    status: open.statuses(),
   });
 }
 
 /**
- * Closes the open project and opens `entry`. Not while the agent works. If the
- * new one fails to open, the previous one opens again and the error is shown.
+ * Shows `entry` in a tab, opening it unless it is open. The project the tab showed goes on in the background, its
+ * agent included. If the new one fails to open, the tab stays where it was and the error is shown.
  */
-async function switchTo(entry: ProjectEntry, socket: WebSocket): Promise<void> {
-  if (switching || entry.id === current.entry.id) return;
-  if (current.agent.agent.status === "busy") {
-    send(socket, { type: "project-error", message: "The agent is working. Switch projects when it is done." });
-    return;
-  }
-  if (verifying) {
-    send(socket, {
-      type: "project-error",
-      message: "A verification kit is being built. Switch projects when it is done.",
-    });
-    return;
-  }
-  switching = true;
-  const previous = current.entry;
-  broadcast({ type: "project-switching", project: entry });
+async function showIn(ws: WebSocket, entry: ProjectEntry): Promise<boolean> {
+  const before = open.shownBy(ws);
+  if (before?.entry.id === entry.id) return true;
+  if (!open.get(entry.id)) send(ws, { type: "project-switching", project: entry });
   try {
-    await current.close();
-    try {
-      current = await OpenProject.open(entry, projectOptions);
-      await projects.setActive(entry.id);
-    } catch (error) {
-      send(socket, { type: "project-error", message: `Could not open ${entry.name}: ${(error as Error).message}` });
-      current = await OpenProject.open(previous, projectOptions);
+    const project = await open.show(ws, entry);
+    // The tab closed while the project opened.
+    if (ws.readyState !== ws.OPEN) {
+      open.hide(ws);
+      return false;
     }
-  } finally {
-    switching = false;
-    for (const ws of sockets.clients) hello(ws);
+    // Its preview no longer speaks for the project it left.
+    before?.forget(ws);
+    await projects.setActive(entry.id);
+    hello(ws, project);
+    return true;
+  } catch (error) {
+    send(ws, { type: "project-error", message: `Could not open ${entry.name}: ${(error as Error).message}` });
+    if (before) hello(ws, before);
+    return false;
   }
 }
 
-sockets.on("connection", (ws: WebSocket) => {
-  if (!switching) hello(ws);
+sockets.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
+  // A tab that reconnects names the project it showed; a new one gets the project shown last.
+  const wanted = new URL(req.url ?? "/", "http://local").searchParams.get("project");
+  void showIn(ws, (wanted && projects.find(wanted)) || projects.active!);
   ws.on("message", (data) => {
-    let message: ClientMessage;
+    let message: Tagged<ClientMessage>;
     try {
-      message = JSON.parse(String(data)) as ClientMessage;
+      message = JSON.parse(String(data)) as Tagged<ClientMessage>;
     } catch {
       return;
     }
     void handle(message, ws).catch((error: unknown) => console.error("[basis]", error));
   });
   ws.on("close", () => {
-    previewReports.forget(ws);
-    current.agent.setPreviewErrors(
-      previewReports.current,
-      previewReports.checks,
-      previewReports.checking,
-      previewReports.generation,
-    );
+    open.shownBy(ws)?.forget(ws);
+    open.hide(ws);
   });
 });
 
-async function handle(message: ClientMessage, socket: WebSocket): Promise<void> {
-  // Everything below belongs to one project; while switching, the new hello tells clients what is open.
-  if (switching) return;
-  const { workspace, agent } = current;
+async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promise<void> {
+  // Requests about the list of projects, whichever one the tab shows.
+  switch (message.type) {
+    case "project-switch": {
+      const entry = projects.find(String(message.id ?? ""));
+      if (entry) await showIn(socket, entry);
+      return;
+    }
+    case "project-open": {
+      let entry: ProjectEntry;
+      try {
+        entry = await projects.open(String(message.dir ?? ""));
+      } catch (error) {
+        send(socket, { type: "project-error", message: (error as Error).message });
+        return;
+      }
+      broadcast({ type: "projects", projects: projects.list });
+      await showIn(socket, entry);
+      return;
+    }
+    case "project-remove": {
+      const id = String(message.id ?? "");
+      const target = open.get(id);
+      if (target && (open.viewers(id).length || target.busy || target.waiting)) {
+        send(socket, {
+          type: "project-error",
+          message: `${target.entry.name} is open or working; it stays on the list.`,
+        });
+        return;
+      }
+      await open.close(id);
+      await projects.remove(id);
+      broadcast({ type: "projects", projects: projects.list });
+      return;
+    }
+    case "project-repo": {
+      let entry: ProjectEntry;
+      try {
+        entry = await projects.setRepo(
+          String(message.id ?? ""),
+          typeof message.repo === "string" ? message.repo : null,
+        );
+      } catch (error) {
+        send(socket, { type: "project-error", message: (error as Error).message });
+        return;
+      }
+      const target = open.get(entry.id);
+      target?.update(entry);
+      broadcast({ type: "projects", projects: projects.list });
+      if (message.bringIn === true && target) await bringInDesign(target, socket);
+      return;
+    }
+  }
+
+  // Everything else belongs to one project: the one the tab showed when it sent the message, which may since
+  // have gone to the background. A project that has closed meanwhile takes nothing.
+  const project = message.projectId === undefined ? open.shownBy(socket) : open.get(String(message.projectId));
+  if (!project) return;
+  const { workspace, agent } = project;
   switch (message.type) {
     case "prompt": {
       const text = message.text.trim();
@@ -372,7 +457,7 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return agent.newSession();
     case "switch-agent":
       if (AGENT_IDS.includes(message.agent)) {
-        projectOptions.agent = message.agent;
+        defaultAgent = message.agent;
         await agent.start(message.agent);
       }
       return;
@@ -401,18 +486,20 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       if (baseline)
         send(socket, {
           type: "baseline",
-          baseline: { id: baseline.id, design: baseline.design, base: current.previewPath(baseline.dir) },
+          projectId: project.entry.id,
+          baseline: { id: baseline.id, design: baseline.design, base: project.previewPath(baseline.dir) },
         });
       return;
     }
     case "snapshot-get": {
       const snapshot = await workspace.snapshot(message.id);
-      if (snapshot) send(socket, { type: "snapshot", snapshot });
+      if (snapshot) send(socket, { type: "snapshot", projectId: project.entry.id, snapshot });
       return;
     }
     case "preview-errors":
-      if (!Array.isArray(message.errors)) return;
-      previewReports.report(
+      // Only from the project the tab shows: the gallery of one it left may still report on its way out.
+      if (!Array.isArray(message.errors) || open.shownBy(socket) !== project) return;
+      project.report(
         socket,
         message.errors,
         message.visible === true,
@@ -420,17 +507,12 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
         message.checking === true,
         Number.isSafeInteger(message.generation) ? Number(message.generation) : 0,
       );
-      agent.setPreviewErrors(
-        previewReports.current,
-        previewReports.checks,
-        previewReports.checking,
-        previewReports.generation,
-      );
       return;
     case "export-manifest": {
-      const files = await starterKit();
+      const files = await starterKit(project);
       send(socket, {
         type: "export-manifest",
+        projectId: project.entry.id,
         folder: slug(workspace.state.design.name),
         files: files.map((file) => ({ path: file.path, bytes: Buffer.byteLength(file.content) })),
       });
@@ -438,93 +520,54 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
     }
     case "export-write": {
       const result = await writeStarterKit(
-        await starterKit(),
+        await starterKit(project),
         String(message.target ?? ""),
         message.overwrite === true,
       );
-      send(socket, { type: "export-result", result });
+      send(socket, { type: "export-result", projectId: project.entry.id, result });
       return;
     }
     case "verify-kit":
       await verificationKit(
+        project,
         typeof message.project === "string" ? message.project : undefined,
         message.skill === true,
         socket,
       );
       return;
-    case "project-switch": {
-      const entry = projects.find(String(message.id ?? ""));
-      if (entry) await switchTo(entry, socket);
-      return;
-    }
     case "project-create": {
       const name = String(message.name ?? "").trim();
       const repoInput = typeof message.repo === "string" ? message.repo.trim() : "";
       if (!name && !repoInput) return;
-      if (agent.agent.status === "busy") {
-        send(socket, { type: "project-error", message: "The agent is working. Create the project when it is done." });
+      const copy = message.copyCurrent === true && !repoInput;
+      // A copy taken mid-turn could hold half-written files.
+      if (copy && project.busy) {
+        send(socket, { type: "project-error", message: "The agent is working. Copy the project when it is done." });
         return;
       }
       let entry: ProjectEntry;
       try {
         // A repo is checked before anything is created, so a typo leaves no half-made project behind.
         const repo = repoInput ? await checkRepo(repoInput) : undefined;
-        entry = await projects.create(
-          name || path.basename(repo!),
-          message.copyCurrent === true && !repo ? current.entry : undefined,
-        );
+        entry = await projects.create(name || path.basename(repo!), copy ? project.entry : undefined);
         if (repo) entry = await projects.setRepo(entry.id, repo);
       } catch (error) {
         send(socket, { type: "project-error", message: (error as Error).message });
         return;
       }
       broadcast({ type: "projects", projects: projects.list });
-      await switchTo(entry, socket);
+      if (!(await showIn(socket, entry))) return;
       // Starting from a repo means bringing in its design system, once the new project's agent is up.
-      if (entry.repo && current.entry.id === entry.id && (await current.agent.whenReady())) await bringInDesign(socket);
-      return;
-    }
-    case "project-open": {
-      if (agent.agent.status === "busy") {
-        send(socket, { type: "project-error", message: "The agent is working. Open the folder when it is done." });
-        return;
-      }
-      let entry: ProjectEntry;
-      try {
-        entry = await projects.open(String(message.dir ?? ""));
-      } catch (error) {
-        send(socket, { type: "project-error", message: (error as Error).message });
-        return;
-      }
-      broadcast({ type: "projects", projects: projects.list });
-      return switchTo(entry, socket);
-    }
-    case "project-remove":
-      await projects.remove(String(message.id ?? ""));
-      broadcast({ type: "projects", projects: projects.list });
-      return;
-    case "project-repo": {
-      let entry: ProjectEntry;
-      try {
-        entry = await projects.setRepo(
-          String(message.id ?? ""),
-          typeof message.repo === "string" ? message.repo : null,
-        );
-      } catch (error) {
-        send(socket, { type: "project-error", message: (error as Error).message });
-        return;
-      }
-      if (entry.id === current.entry.id) current.update(entry);
-      broadcast({ type: "projects", projects: projects.list });
-      if (message.bringIn === true && entry.id === current.entry.id) await bringInDesign(socket);
+      const created = open.get(entry.id);
+      if (entry.repo && created && (await created.agent.whenReady())) await bringInDesign(created, socket);
       return;
     }
     case "import-design":
-      return bringInDesign(socket);
+      return bringInDesign(project, socket);
     case "template-update":
-      return bringInTemplate();
+      return bringInTemplate(project);
     case "template-skip":
-      return current.workspace.settleTemplateUpdate();
+      return workspace.settleTemplateUpdate();
   }
 }
 
@@ -533,23 +576,22 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
  * starter files. The workspace counts as caught up once the turn has run (or is queued); its review shows what came
  * in.
  */
-async function bringInTemplate(): Promise<void> {
-  const update = current.workspace.templateUpdate;
+async function bringInTemplate(project: OpenProject): Promise<void> {
+  const update = project.workspace.templateUpdate;
   if (!update) return;
-  const workspace = current.workspace;
   const instruction = templateInstruction(await templateChanges(update.from), update.files);
-  await current.agent.prompt("Bring in the improvements to Basis' starter template", { instruction });
-  await workspace.settleTemplateUpdate();
+  await project.agent.prompt("Bring in the improvements to Basis' starter template", { instruction });
+  await project.workspace.settleTemplateUpdate();
 }
 
 /** Starts (or queues, while the agent works) the guided turn that brings in the linked repo's design system. */
-async function bringInDesign(socket: WebSocket): Promise<void> {
-  const repo = current.entry.repo;
+async function bringInDesign(project: OpenProject, socket: WebSocket): Promise<void> {
+  const repo = project.entry.repo;
   if (!repo) {
     send(socket, { type: "project-error", message: "Link a product repo first." });
     return;
   }
-  await current.agent.prompt(`Bring in the design system from ${path.basename(repo)}`, {
+  await project.agent.prompt(`Bring in the design system from ${path.basename(repo)}`, {
     instruction: importInstruction(repo),
   });
 }
@@ -560,11 +602,11 @@ chromeServer.once("error", (error) => {
 });
 chromeServer.listen(port, host, () => {
   console.log(`Basis is running at http://localhost:${port}`);
-  console.log(`Project: ${current.entry.name} (${current.entry.dir})`);
+  console.log(`Project: ${projects.active!.name} (${projects.active!.dir})`);
 });
 
 async function shutdown(): Promise<void> {
-  await current.close();
+  await open.closeAll();
   await chromeVite.close();
   process.exit(0);
 }

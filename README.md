@@ -31,17 +31,17 @@ To work on Basis itself, clone the repository and run `npm install` and `npm run
 | `BASIS_WORKSPACE` | | Opens just this workspace for one run, without touching the project list (for tests and one-off use) |
 | `BASIS_AGENT` | `claude` | Agent started on boot (`claude` or `codex`) |
 | `PORT` | `5320` | Port of the Basis app (bound to 127.0.0.1 only) |
-| `BASIS_PREVIEW_PORT` | `PORT + 1` | Port of the sandboxed preview origin |
+| `BASIS_PREVIEW_PORT` | `PORT + 1` | Port of the sandboxed preview origin of the first open project; others get free ports |
 
 ## Projects
 
-Each project is a workspace of its own: its own design system, history, chat and review. Switch, create and open projects from the menu with the project's name at the top left.
+Each project is a workspace of its own: its own design system, history, chat and review. Switch, create and open projects from the menu with the project's name at the top left. Several projects run at once: switch away while the agent works and it goes on in the background.
 
 A project can link the **product repo** it designs for (project menu, **Link product repo…**): pick it from the repos Basis finds in your usual code folders, choose it with **Browse…** in your system's folder dialog, or paste its path. The agent reads and searches it without asking, also with shell commands that only read (`ls`, `find`, `grep`), to match the product's look, components and terms, and never writes there: its edits in the repo are refused without asking you, and writes outside the workspace are refused. **New project…** can also start from a product repo: the project takes the repo folder's name unless you give one, links the repo and starts by bringing in its design. **Bring in its design** (offered when you link, and in the project menu) starts a guided turn: the agent maps the repo's tokens onto `design-system.json`, restyles the components and patterns to resemble the product's, writes what it learned to `product.md` (where the tokens live, an inventory of the product's components and their Basis counterparts, terms to reuse) and opens a review.
 
 - **New project** starts from Basis' defaults, or as a copy of the open project's tokens and components (not its history). It lives in `~/.basis/workspaces/`.
 - **Open folder** adds a workspace from anywhere, or an empty or new folder for Basis to set up, inside a product repo for instance; a folder inside a git repo links that repo as the product repo (Unlink in the project menu undoes it). Basis refuses a folder that already has other files, so it never starts a history in someone's project.
-- Switching waits while the agent works. The agent of the project you leave stops, and coming back resumes its conversation, so it remembers where you were. The export remembers its target folder per project.
+- Switching never waits. The project you leave stays open, its agent working, and the project menu says which projects are **working**, **waiting for approval** (the agent asks before a command, and is stuck until you answer) or **done** (a turn ended while you looked elsewhere). A dot next to the project's name says so with the menu shut: red when another project waits for you. A project you have not shown for ten minutes, whose agent has nothing to do, closes; opening it again resumes its conversation, so the agent remembers where you were. The unsent message in the chat and the export's target folder are kept per project.
 - When Basis' starter components improve, the files a project never changed update by themselves. For the ones the agent changed, the project menu offers a guided turn that brings the improvements in, as a review, keeping the project's own look.
 - Removing a project from the list never deletes its folder. Earlier versions kept the project list in the Basis folder; it moves to `~/.basis` on first start, and its projects stay where they are. The `./workspace` of versions before projects becomes the first project.
 
@@ -119,7 +119,7 @@ Basis runs on your machine and answers only on localhost. It sends no telemetry.
 ## Troubleshooting
 
 - **"Basis needs git on the PATH":** install git, then start Basis again.
-- **"Port 5320 is in use":** another Basis is probably running. Stop it, or start this one with another `PORT`. The preview takes `PORT + 1`.
+- **"Port 5320 is in use":** another Basis is probably running. Stop it, or start this one with another `PORT`. The preview takes `PORT + 1` (further open projects take free ports).
 - **The agent asks you to log in:** run `claude` (or `codex login`) in a terminal, then pick the agent again in the picker.
 - **"Usage limit":** your plan's limit is reached. It resets after a while, and the conversation is kept until then.
 - **"Another Claude Code process is refreshing it":** several Claude Code processes refreshed their login at once. Send the message again.

@@ -1,7 +1,8 @@
 // A stand-in ACP agent for the end-to-end tests, started through BASIS_AGENT_SCRIPT. It changes a token through the
 // client's own file methods, so history, checks and reviews run for real. What it does depends on a marker in the
-// prompt: E2E-REVIEW also opens a review of the Buttons specimen, and E2E-VIEW writes a new view in two steps, the
-// first importing a file the second writes. Every turn moves motion.duration.fast by 10ms.
+// prompt: E2E-REVIEW also opens a review of the Buttons specimen, E2E-VIEW writes a new view in two steps, the
+// first importing a file the second writes, E2E-SLOW takes four seconds first (for turns in two projects at once),
+// and E2E-ASK first asks for permission to run a command. Every turn moves motion.duration.fast by 10ms.
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
@@ -21,6 +22,17 @@ async function turn(params, client) {
   const cwd = sessions.get(params.sessionId);
   if (!cwd) throw new Error(`Unknown session ${params.sessionId}`);
   const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("\n");
+  if (text.includes("E2E-SLOW")) await new Promise((resolve) => setTimeout(resolve, 4000));
+  if (text.includes("E2E-ASK")) {
+    await client.request(acp.methods.client.session.requestPermission, {
+      sessionId: params.sessionId,
+      toolCall: { toolCallId: "ask-1", title: "Run the E2E command", kind: "execute" },
+      options: [
+        { optionId: "allow", name: "Allow", kind: "allow_once" },
+        { optionId: "reject", name: "Reject", kind: "reject_once" },
+      ],
+    });
+  }
   const file = path.join(cwd, "design-system.json");
   const { content } = await client.request(acp.methods.client.fs.readTextFile, {
     sessionId: params.sessionId,

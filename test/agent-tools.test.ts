@@ -14,6 +14,7 @@ import {
   parseScreenshotArgs,
   toolServer,
   TOOLS_PATH,
+  toolsUrl,
   type ToolScreenshots,
 } from "../server/agent-tools.ts";
 import { planCapture, type Screenshot } from "../server/screenshots.ts";
@@ -141,9 +142,11 @@ async function withToolServer(work: (rpc: (method: string, params?: unknown) => 
       return { plan, shots: plan.shots.map((item) => shot(item.width, item.theme)) };
     },
   };
-  const server = http.createServer((req, res) => void handleToolRequest(req, res, secret, () => screenshots));
+  const server = http.createServer(
+    (req, res) => void handleToolRequest(req, res, secret, (project) => (project === "acme" ? screenshots : null)),
+  );
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}${TOOLS_PATH}`;
+  const url = toolsUrl(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, "acme");
   const entry = toolServer(url, secret);
   const child = spawn(entry.command, entry.args, {
     env: { ...process.env, ...Object.fromEntries(entry.env.map((item) => [item.name, item.value])) },
@@ -206,22 +209,36 @@ test("the MCP server lists Basis' tools and forwards calls to Basis", async () =
   });
 });
 
-test("the tool route refuses requests without the secret", async () => {
-  const server = http.createServer((req, res) => void handleToolRequest(req, res, "right", () => null));
+test("the tool route refuses requests without the secret, and names its project", async () => {
+  const asked: string[] = [];
+  const server = http.createServer(
+    (req, res) =>
+      void handleToolRequest(req, res, "right", (project) => {
+        asked.push(project);
+        return null;
+      }),
+  );
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}${TOOLS_PATH}`;
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const base = toolsUrl(origin, "my project");
   try {
+    // Without a project in the path there is nothing to answer.
+    assert.equal(
+      (await fetch(`${origin}${TOOLS_PATH}/list`, { headers: { authorization: "Bearer right" } })).status,
+      404,
+    );
     assert.equal((await fetch(`${base}/list`)).status, 401);
     assert.equal((await fetch(`${base}/list`, { headers: { authorization: "Bearer wrong" } })).status, 401);
     const ok = await fetch(`${base}/list`, { headers: { authorization: "Bearer right" } });
     assert.equal(ok.status, 200);
-    // While projects switch there are no screenshots to take; the agent is told so.
+    // A project that is not open has no screenshots to take; the agent is told so.
     const call = await fetch(`${base}/call`, {
       method: "POST",
       headers: { authorization: "Bearer right" },
       body: JSON.stringify({ name: "screenshot", arguments: { target: "buttons" } }),
     });
-    assert.match(JSON.stringify(await call.json()), /switching projects/);
+    assert.match(JSON.stringify(await call.json()), /not open in Basis/);
+    assert.deepEqual(asked, ["my project"]);
   } finally {
     server.close();
   }

@@ -9,13 +9,20 @@ import type { CapturePlan, Screenshot, Screenshots, ShotOptions, ShotTarget } fr
  * Tools Basis gives the design agent. Every session gets an MCP server of Basis' own (agent-tools-mcp.mjs), started
  * by the agent over stdio, which every ACP agent supports. That script only speaks MCP: it forwards listings and
  * calls to the chrome server over HTTP on 127.0.0.1 with a secret made at each start, and the work happens here,
- * where the open project's screenshots are. Basis approves its own tools without asking the user.
+ * where the projects' screenshots are. Each project's server has a URL of its own (`toolsUrl`), which names the
+ * project, so an agent's screenshots are of its own project whichever one a tab shows. Basis approves its own tools
+ * without asking the user.
  */
 
 /** The MCP server's name in the session; Claude Code calls its tools `mcp__basis__<tool>`. */
 export const TOOL_SERVER = "basis";
-/** Where the chrome server answers the MCP server. */
+/** Where the chrome server answers the MCP server: `/agent-tools/<project>/list` and `/call`. */
 export const TOOLS_PATH = "/agent-tools";
+
+/** The URL a project's MCP server sends its requests under, on the chrome server at `origin`. */
+export function toolsUrl(origin: string, project: string): string {
+  return `${origin}${TOOLS_PATH}/${encodeURIComponent(project)}`;
+}
 const SCRIPT = path.join(import.meta.dirname, "agent-tools-mcp.mjs");
 
 /** Images per screenshot call. */
@@ -190,15 +197,15 @@ export function basisToolTitle(tool: string, rawInput: unknown): string {
 }
 
 /**
- * Answers the MCP server: `GET /agent-tools/list` and `POST /agent-tools/call` with `{ name, arguments }`. Only with
- * the secret, so a web page or another local program cannot use the tools. `screenshots` is the open project's,
- * or null while projects switch.
+ * Answers the MCP server: `GET /agent-tools/<project>/list` and `POST /agent-tools/<project>/call` with
+ * `{ name, arguments }`. Only with the secret, so a web page or another local program cannot use the tools.
+ * `screenshots` gives the named project's, or null when it is not open.
  */
 export async function handleToolRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   secret: string,
-  screenshots: () => ToolScreenshots | null,
+  screenshots: (project: string) => ToolScreenshots | null,
 ): Promise<void> {
   const reply = (status: number, body: unknown) => {
     res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -207,9 +214,14 @@ export async function handleToolRequest(
   const given = Buffer.from(req.headers.authorization ?? "");
   const expected = Buffer.from(`Bearer ${secret}`);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return reply(401, {});
-  const route = req.url?.split("?")[0];
-  if (req.method === "GET" && route === `${TOOLS_PATH}/list`) return reply(200, { tools: TOOLS });
-  if (req.method !== "POST" || route !== `${TOOLS_PATH}/call`) return reply(404, {});
+  const [project, action] =
+    req.url
+      ?.split("?")[0]
+      ?.match(/^\/agent-tools\/([^/]+)\/(list|call)$/)
+      ?.slice(1) ?? [];
+  if (!project) return reply(404, {});
+  if (req.method === "GET" && action === "list") return reply(200, { tools: TOOLS });
+  if (req.method !== "POST" || action !== "call") return reply(404, {});
   let body: { name?: unknown; arguments?: unknown };
   try {
     let raw = "";
@@ -221,7 +233,13 @@ export async function handleToolRequest(
   } catch {
     return reply(400, {});
   }
-  const open = screenshots();
-  if (!open) return reply(200, failure("Basis is switching projects. Try again in a moment."));
+  let name: string;
+  try {
+    name = decodeURIComponent(project);
+  } catch {
+    return reply(404, {});
+  }
+  const open = screenshots(name);
+  if (!open) return reply(200, failure("This project is not open in Basis now. Try again in a moment."));
   reply(200, await callTool(body.name, body.arguments, open));
 }

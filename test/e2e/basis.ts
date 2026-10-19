@@ -8,7 +8,7 @@ const root = path.resolve(import.meta.dirname, "..", "..");
 
 export interface Basis {
   url: string;
-  /** The throwaway workspace this instance opened. */
+  /** The throwaway workspace this instance opened (with `home`, its first project's). */
   workspace: string;
   /** The value of a token in the workspace's design-system.json, by dotted path. */
   token(dotted: string): Promise<string>;
@@ -16,20 +16,22 @@ export interface Basis {
 
 /**
  * Every test gets its own Basis: a throwaway workspace, its own ports, and the stand-in agent
- * (fake-agent.mjs), so the server, the history, the checks and the gallery all run for real.
+ * (fake-agent.mjs), so the server, the history, the checks and the gallery all run for real. With `home`
+ * (`test.use({ home: true })`) it gets a throwaway home of its own instead, so projects can be created.
  */
-export const test = base.extend<{ basis: Basis }>({
-  // Playwright reads the first argument's pattern to find the fixtures this one needs; it needs none.
-  // eslint-disable-next-line no-empty-pattern
-  basis: async ({}, provide, testInfo) => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "basis-e2e-"));
+export const test = base.extend<{ basis: Basis; home: boolean }>({
+  home: [false, { option: true }],
+  basis: async ({ home }, provide, testInfo) => {
+    const folder = await mkdtemp(path.join(tmpdir(), "basis-e2e-"));
+    // A new home starts with a project called Basis in its workspaces/ folder.
+    const workspace = home ? path.join(folder, "workspaces", "basis") : folder;
     const port = 5400 + testInfo.workerIndex * 2;
     const proc = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
       cwd: root,
       env: {
         ...process.env,
         PORT: String(port),
-        BASIS_WORKSPACE: workspace,
+        ...(home ? { BASIS_HOME: folder } : { BASIS_WORKSPACE: folder }),
         BASIS_AGENT_SCRIPT: path.join(root, "test", "e2e", "fake-agent.mjs"),
       },
       stdio: ["ignore", "pipe", "pipe"],
@@ -60,7 +62,7 @@ export const test = base.extend<{ basis: Basis }>({
       if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"]);
       else process.kill(-proc.pid!, "SIGTERM");
       await new Promise((resolve) => (proc.exitCode !== null ? resolve(null) : proc.once("exit", resolve)));
-      await rm(workspace, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      await rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }
   },
 });

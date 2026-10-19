@@ -1,4 +1,5 @@
 import http from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
 import { createServer as createVite, type Connect, type ViteDevServer } from "vite";
@@ -6,6 +7,7 @@ import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
 import { PreviewHold } from "./hold.ts";
+import { PreviewReports } from "./previews.ts";
 import { rebasePlugin } from "./rebase.ts";
 import { Screenshots } from "./screenshots.ts";
 import { ViewStability } from "./stability.ts";
@@ -15,7 +17,10 @@ export interface ProjectOptions {
   /** Where Basis is installed: Vite's root for the preview. */
   root: string;
   host: string;
+  /** The preview's port; 0 takes a free one. */
   previewPort: number;
+  /** The project's slot among those open (server/open-projects.ts): its own Vite cache, as projects run at once. */
+  slot: number;
   /** Origins allowed to frame the preview (the chrome). */
   chromeOrigins: string[];
   agent: AgentId;
@@ -56,8 +61,8 @@ export function guard(blocked: (url: string) => boolean): Connect.NextHandleFunc
 
 /**
  * An open project: its workspace, its agent, and the preview server that
- * compiles its components. Only one project is open at a time; switching
- * closes this one and opens the next, on the same preview port.
+ * compiles its components. Several are open at once (server/open-projects.ts),
+ * each with a preview port of its own.
  */
 export class OpenProject {
   private constructor(
@@ -67,17 +72,52 @@ export class OpenProject {
     private readonly root: string,
     private readonly previewServer: http.Server,
     private readonly previewVite: ViteDevServer,
+    /** The preview's port. */
+    readonly previewPort: number,
     /** Screenshots of specimens and view screens from this project's preview (server/screenshots.ts). */
     readonly screenshots: Screenshots,
     /** Holds the preview's changes while a turn runs (server/hold.ts). */
     readonly hold: PreviewHold,
   ) {}
 
+  /** Render problems per tab showing this project; the fix loop gets the current tab's (see PreviewReports). */
+  private readonly reports = new PreviewReports<unknown>();
+
   static async open(entry: ProjectEntry, options: ProjectOptions): Promise<OpenProject> {
-    const { root, broadcast } = options;
     const workspace = new Workspace(entry.dir);
     await workspace.init();
-    const screenshots = new Screenshots(`http://${options.host}:${options.previewPort}/capture.html`);
+
+    /*
+     * The preview runs on its own port inside a sandboxed iframe, because it
+     * executes component code the agent writes; a different port is a
+     * different origin, so that code cannot reach the bridge or the chrome.
+     * It listens first, since a free port is only known then; Vite answers
+     * once it is set up, before the port is given to anyone.
+     */
+    const previewServer = http.createServer();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        previewServer.once("error", reject);
+        previewServer.listen(options.previewPort, options.host, resolve);
+      });
+      const previewPort = (previewServer.address() as AddressInfo).port;
+      return await OpenProject.setUp(entry, options, workspace, previewServer, previewPort);
+    } catch (error) {
+      previewServer.close();
+      await workspace.close();
+      throw error;
+    }
+  }
+
+  private static async setUp(
+    entry: ProjectEntry,
+    options: ProjectOptions,
+    workspace: Workspace,
+    previewServer: http.Server,
+    previewPort: number,
+  ): Promise<OpenProject> {
+    const { root, broadcast } = options;
+    const screenshots = new Screenshots(`http://${options.host}:${previewPort}/capture.html`);
     const views = new ViewStability(entry.dir, screenshots, () => workspace.state.design);
     const hold = new PreviewHold(broadcast);
     const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home, views, hold);
@@ -92,16 +132,11 @@ export class OpenProject {
     agent.on("chat-reset", () => broadcast({ type: "chat-reset" }));
     agent.on("chat-remove", (id) => broadcast({ type: "chat-remove", id }));
 
-    /*
-     * The preview runs on its own port inside a sandboxed iframe, because it
-     * executes component code the agent writes; a different port is a
-     * different origin, so that code cannot reach the bridge or the chrome.
-     */
-    const previewServer = http.createServer();
     const previewVite = await createVite({
       root,
       appType: "mpa",
-      cacheDir: "node_modules/.vite/preview",
+      // One cache per slot: Vite servers sharing one would race to write the deps they optimise.
+      cacheDir: `node_modules/.vite/preview${options.slot ? `-${options.slot}` : ""}`,
       optimizeDeps: { entries: ["preview.html", "capture.html"] },
       plugins: [rebasePlugin(root, entry.dir), hold.plugin()],
       resolve: {
@@ -127,7 +162,7 @@ export class OpenProject {
     previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(entry.dir, folder)));
     const previewGuard = guard((url) => url === "/" || url === "/index.html");
     previewServer.on("request", (req, res) => {
-      if (!isLocalHost(req, options.previewPort)) return refuseHost(res);
+      if (!isLocalHost(req, previewPort)) return refuseHost(res);
       // The capture page (capture.html) reads the current tokens from here, as the kit's copy reads its own file.
       if (req.method === "GET" && req.url?.split("?")[0] === "/design.json") {
         res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -136,17 +171,47 @@ export class OpenProject {
       }
       previewGuard(req, res, () => previewVite.middlewares(req, res));
     });
-    await new Promise<void>((resolve, reject) => {
-      previewServer.once("error", reject);
-      previewServer.listen(options.previewPort, options.host, resolve);
-    });
 
     void agent.start();
-    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, screenshots, hold);
+    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, previewPort, screenshots, hold);
   }
 
   get entry(): ProjectEntry {
     return this.current;
+  }
+
+  /** The agent runs a turn, its fix-ups or the prompts queued behind it. */
+  get busy(): boolean {
+    return this.agent.agent.status === "busy";
+  }
+
+  /** The agent waits for the user to answer a permission request. */
+  get waiting(): boolean {
+    return this.agent.waiting;
+  }
+
+  /** Records what a tab's preview of this project shows now (see PreviewReports), for the fix loop. */
+  report(
+    connection: unknown,
+    errors: string[],
+    visible: boolean,
+    checks: string[],
+    checking: boolean,
+    generation: number,
+  ): void {
+    this.reports.report(connection, errors, visible, checks, checking, generation);
+    this.passReports();
+  }
+
+  /** A tab no longer shows this project (it closed, or shows another). */
+  forget(connection: unknown): void {
+    this.reports.forget(connection);
+    this.passReports();
+  }
+
+  private passReports(): void {
+    const { current, checks, checking, generation } = this.reports;
+    this.agent.setPreviewErrors(current, checks, checking, generation);
   }
 
   /** Takes a changed list entry for this project (say, a product repo linked); the agent reads it from its next turn. */

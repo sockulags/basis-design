@@ -16,17 +16,30 @@ component source, patterns and the gallery specimens.
 
 ## Architecture
 
-- `server/index.ts`: the chrome server, the bridge, and switching between projects.
+- `server/index.ts`: the chrome server, the bridge, and the projects open at once.
   - **Chrome** on `PORT` (5320) serves `index.html` and is the only origin allowed on the `/bridge` WebSocket.
     Both servers answer only requests whose `Host` is `localhost` or `127.0.0.1` with their port
     (`isLocalHost` in `server/project.ts`), so a page that rebinds its own name to 127.0.0.1 gets a 403.
   - `BASIS_HOME` defaults to `~/.basis`, never Basis' own folder, which an update or the npx cache may replace.
     Earlier versions kept the list in the repo root; `Projects.load({ legacyList })` reads it once when the home
     has none and saves it there (the old file stays, and its projects keep their absolute paths).
-  - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is the
-    open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
-    the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
-    project entry may name a product `repo`; linking one updates the open project in place (`OpenProject.update`),
+  - `server/projects.ts` keeps the project list (`<BASIS_HOME>/basis.projects.json`); `server/project.ts` is an
+    open project: its workspace, its agent and its **preview** server. Several are open at once
+    (`server/open-projects.ts`, `OpenProjects`): each tab shows one, and switching shows another in that tab
+    (opening it unless it is open) while the one it left goes on, its agent included; the bridge sends that tab a
+    fresh `hello`, and the chrome remounts its `Workbench` for the new project. A project's messages go only to the
+    tabs that show it, tagged with its id (`projectId`, `Tagged` in `shared/protocol.ts`), and the chrome drops a
+    tagged message of another project; what the chrome sends is tagged by `App` with the project of the workbench
+    that sent it, so a message sent while the next project opens still reaches the one it was meant for (an
+    untagged message goes to the project the tab shows). A tab that reconnects names its project in the bridge URL
+    (`/bridge?project=<id>`). `OpenProjects` also keeps each project's status for the project menu (`working`,
+    `waiting` for an answer to a permission request, `done` for a turn that ended while no tab showed it, sent to
+    every tab as `project-status`), and closes a project no tab shows once its agent has been idle for
+    `IDLE_CLOSE_MS` (ten minutes). Each open project holds a slot, the lowest free number: slot 0 gets the preview
+    port below, the others a free port from the system (ports in a row could run into another Basis), and each slot
+    its own Vite cache (`node_modules/.vite/preview-<slot>`), since Vite servers sharing one race to write the
+    deps they optimise. The project shown last is `active` in the list and opens at start. A project entry may name
+    a product `repo`; linking one updates the open project in place (`OpenProject.update`),
     and `AgentHost` auto-approves reads and searches inside it, refuses edits there without asking, and tells the
     agent about it every turn. Claude Code gets the repo as a working directory (`sessionMeta`, through
     `_meta.claudeCode.options.additionalDirectories`; ACP's own `additionalDirectories` would make it writable for
@@ -38,7 +51,8 @@ component source, patterns and the gallery specimens.
     guided turn (`importInstruction`), and what the agent learns goes to `product.md` in the workspace, which it
     may write like the design file. Each turn points the agent at `product.md` when it
     exists (`repoContext` in `server/agent.ts`), so it reads that before the repo.
-  - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
+  - **Preview** on `PORT + 1` (5321) for the first open project, a free port for each other one, serves
+    `preview.html` in a sandboxed iframe; the `hello` tells the chrome its port. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
   - `server/hold.ts` holds the preview while an agent turn runs (`PreviewHold`, one per open project, held from the
@@ -96,8 +110,9 @@ component source, patterns and the gallery specimens.
   - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` tool. The agent
     starts `server/agent-tools-mcp.mjs` with Node over stdio (the transport every ACP agent supports); the script
     has no dependencies and only speaks MCP's JSON-RPC, forwarding `tools/list` and `tools/call` to the chrome
-    server at `/agent-tools/` on 127.0.0.1 with a secret made at each start (in the script's env), so no other
-    program or page can use the route. The tool photographs through the open project's `screenshots`: by default
+    server at `/agent-tools/<project>/` on 127.0.0.1 with a secret made at each start (in the script's env), so no
+    other program or page can use the route. Each project's server has its own URL (`toolsUrl`), so the tool
+    photographs through that project's `screenshots` whichever project a tab shows: by default
     the narrowest width in both themes, at most four images, full pages cut at 2000 px with the cut said in the
     text. `onPermission` approves Basis' own tools without asking: Claude Code titles them `mcp__basis__<tool>`,
     Codex `mcp.basis.<tool>`, and Codex's approval request carries only the id of the tool call it reported
@@ -109,8 +124,9 @@ component source, patterns and the gallery specimens.
     findings are left out, since they are from before the turn. A fresh gallery document reports its errors (often
     none) and its checks right after `ready`, counts as checking until it has first rendered, and the chrome drops
     the previous document's lists on `ready`. Every open tab
-    reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
-    looked at last), so a stale or second tab cannot send the agent after problems that are not there.
+    reports its preview's errors with its visibility, to the project it shows (`OpenProject.report`, which takes
+    reports only from tabs that show it); `server/previews.ts` picks the tab the user looks at (or looked at last),
+    so a stale or second tab cannot send the agent after problems that are not there.
   - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
     (`server/chatlog.ts`) and the agent session is resumed after a restart where the agent supports
     `session/resume` (Claude Code does).
@@ -207,7 +223,8 @@ component source, patterns and the gallery specimens.
 - `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `tokens.ts` (CSS variables and
   exports), `protocol.ts` (bridge messages), `frame.ts` (chrome-iframe messages, pages, and the parser for
   untrusted preview input), `review.ts` (review.json format), `contracts.ts`, `annotations.ts`, `diff.ts`.
-- `src/` (chrome): `App.tsx` keeps the bridge and mounts `Workbench.tsx` once per project, which wires the
+- `src/` (chrome): `App.tsx` keeps the bridge, tags what each workbench sends with its project, and mounts
+  `Workbench.tsx` once per project, which wires the
   parts; `shell/` holds the top bar and project menu, sidebar, history, inspect and review bars, dialogs,
   `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel and composer.
 - `src/preview/` (iframe): `main.tsx` (messaging, picker, scroll spy, errors, link guard), `Preview.tsx`
@@ -350,10 +367,12 @@ npm run test:e2e     # Playwright: the app in Chromium, each test with its own B
   `motion.duration.fast` by 10ms through the client's file methods (a timing token, so the checks find nothing to
   fix) and opens a review of Buttons when the prompt contains `E2E-REVIEW`. The gallery is a cross-origin iframe;
   Playwright reaches into it with `gallery(page)`. CI runs them on Linux and keeps traces of failures.
-- **Before restarting the dev server**, check that the agent is idle: a turn in flight is lost. A small Node
-  script connecting to `ws://127.0.0.1:5320/bridge` with header `origin: http://localhost:5320` gets a `hello`
-  message containing `agent.status`. The chat and an open review survive the restart.
-- **To kill the server on Windows:** `Get-NetTCPConnection -LocalPort 5320,5321 -State Listen | % { taskkill /PID $_.OwningProcess /T /F }`.
+- **Before restarting the dev server**, check that no agent works, in any open project: a turn in flight is lost. A
+  small Node script connecting to `ws://127.0.0.1:5320/bridge` with header `origin: http://localhost:5320` gets a
+  `hello` message containing `agent.status` of the project it shows and `status`, which names every project whose
+  agent is `working` or `waiting`. The chat and an open review survive the restart.
+- **To kill the server on Windows:** `Get-NetTCPConnection -LocalPort 5320 -State Listen | % { taskkill /PID $_.OwningProcess /T /F }`
+  (the previews of every open project run in the same process).
 - **Test changes that touch the agent or the workspace** in a separate instance with a throwaway workspace:
   `PORT=5330 BASIS_WORKSPACE="$TEMP/basis-test-ws" npx tsx server/index.ts`. `BASIS_WORKSPACE` opens just that
   workspace and never touches the saved project list. To test projects themselves, give the instance its own
@@ -401,7 +420,9 @@ TypeScript server through tsx). Publishing is the maintainer's call.
   sidebar on its own keeps its width. Both layouts of the Navbar are rendered and CSS shows one, so search and
   actions exist twice in the DOM (one hidden).
 - **OAuth refresh races:** several Claude Code processes at once (a dev instance, a test instance, a Claude Code
-  session) can make a turn fail with "another Claude Code process is refreshing it". It is transient; retry.
+  session, and every open project's agent) can make a turn fail with "another Claude Code process is refreshing
+  it". It is transient; retry. Codex agents of several projects share Basis' Codex home and its linked `auth.json`,
+  as several Codex sessions on one machine share `~/.codex`.
 - **Hidden tabs:** rAF does not run in background browser tabs, so do not gate chrome-iframe messaging on rAF.
 - **StrictMode:** it remounts class components in dev. `SectionBoundary` reports from mount and update so
   problems survive that.
@@ -468,7 +489,7 @@ Lucas is rolling out a larger idea in steps:
 5. Tokens for added components: `components` takes a group per added component next to the strict baseline
    groups; `shared/design.ts` checks the names and that no two tokens share a CSS variable: done.
 6. Projects: a project menu to switch, create (blank or a copy) and open workspace folders; one project open at
-   a time, each with its own agent session: done. This is the base for linking Basis to real projects (reading
+   a time, each with its own agent session: done. Since 2026-10-19 several stay open at once. This is the base for linking Basis to real projects (reading
    a product repo's context, designing views for one of its features).
 7. Scaling the preview: pages render progressively, and "also changed" checks only the sections a review can
    reach: done. Specimen modules still load up front; at 230 ms for 86 sections that was not the bottleneck.
@@ -494,6 +515,9 @@ The next step is Lucas' call. Left for later: syncing tokens and components forw
 comparison of the whole gallery between two history entries, the icon, and publishing.
 
 ## Known limits
+
+- **Projects in the background** get no preview checks yet: with no tab showing the project, the fix loop leaves
+  out render errors and check findings (it still has type errors, design problems and the stable-views check).
 
 - **Inspecting a past version** (history menu) shows that version's tokens with today's component code. The
   banner says so, and Restore brings back both. Reviews run a past version's real code from

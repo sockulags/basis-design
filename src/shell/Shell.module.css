@@ -1048,6 +1048,42 @@ a.primaryButton {
   background: var(--app-ink-2);
 }
 
+/* Another project waits for an approval (danger: its agent is stuck until then) or finished in the background. */
+.attentionDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-signal);
+}
+
+.attentionDot[data-status="waiting"] {
+  background: var(--app-danger);
+  animation: blink 900ms ease-in-out infinite;
+}
+
+/* What a project in the background is up to, in its row of the project menu. */
+.projectStatus {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--app-ink-3);
+  color: var(--app-muted);
+  font-family: var(--app-mono);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.projectStatus[data-status="waiting"] {
+  background: color-mix(in srgb, var(--app-danger) 18%, transparent);
+  color: var(--app-danger);
+}
+
+.projectStatus[data-status="done"] {
+  background: color-mix(in srgb, var(--app-signal) 18%, transparent);
+  color: var(--app-signal);
+}
+
 /* A newer starter template is waiting in the project menu. */
 .updateDot {
   flex: none;

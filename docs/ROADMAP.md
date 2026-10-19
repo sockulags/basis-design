@@ -90,11 +90,16 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       tokens, the capture and compare loop, the exception rules, when to stop) and the Export tab gets "Copy prompt",
       which tells the agent to read it. Done when: an agent given only the copied prompt in a fixture repo finds the
       kit and runs the loop.
-- [ ] **Several projects at once.** Projects stay open while their agent works after you switch away; the project
+- [x] **Several projects at once.** Projects stay open while their agent works after you switch away; the project
       menu shows which are busy, done or waiting for an approval. Each open project gets its own preview port, the
-      screenshot tool names its project, and server messages carry the project. A project in the background gets
-      its preview checks from a headless page. Idle projects close after a while. Done when: two projects run turns
-      at the same time and each ends with its own history entry and no crossed messages.
+      screenshot tool names its project, and server messages carry the project. Idle projects close after a while.
+      Done when: two projects run turns at the same time and each ends with its own history entry and no crossed
+      messages. (Split: the headless page is the next step.)
+- [ ] **Preview checks for projects in the background.** While no tab shows a project whose agent works, a headless
+      page (in the project's screenshot browser) hosts its gallery the way the chrome does and reports its render
+      errors and checks, so the fix loop's wait for the reloaded gallery and its checks works there too; it closes
+      when a tab shows the project again or the agent is done. Done when: a turn in a project in the background
+      that leaves a render error and an accessibility finding gets both back in its fix loop.
 - [ ] **Threads in a project.** Several chats per project, each its own agent session, listed in the chat panel;
       their turns queue across threads so history and reviews stay consistent. Done when: two threads in one
       project keep separate conversations across a restart.
@@ -226,6 +231,49 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Several projects at once, split in two: this step keeps projects open and apart, and "Preview checks
+  for projects in the background" adds the headless page, which is a piece of its own (a host page that renders the
+  gallery as the chrome does, in the project's screenshot browser). `server/open-projects.ts` (`OpenProjects`) holds
+  the open projects; a tab shows one, and switching shows another in that tab without closing the one it left, so
+  its agent goes on. Two tabs can show different projects; one tab switching never moves the other. The project
+  shown last stays `active` in the list and opens at start. Each project's messages go only to the tabs that show
+  it and carry its id (`projectId`), and the chrome drops any tagged with another; the chrome tags what it sends
+  with the project of the workbench that sent it (in `App`, not in the bridge, since the bridge learns of a new
+  project before React unmounts the old workbench, whose gallery may still report), and the server routes a tagged
+  message to that project even when the tab has moved on, so a prompt or a permission answer sent during a switch
+  is never crossed; preview reports are taken only from tabs that show the project. Ports: the first project open
+  keeps `PORT + 1` (or `BASIS_PREVIEW_PORT`), the others get a free port from the system rather than the next ones
+  up, which could run into another Basis (a test instance on 5330); the preview server listens before Vite is set
+  up, so the port is known for the screenshots. The CSP needed no change: `frame-ancestors` names the chrome, and
+  the chrome takes the port from the `hello`. Vite caches are per slot (the lowest free number when a project
+  opens: `preview`, `preview-1`, …), so their number stays the number of projects open at once, not every project
+  ever opened. The screenshot tool's URL names its project (`/agent-tools/<project>/`), with the one secret, so an
+  agent always photographs its own project. Statuses: `working` (the agent is busy), `waiting` (a permission
+  request waits; `AgentHost.waiting`, set before the chat item goes out), `done` (a turn ended while no tab showed
+  the project, kept until one does, also after it closes); the menu labels the rows, and a dot by the project's name
+  says so with the menu shut, red and blinking for waiting since that agent is stuck. Switching, New project and
+  Open folder no longer wait for the agent; a copy of a project still does, since a copy mid-turn could take
+  half-written files, and a project that is shown, working or waiting cannot be removed. Idle projects (no tab, not
+  working, not waiting) close after ten minutes (`IDLE_CLOSE_MS`): long enough to look at another project and come
+  back, short enough that a day's visits do not each keep an agent, Vite and a browser running; reopening resumes
+  the agent's session as before. The chat draft is per project (`basis:draft:<id>`); the old global draft is left
+  alone. Several Claude Code processes make the transient OAuth refresh failure more likely; it is noted under
+  Gotchas, and no retry was added. Codex agents of several projects share Basis' Codex home, as several Codex
+  sessions share `~/.codex`; not tried with two Codex turns at once. Until the next step, a project in the
+  background gets no preview reports, so its fix loop leaves out render errors and checks, as it did for a turn
+  with no tab open (Known limits). Verified with unit tests (`test/open-projects.test.ts`: one open per project
+  however many ask, slots, done only when unseen, statuses reported once per change, idle closing that spares
+  shown, working and waiting projects, a failed open freeing its slot; the per-project tool route), two e2e tests
+  with a home of their own (`test.use({ home: true })`; the stand-in agent got `E2E-SLOW` and `E2E-ASK`): two
+  projects with overlapping turns each end with their own chat and history entry and the other's message absent,
+  the button says the other finished, and a project waiting for an approval shows outside the menu and can be
+  answered after switching back; and on a throwaway instance with real Claude turns: a project "Second" created
+  beside "Basis", then a turn in each started seconds apart (each taking three screenshots and changing a motion
+  token), with the menu showing Basis working while Second was shown. Both ended with their own commit
+  (19:39:12 and 19:39:20), each chat held only its own prompts, its greps named its own workspace, its
+  screenshots showed its own tokens (Second's agent saw its own 14px radius), and the button said "Basis finished
+  in the background". Second's preview ran on a free port beside Basis' on 5331.
 
 - 2026-10-19: A prompt for the implementing agent. This step also builds "Implementation notes in the kit" and
   "A skill for the implementing agent", which are ticked with a pointer here rather than removed, so their

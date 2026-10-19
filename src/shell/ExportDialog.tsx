@@ -17,6 +17,8 @@ type Tab = "kit" | "verify" | (typeof FORMATS)[number]["id"];
 
 interface ExportDialogProps {
   design: Design;
+  /** The project the starter kit's download is of. */
+  projectId?: string;
   workspace: string;
   /** Number of open problems in the workspace; exporting still works, but the user should know. */
   problems: number;
@@ -151,6 +153,7 @@ function StarterKit({
 
 export function ExportDialog({
   design,
+  projectId,
   workspace,
   problems,
   manifest,
@@ -247,7 +250,11 @@ export function ExportDialog({
           ) : tab === "kit" ? (
             <>
               <span className={styles.muted}>{manifest ? `${manifest.folder}.zip` : ""}</span>
-              <a className={styles.primaryButton} href="/export/starter-kit.zip" download>
+              <a
+                className={styles.primaryButton}
+                href={`/export/starter-kit.zip${projectId ? `?project=${encodeURIComponent(projectId)}` : ""}`}
+                download
+              >
                 Download .zip
               </a>
             </>

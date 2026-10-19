@@ -1,12 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ClientMessage, ProjectEntry, TemplateUpdate } from "../../shared/protocol.ts";
+import type { ClientMessage, ProjectEntry, ProjectStatus, TemplateUpdate } from "../../shared/protocol.ts";
 import { FolderField } from "./FolderField.tsx";
 import styles from "./Shell.module.css";
 
 interface ProjectMenuProps {
   project: ProjectEntry | null;
   projects: ProjectEntry[];
-  /** Switching, creating and opening wait while the agent works. */
+  /** What the projects are up to, by id; the others go on in the background while this one is shown. */
+  status: Record<string, ProjectStatus>;
+  /** The open project's agent works: its template update waits. */
   agentBusy: boolean;
   /** The server's answer to the last failed project request. */
   error: { message: string } | null;
@@ -17,11 +19,21 @@ interface ProjectMenuProps {
 
 type Dialog = "create" | "open" | "repo" | null;
 
+/** How a row names what its project is up to. */
+const STATUS_LABELS: Record<ProjectStatus, string> = {
+  working: "working",
+  waiting: "waiting for approval",
+  done: "done",
+};
+
 /**
  * The open project, where the brand used to be, with the list of projects:
  * switch to one, start a new one, or open a workspace folder from elsewhere.
+ * Projects keep running when another is shown; the rows say which are
+ * working, waiting for an approval or done, and the button shows a dot when
+ * another project waits or finished, so it is not missed with the menu shut.
  */
-export function ProjectMenu({ project, projects, agentBusy, error, templateUpdate, send }: ProjectMenuProps) {
+export function ProjectMenu({ project, projects, status, agentBusy, error, templateUpdate, send }: ProjectMenuProps) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   /** The error when the last request went out; a different one (even with the same text) is the answer to it. */
@@ -57,6 +69,15 @@ export function ProjectMenu({ project, projects, agentBusy, error, templateUpdat
     send(message);
   };
 
+  const others = projects.filter((entry) => entry.id !== project?.id);
+  const waiting = others.filter((entry) => status[entry.id] === "waiting");
+  const done = others.filter((entry) => status[entry.id] === "done");
+  const attention = waiting.length
+    ? `${waiting.map((entry) => entry.name).join(", ")} ${waiting.length === 1 ? "is" : "are"} waiting for approval`
+    : done.length
+      ? `${done.map((entry) => entry.name).join(", ")} finished in the background`
+      : "";
+
   return (
     <div ref={root} className={styles.projectRoot}>
       <button
@@ -64,11 +85,16 @@ export function ProjectMenu({ project, projects, agentBusy, error, templateUpdat
         className={styles.projectButton}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        title={project?.dir}
+        title={attention ? `${project?.dir ?? ""}\n${attention}` : project?.dir}
         onClick={() => setOpen((value) => !value)}
       >
         <span className={styles.brandMark} aria-hidden />
         <span className={styles.projectName}>{project?.name ?? "Basis"}</span>
+        {attention && (
+          <span className={styles.attentionDot} data-status={waiting.length ? "waiting" : "done"}>
+            <span className="visually-hidden">, {attention}</span>
+          </span>
+        )}
         {templateUpdate && (
           <span className={styles.updateDot}>
             <span className="visually-hidden">, starter template update available</span>
@@ -82,30 +108,34 @@ export function ProjectMenu({ project, projects, agentBusy, error, templateUpdat
         // A panel the button discloses, not a menu: it holds hints, rows with their own buttons and actions.
         <div id={panelId} className={`${styles.menu} ${styles.projectMenu}`}>
           <p className={styles.menuHint}>
-            {agentBusy
-              ? "The agent is working; switch projects when it is done."
-              : "Each project has its own design system, history and chat."}
+            Each project has its own design system, history and chat, and its agent keeps working while you look at
+            another.
           </p>
           {answer && !dialog && <p className={styles.projectError}>{answer}</p>}
           {projects.map((entry) => {
             const isOpen = entry.id === project?.id;
+            const state = status[entry.id];
             return (
               <div key={entry.id} className={styles.projectRow}>
                 <button
                   type="button"
                   className={styles.menuItem}
                   aria-current={isOpen || undefined}
-                  disabled={agentBusy && !isOpen}
                   onClick={() => (isOpen ? setOpen(false) : request({ type: "project-switch", id: entry.id }))}
                 >
                   <span className={styles.menuTitle}>
                     {entry.name}
                     {isOpen && <span className={styles.current}>open</span>}
+                    {state && !isOpen && (
+                      <span className={styles.projectStatus} data-status={state}>
+                        {STATUS_LABELS[state]}
+                      </span>
+                    )}
                   </span>
                   <span className={styles.projectDir}>{entry.dir}</span>
                   {entry.repo && <span className={styles.projectDir}>Product repo: {entry.repo}</span>}
                 </button>
-                {!isOpen && (
+                {!isOpen && state !== "working" && state !== "waiting" && (
                   <button
                     type="button"
                     className={styles.projectRemove}
@@ -194,7 +224,6 @@ export function ProjectMenu({ project, projects, agentBusy, error, templateUpdat
             <button
               type="button"
               className={styles.chromeButton}
-              disabled={agentBusy}
               onClick={() => {
                 setOpen(false);
                 setDialog("create");
@@ -205,7 +234,6 @@ export function ProjectMenu({ project, projects, agentBusy, error, templateUpdat
             <button
               type="button"
               className={styles.chromeButton}
-              disabled={agentBusy}
               onClick={() => {
                 setOpen(false);
                 setDialog("open");

@@ -235,6 +235,11 @@ export class AgentHost extends EventEmitter<Events> {
     return this.transcript;
   }
 
+  /** True while a permission request waits for the user's answer. */
+  get waiting(): boolean {
+    return this.permissions.size > 0;
+  }
+
   /** Brings back the conversation saved before the last restart; the next start tries to resume its session. */
   async restore(): Promise<void> {
     const saved = await loadChat(this.workspace.dir);
@@ -843,8 +848,10 @@ ${message}`
     const id = this.nextId("permission");
     const title = call.title ?? "The agent wants to run a tool";
     const detail = describeRawInput(call.rawInput) ?? (paths.length ? paths.join("\n") : undefined);
+    // Waiting before the item goes out, so whoever hears of it sees the agent waiting (see `waiting`).
+    const answered = new Promise<string | null>((resolve) => this.permissions.set(id, resolve));
     this.push({ kind: "permission", id, title, detail, options });
-    const optionId = await new Promise<string | null>((resolve) => this.permissions.set(id, resolve));
+    const optionId = await answered;
     this.permissions.delete(id);
     const chosen = options.find((option) => option.optionId === optionId);
     this.push({ kind: "permission", id, title, detail, options, resolved: chosen?.name ?? "Cancelled" });
