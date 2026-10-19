@@ -1,0 +1,778 @@
+import path from "node:path";
+
+/** Node's path functions for one system: `path.win32`, `path.posix` or this one's. */
+type PlatformPath = typeof path;
+
+/*
+ * Which shell commands only read, and what they read. Codex asks before every command it runs on Windows (Basis'
+ * Codex home has no sandbox there, server/codex.ts), reads included; Basis approves a command without asking only
+ * when it can tell from the command line alone that nothing in it writes, runs other programs or reads outside the
+ * places the agent may read. This is deliberately strict: a command it does not fully understand is not approved,
+ * and the user is asked as before. So only plain words, quotes and a few operators are understood, only listed
+ * programs with listed options, and every argument that may name a file is returned to be checked.
+ */
+
+/** A command Basis may run unasked once every path it reads is allowed. */
+export interface ReadOnlyCommand {
+  /** Absolute paths the command reads or lists, its working folder first. */
+  reads: string[];
+  /** Absolute paths of programs it starts by path (the shell Codex wraps it in); they must not be the agent's own files. */
+  programs: string[];
+}
+
+/**
+ * What `command`, run in `cwd`, reads, or null when it may do anything else. `command` is the command line of a
+ * Codex approval request: an argument list joined with POSIX quoting, usually a shell with a script
+ * (`"…\pwsh.exe" -Command 'Get-Content a.ts'`, `bash -lc '…'`), sometimes with the shell's name taken off by the
+ * ACP adapter. `paths` resolves paths; tests pass `path.win32` or `path.posix`.
+ */
+export function readOnlyCommand(command: string, cwd: string, paths: PlatformPath = path): ReadOnlyCommand | null {
+  if (!paths.isAbsolute(cwd)) return null;
+  const outer = posixTokens(command);
+  const words = outer?.every(isArg) ? outer.map((arg) => arg.values[0]!) : null;
+  const shell = words ? shellOf(words) : null;
+  let commands: Arg[][] | null;
+  let programs: string[] = [];
+  if (shell) {
+    const tokens = shell.kind === "pwsh" ? psTokens(shell.script) : posixTokens(shell.script);
+    commands = tokens && split(tokens);
+    if (shell.program !== null) {
+      if (!paths.isAbsolute(shell.program)) return null;
+      programs = [shell.program];
+    }
+    if (commands) return collect(commands, shell.kind, shell.legacy, cwd, paths, programs);
+    return null;
+  }
+  // No shell in front: a plain argument list, or a POSIX script whose `bash -lc` the adapter removed together with
+  // the quotes around it. The single quotes inside such a script were written as '"'"' and cannot be read back.
+  if (command.includes(`'"'"'`)) return null;
+  commands = outer && split(outer);
+  return commands ? collect(commands, "posix", false, cwd, paths, programs) : null;
+}
+
+/**
+ * Whether Basis may approve a Codex approval request for a command without asking: its raw input is the command
+ * and its working folder and nothing else (no network access or extra sandbox permissions), the command only reads,
+ * and everything it reads is `readable`, while the shell it starts by path is not (so it is none of the agent's own
+ * files). `cwd` is the folder Codex runs in when the request names none.
+ */
+export function isApprovableRead(
+  rawInput: unknown,
+  cwd: string,
+  readable: (target: string) => boolean,
+  paths: PlatformPath = path,
+): boolean {
+  if (!rawInput || typeof rawInput !== "object") return false;
+  const { command, cwd: folder = cwd, ...rest } = rawInput as Record<string, unknown>;
+  if (Object.keys(rest).length > 0 || typeof command !== "string" || typeof folder !== "string") return false;
+  const found = readOnlyCommand(command, folder, paths);
+  return found !== null && found.reads.every(readable) && !found.programs.some(readable);
+}
+
+/** One argument: its values (more than one for a PowerShell array, `a, b`), and how it was written. */
+interface Arg {
+  values: string[];
+  /** It began with a quote, so PowerShell never takes it as a parameter name. */
+  quoted: boolean;
+  /** Some part of it was quoted (PowerShell only). */
+  quotes?: boolean;
+  /** It holds an unquoted wildcard, which a shell or a cmdlet may expand into other names. */
+  glob: boolean;
+}
+
+/** Statement and pipeline separators; every command on either side is checked the same way. */
+type Token = Arg | { op: ";" | "|" };
+
+const isArg = (token: Token): token is Arg => "values" in token;
+
+type Dialect = "pwsh" | "posix";
+
+interface Shell {
+  kind: Dialect;
+  /** The shell's own path when it was given as one, null for a bare name. */
+  program: string | null;
+  script: string;
+  /** Windows PowerShell 5.1, which passes arguments to programs in its old way and follows links when recursing. */
+  legacy: boolean;
+}
+
+const PWSH = new Set(["pwsh", "pwsh.exe", "powershell", "powershell.exe"]);
+const POSIX_SHELLS = new Set(["bash", "sh", "zsh"]);
+const PWSH_FLAGS = new Set(["-noprofile", "-nologo", "-noninteractive"]);
+
+/** The shell and script of `shell [flags] -Command script` or `bash -lc script`, or null for anything else. */
+function shellOf(words: string[]): Shell | null {
+  if (words.length < 3) return null;
+  const first = words[0]!;
+  const name = first.split(/[\\/]/).pop()!.toLowerCase();
+  const program = /[\\/]/.test(first) ? first : null;
+  const flags = words.slice(1, -2).map((word) => word.toLowerCase());
+  const run = words.at(-2)!.toLowerCase();
+  const script = words.at(-1)!;
+  if (PWSH.has(name)) {
+    if (!flags.every((flag) => PWSH_FLAGS.has(flag)) || (run !== "-command" && run !== "-c")) return null;
+    return { kind: "pwsh", program, script, legacy: name.startsWith("powershell") };
+  }
+  if (POSIX_SHELLS.has(name)) {
+    if (flags.some((flag) => flag !== "-l") || !/^-l?c$|^-cl$/.test(run)) return null;
+    return { kind: "posix", program, script, legacy: false };
+  }
+  return null;
+}
+
+/** Splits tokens into commands at `;`, `|`, `&&` and `||`, or null when a command is empty. */
+function split(tokens: Token[]): Arg[][] | null {
+  const commands: Arg[][] = [[]];
+  for (const token of tokens) {
+    if (isArg(token)) commands.at(-1)!.push(token);
+    else commands.push([]);
+  }
+  return commands.every((command) => command.length > 0) ? commands : null;
+}
+
+/** Only printable ASCII: PowerShell takes typographic quotes and dashes for quotes and dashes. */
+const PLAIN = /^[\x20-\x7e]*$/;
+
+/**
+ * POSIX shell words: single quotes, double quotes without expansions, backslash escapes, `;`, `|`, `&&`, `||` and
+ * the redirections that only drop or merge errors (`2>/dev/null`, `2>&1`). Null for anything that expands, runs a
+ * subshell, redirects into a file or starts a comment.
+ */
+export function posixTokens(text: string): Token[] | null {
+  if (!PLAIN.test(text.replace(/\t/g, " "))) return null;
+  const tokens: Token[] = [];
+  let word = null as string | null;
+  let quoted = false;
+  let glob = false;
+  const end = () => {
+    if (word !== null) tokens.push({ values: [word], quoted, glob });
+    word = null;
+    quoted = false;
+    glob = false;
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]!;
+    if (char === " " || char === "\t") {
+      end();
+    } else if (char === "'") {
+      const close = text.indexOf("'", i + 1);
+      if (close === -1) return null;
+      if (word === null) quoted = true;
+      word = (word ?? "") + text.slice(i + 1, close);
+      i = close;
+    } else if (char === '"') {
+      let value = "";
+      let j = i + 1;
+      for (; j < text.length && text[j] !== '"'; j += 1) {
+        const inner = text[j]!;
+        if (inner === "$" || inner === "`") return null;
+        if (inner === "\\" && j + 1 < text.length && '"\\$`'.includes(text[j + 1]!)) {
+          j += 1;
+          value += text[j];
+        } else value += inner;
+      }
+      if (j >= text.length) return null;
+      if (word === null) quoted = true;
+      word = (word ?? "") + value;
+      i = j;
+    } else if (char === "\\") {
+      if (i + 1 >= text.length) return null;
+      i += 1;
+      if (word === null) quoted = true;
+      word = (word ?? "") + text[i];
+    } else if (char === ";") {
+      end();
+      tokens.push({ op: ";" });
+    } else if (char === "|" || char === "&") {
+      const double = text[i + 1] === char;
+      if (char === "&" && !double) return null;
+      end();
+      tokens.push({ op: double ? ";" : "|" });
+      if (double) i += 1;
+    } else if (char === ">" || char === "<") {
+      const drop = word === "2" && !quoted ? /^>(?:&1|\s*\/dev\/null)(?=$|[\s;|&])/.exec(text.slice(i)) : null;
+      if (!drop) return null;
+      word = null;
+      i += drop[0].length - 1;
+    } else if ("$`(){}".includes(char)) {
+      return null;
+    } else if ((char === "#" || char === "~") && word === null) {
+      return null;
+    } else {
+      if ("*?[]".includes(char)) glob = true;
+      word = (word ?? "") + char;
+    }
+  }
+  end();
+  return tokens;
+}
+
+/**
+ * PowerShell in argument mode: single quotes (`''` for a quote), double quotes without expansions (`""` for a
+ * quote), arrays (`a, b`), `;`, `|`, `&&`, `||`, and dropping errors (`2>$null`, `2>&1`). Null for variables,
+ * subexpressions, script blocks, splatting, type literals, escapes, comments, the call operator and redirections
+ * into files.
+ */
+export function psTokens(text: string): Token[] | null {
+  if (!PLAIN.test(text.replace(/\t/g, " "))) return null;
+  const tokens: Token[] = [];
+  let current = null as Arg | null;
+  let value = null as string | null;
+  /** After a comma, the next value belongs to the same argument. */
+  let more = false;
+  const endValue = () => {
+    if (value === null) return;
+    if (current) current.values.push(value);
+    value = null;
+  };
+  const end = () => {
+    endValue();
+    if (current && !more) {
+      tokens.push(current);
+      current = null;
+    }
+  };
+  const start = (isQuoted: boolean) => {
+    if (value !== null) return;
+    if (!current) current = { values: [], quoted: isQuoted, glob: false };
+    more = false;
+    value = "";
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]!;
+    if (char === " " || char === "\t") {
+      end();
+    } else if (char === "'" || char === '"') {
+      start(true);
+      current!.quotes = true;
+      let literal = "";
+      let j = i + 1;
+      for (; j < text.length; j += 1) {
+        if (text[j] === char) {
+          if (text[j + 1] !== char) break;
+          j += 1;
+        } else if (char === '"' && (text[j] === "$" || text[j] === "`")) return null;
+        literal += text[j];
+      }
+      if (j >= text.length) return null;
+      value = (value ?? "") + literal;
+      i = j;
+    } else if (char === ",") {
+      if (value === null || more) return null;
+      endValue();
+      more = true;
+    } else if (char === ";" || char === "|" || char === "&") {
+      const double = text[i + 1] === char;
+      if (char === "&" && !double) return null;
+      if (more) return null;
+      end();
+      tokens.push({ op: double || char === ";" ? ";" : "|" });
+      if (double) i += 1;
+    } else if (char === ">") {
+      const drop = value === "2" && current?.values.length === 0 && !current.quoted && !more;
+      const match = drop ? /^>(?:&1|\s*\$null)(?=$|[\s;|&])/.exec(text.slice(i)) : null;
+      if (!match) return null;
+      current = null;
+      value = null;
+      i += match[0].length - 1;
+    } else if ("$`@(){}[]<#".includes(char)) {
+      return null;
+    } else {
+      start(false);
+      if (char === "*" || char === "?") current!.glob = true;
+      value += char;
+    }
+  }
+  if (more) return null;
+  end();
+  // The stop-parsing token hands the rest of the line to the program as it is, expanding %variables%.
+  if (tokens.some((token) => isArg(token) && token.values.includes("--%"))) return null;
+  return tokens;
+}
+
+/** The working folder and every path the commands read, resolved, or null when one of them is not a read. */
+function collect(
+  commands: Arg[][],
+  dialect: Dialect,
+  legacy: boolean,
+  cwd: string,
+  paths: PlatformPath,
+  programs: string[],
+): ReadOnlyCommand | null {
+  const reads = [paths.resolve(cwd)];
+  for (const command of commands) {
+    const found = dialect === "pwsh" ? psCommand(command, legacy) : posixCommand(command);
+    if (!found) return null;
+    for (const target of found) {
+      if (!plainPath(target, paths)) return null;
+      reads.push(paths.resolve(cwd, target));
+    }
+  }
+  return { reads, programs };
+}
+
+/**
+ * A path Basis can check by resolving it: no wildcards, no home folder (`~`), no UNC or device path, no drive-relative
+ * path, and no colon but a drive's, which also rules out alternate data streams and PowerShell's other drives
+ * (`env:`, `HKLM:`, `FileSystem::`).
+ */
+function plainPath(target: string, paths: PlatformPath): boolean {
+  if (target === "" || /[*?[\]"]/.test(target) || target.startsWith("~")) return false;
+  if (/^[\\/]{2}/.test(target)) return false;
+  const drive = paths.sep === "\\" && /^[A-Za-z]:[\\/]/.test(target);
+  const rest = drive ? target.slice(2) : target;
+  if (rest.includes(":")) return false;
+  // Windows drops dots and spaces at the end of a name, so `.. ` and `...` would be read as `..` there.
+  return rest.split(/[\\/]/).every((part) => part === "." || part === ".." || !/[. ]$/.test(part));
+}
+
+/* PowerShell cmdlets that only read, with the parameters Basis understands. */
+
+interface Cmdlet {
+  /** Parameters whose values are paths it reads. */
+  paths?: string[];
+  /** Parameters that take a value that is not a path. */
+  values?: string[];
+  /** Name filters, which must not name folders. */
+  filters?: string[];
+  switches?: string[];
+  /** Where positional arguments go, in order; any further ones are taken as paths. */
+  positions?: string[];
+}
+
+const PATHS = ["path", "literalpath", "pspath", "lp"];
+const COMMON = { values: ["erroraction", "ea", "warningaction", "wa"], switches: ["verbose"] };
+
+const CMDLETS: Record<string, Cmdlet> = {
+  "get-content": {
+    paths: PATHS,
+    values: ["totalcount", "first", "head", "tail", "last", "readcount", "encoding", "delimiter"],
+    switches: ["raw", "force"],
+    positions: ["path"],
+  },
+  "get-childitem": {
+    paths: PATHS,
+    values: ["depth", "attributes"],
+    filters: ["filter", "include", "exclude"],
+    switches: ["recurse", "force", "name", "file", "directory", "hidden", "system", "readonly"],
+    positions: ["path", "filter"],
+  },
+  "select-string": {
+    paths: ["path", "literalpath"],
+    values: ["pattern", "encoding", "context", "culture"],
+    filters: ["include", "exclude"],
+    switches: ["simplematch", "casesensitive", "notmatch", "allmatches", "list", "quiet", "raw", "noemphasis"],
+    positions: ["pattern", "path"],
+  },
+  "test-path": {
+    paths: ["path", "literalpath"],
+    values: ["pathtype"],
+    filters: ["filter", "include", "exclude"],
+    switches: ["isvalid"],
+    positions: ["path"],
+  },
+  "get-item": {
+    paths: PATHS,
+    filters: ["filter", "include", "exclude"],
+    switches: ["force"],
+    positions: ["path"],
+  },
+  "resolve-path": { paths: ["path", "literalpath"], switches: ["relative"], positions: ["path"] },
+  "get-location": {},
+  "select-object": {
+    values: ["first", "last", "skip", "skiplast", "index", "property", "expandproperty", "excludeproperty"],
+    switches: ["unique"],
+    positions: ["property"],
+  },
+  "sort-object": {
+    values: ["property", "top", "bottom"],
+    switches: ["descending", "unique", "casesensitive"],
+    positions: ["property"],
+  },
+  "measure-object": {
+    values: ["property"],
+    switches: ["line", "word", "character", "sum", "average", "maximum", "minimum", "ignorewhitespace"],
+    positions: ["property"],
+  },
+  "format-table": { values: ["property"], switches: ["autosize", "wrap", "hidetableheaders"], positions: ["property"] },
+  "format-list": { values: ["property"], positions: ["property"] },
+  "out-string": { values: ["width"], switches: ["stream"] },
+};
+
+/** PowerShell's own aliases on Windows for the cmdlets above. */
+const ALIASES: Record<string, string> = {
+  cat: "get-content",
+  gc: "get-content",
+  type: "get-content",
+  ls: "get-childitem",
+  dir: "get-childitem",
+  gci: "get-childitem",
+  sls: "select-string",
+  gi: "get-item",
+  rvpa: "resolve-path",
+  pwd: "get-location",
+  gl: "get-location",
+  select: "select-object",
+  sort: "sort-object",
+  measure: "measure-object",
+  ft: "format-table",
+  fl: "format-list",
+};
+
+/** The paths one PowerShell command reads, or null when it is not one of the reads above. */
+function psCommand(args: Arg[], legacy: boolean): string[] | null {
+  const [head, ...rest] = args;
+  if (!head || head.quoted || head.values.length !== 1) return null;
+  const name = head.values[0]!.toLowerCase();
+  if (!/^[a-z][a-z0-9.-]*$/.test(name)) return null;
+  const native = name.replace(/\.exe$/, "");
+  if (native === "rg" || native === "git") {
+    const words: string[] = [];
+    for (const arg of rest) {
+      const word = arg.values[0]!;
+      // Arrays reach programs as separate arguments, and quotes and empty arguments get lost or merged on the way.
+      if (arg.values.length !== 1 || arg.glob || !nativeSafe(word, legacy)) return null;
+      words.push(word);
+    }
+    return native === "rg" ? rgReads(words) : gitReads(words);
+  }
+  const cmdlet = CMDLETS[ALIASES[name] ?? name];
+  if (!cmdlet) return null;
+  // Windows PowerShell 5.1 follows links into other folders when it recurses.
+  return cmdletReads(cmdlet, rest, legacy && (name === "get-childitem" || ALIASES[name] === "get-childitem"));
+}
+
+/** An argument PowerShell passes to a program unchanged, also in its old way of quoting (Windows PowerShell 5.1). */
+function nativeSafe(word: string, legacy: boolean): boolean {
+  if (word === "" || word.includes('"')) return false;
+  if (/\s/.test(word) && word.endsWith("\\")) return false;
+  return !(legacy && /\s/.test(word));
+}
+
+function cmdletReads(cmdlet: Cmdlet, args: Arg[], noRecurse: boolean): string[] | null {
+  const kind = (name: string): "path" | "value" | "filter" | "switch" | null => {
+    if (cmdlet.paths?.includes(name)) return "path";
+    if (cmdlet.values?.includes(name) || COMMON.values.includes(name)) return "value";
+    if (cmdlet.filters?.includes(name)) return "filter";
+    if (cmdlet.switches?.includes(name) || COMMON.switches.includes(name)) return "switch";
+    return null;
+  };
+  const reads: string[] = [];
+  const bound = new Set<string>();
+  const positional: Arg[] = [];
+  const take = (name: string, arg: Arg): boolean => {
+    const type = kind(name);
+    if (type === "path") {
+      if (arg.glob) return false;
+      reads.push(...arg.values);
+    } else if (type === "filter") {
+      if (arg.values.some((value) => /[\\/:]|\.\./.test(value))) return false;
+    } else if (type !== "value") return false;
+    bound.add(name);
+    return true;
+  };
+  let named = true;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]!;
+    const text = arg.values[0]!;
+    if (!named || arg.quoted || !text.startsWith("-") || arg.values.length !== 1) {
+      positional.push(arg);
+      continue;
+    }
+    if (text === "--") {
+      named = false;
+      continue;
+    }
+    // Whether PowerShell takes `-'Path'` or `-Path:'x'` as a parameter is not worth guessing.
+    if (arg.quotes) return null;
+    const match = /^-([a-z][a-z0-9]*)(?::(.*))?$/i.exec(text);
+    if (!match) return null;
+    const name = match[1]!.toLowerCase();
+    if (noRecurse && (name === "recurse" || name === "depth")) return null;
+    const type = kind(name);
+    if (type === null) return null;
+    if (type === "switch") {
+      if (match[2] !== undefined) return null;
+      bound.add(name);
+      continue;
+    }
+    let value: Arg;
+    if (match[2] !== undefined) {
+      if (match[2] === "") return null;
+      value = { values: [match[2]], quoted: false, glob: /[*?]/.test(match[2]) };
+    } else {
+      const next = args[i + 1];
+      if (!next || (!next.quoted && next.values[0]!.startsWith("-"))) return null;
+      value = next;
+      i += 1;
+    }
+    if (!take(name, value)) return null;
+  }
+  const slots = (cmdlet.positions ?? []).filter((name) => !bound.has(name));
+  for (const [index, arg] of positional.entries()) {
+    const slot = slots[index];
+    if (slot ? !take(slot, arg) : arg.glob) return null;
+    if (!slot) reads.push(...arg.values);
+  }
+  return reads;
+}
+
+/* Programs, for POSIX shells and from PowerShell. */
+
+/** The paths one POSIX command reads, or null when it is not one Basis knows to only read. */
+function posixCommand(args: Arg[]): string[] | null {
+  if (args.some((arg) => arg.glob)) return null;
+  const [name, ...words] = args.map((arg) => arg.values[0]!);
+  switch (name) {
+    case "cat":
+      return flagReads(words, { short: "nbsvAETetu" });
+    case "head":
+    case "tail":
+      return flagReads(words, { short: "qv", shortValues: "nc", longValues: ["lines", "bytes"], numeric: true });
+    case "wc":
+      return flagReads(words, { short: "lwcmL", long: ["lines", "words", "bytes", "chars"] });
+    case "ls":
+      return flagReads(words, {
+        short: "alhRrtS1dFAGip",
+        long: ["all", "almost-all", "human-readable", "recursive", "reverse"],
+        longValues: ["color", "sort"],
+      });
+    case "pwd":
+      return words.length === 0 ? [] : null;
+    case "grep":
+      return flagReads(words, GREP);
+    case "rg":
+      return rgReads(words);
+    case "git":
+      return gitReads(words);
+    case "find":
+      return findReads(words);
+    default:
+      return null;
+  }
+}
+
+interface Flags {
+  /** Short options without a value, as one string of letters. */
+  short?: string;
+  /** Short options that take a value, attached (`-n5`) or as the next word. */
+  shortValues?: string;
+  long?: string[];
+  /** Long options with a value, `--name=value` or `--name value`. */
+  longValues?: string[];
+  /** `-5`, as head and tail take it. */
+  numeric?: boolean;
+  /** The first positional argument is a pattern, unless one of these options gave the pattern. */
+  pattern?: string[];
+  /** Options after which every positional argument is a path, also the first (rg --files). */
+  pathsOnly?: string[];
+}
+
+const GREP: Flags = {
+  short: "rnilLcvwxEFohHsqIza",
+  shortValues: "eABCm",
+  long: [
+    "recursive",
+    "line-number",
+    "ignore-case",
+    "files-with-matches",
+    "files-without-match",
+    "count",
+    "invert-match",
+    "word-regexp",
+    "line-regexp",
+    "extended-regexp",
+    "fixed-strings",
+    "only-matching",
+    "no-filename",
+    "with-filename",
+    "no-messages",
+    "quiet",
+    "color",
+    "colour",
+  ],
+  longValues: ["include", "exclude", "exclude-dir", "color", "colour", "regexp", "context", "max-count"],
+  pattern: ["e", "regexp"],
+};
+
+/**
+ * ripgrep's options that only change what it searches for or how it prints. Left out on purpose: `--pre` (runs a
+ * program on every file), `-z` (runs decompressors), `-L` (follows links out of the folder), `-f` and
+ * `--ignore-file` (read a file named by the option), `--hostname-bin` and `--type-add`.
+ */
+const RG: Flags = {
+  short: "niSsFwxvlcouNUPHIqap0",
+  shortValues: "gtTABCmdeMrE",
+  long: [
+    "line-number",
+    "ignore-case",
+    "smart-case",
+    "case-sensitive",
+    "fixed-strings",
+    "word-regexp",
+    "line-regexp",
+    "invert-match",
+    "files-with-matches",
+    "files-without-match",
+    "count",
+    "count-matches",
+    "only-matching",
+    "files",
+    "hidden",
+    "no-ignore",
+    "no-ignore-vcs",
+    "no-ignore-dot",
+    "no-ignore-parent",
+    "no-ignore-global",
+    "unrestricted",
+    "no-heading",
+    "heading",
+    "no-line-number",
+    "column",
+    "json",
+    "vimgrep",
+    "multiline",
+    "multiline-dotall",
+    "pcre2",
+    "trim",
+    "with-filename",
+    "no-filename",
+    "quiet",
+    "stats",
+    "null",
+    "no-messages",
+    "text",
+    "pretty",
+    "no-config",
+    "byte-offset",
+    "passthru",
+    "type-list",
+    "max-columns-preview",
+  ],
+  longValues: [
+    "glob",
+    "iglob",
+    "type",
+    "type-not",
+    "after-context",
+    "before-context",
+    "context",
+    "max-count",
+    "max-depth",
+    "regexp",
+    "color",
+    "sort",
+    "sortr",
+    "max-columns",
+    "max-filesize",
+    "replace",
+    "encoding",
+    "context-separator",
+  ],
+  pattern: ["e", "regexp"],
+  pathsOnly: ["files", "type-list"],
+};
+
+function rgReads(words: string[]): string[] | null {
+  return flagReads(words, RG);
+}
+
+/** The positional arguments that name paths, or null for an option outside `flags`. */
+function flagReads(words: string[], flags: Flags): string[] | null {
+  const positional: string[] = [];
+  const given = new Set<string>();
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i]!;
+    if (word === "--") {
+      positional.push(...words.slice(i + 1));
+      break;
+    }
+    if (word === "-" || !word.startsWith("-")) {
+      positional.push(word);
+      continue;
+    }
+    if (word.startsWith("--")) {
+      const [name, value] = word.slice(2).split(/=(.*)/s, 2) as [string, string | undefined];
+      if (value !== undefined) {
+        if (!flags.longValues?.includes(name)) return null;
+      } else if (flags.long?.includes(name)) {
+        // A switch.
+      } else if (flags.longValues?.includes(name)) {
+        if (i + 1 >= words.length) return null;
+        i += 1;
+      } else return null;
+      given.add(name);
+      continue;
+    }
+    if (flags.numeric && /^-\d+$/.test(word)) continue;
+    for (let j = 1; j < word.length; j += 1) {
+      const letter = word[j]!;
+      given.add(letter);
+      if (flags.short?.includes(letter)) continue;
+      if (!flags.shortValues?.includes(letter)) return null;
+      // The rest of the word is the value, or else the next word.
+      if (j === word.length - 1) {
+        if (i + 1 >= words.length) return null;
+        i += 1;
+      }
+      break;
+    }
+  }
+  const pathsOnly = flags.pathsOnly?.some((name) => given.has(name));
+  const hasPattern = flags.pattern && !pathsOnly && !flags.pattern.some((name) => given.has(name));
+  return hasPattern ? positional.slice(1) : positional;
+}
+
+/** `find` with tests that only filter and print; never `-exec`, `-delete`, `-fprint` or following links. */
+function findReads(words: string[]): string[] | null {
+  const VALUE = ["-name", "-iname", "-path", "-ipath", "-wholename", "-iwholename", "-type", "-maxdepth", "-mindepth"];
+  const VALUE_MORE = ["-size", "-mtime", "-mmin", "-atime", "-regex", "-iregex"];
+  const ALONE = ["-print", "-print0", "-empty", "-not", "-o", "-or", "-a", "-and", "-prune", "-true", "-false"];
+  const ALONE_MORE = ["-depth", "-readable", "!", "(", ")"];
+  let i = 0;
+  if (words[0] === "-P") i = 1;
+  const starts: string[] = [];
+  for (; i < words.length && !/^[-!()]/.test(words[i]!); i += 1) starts.push(words[i]!);
+  for (; i < words.length; i += 1) {
+    const word = words[i]!;
+    if (VALUE.includes(word) || VALUE_MORE.includes(word)) {
+      if (i + 1 >= words.length) return null;
+      i += 1;
+    } else if (!ALONE.includes(word) && !ALONE_MORE.includes(word)) return null;
+  }
+  return starts;
+}
+
+const GIT_READS = new Set(["status", "diff", "log", "show"]);
+const GIT_GLOBAL = new Set(["--no-optional-locks", "--no-pager", "-P"]);
+/** Options of the read subcommands that write a file, read one named by the option, or run another program. */
+const GIT_REFUSED =
+  /^(?:--output(?:[=-]|$)|--no-index$|--ext-diff$|-O|--contents?(?:=|$)|--ignore-revs-file|--show-signature)/;
+
+/**
+ * `git status`, `diff`, `log` and `show`. Their other arguments are revisions or paths inside the repository; a
+ * `rev:path` names a file in git's history, everything else is checked as a path.
+ */
+function gitReads(words: string[]): string[] | null {
+  let i = 0;
+  while (i < words.length && GIT_GLOBAL.has(words[i]!)) i += 1;
+  if (!GIT_READS.has(words[i] ?? "")) return null;
+  const reads: string[] = [];
+  let paths = false;
+  for (const word of words.slice(i + 1)) {
+    if (paths) {
+      reads.push(word);
+    } else if (word === "--") {
+      paths = true;
+    } else if (word.startsWith("-")) {
+      if (GIT_REFUSED.test(word)) return null;
+    } else {
+      const object = /^([A-Za-z0-9_.~^@{}/-]{2,}):(.*)$/.exec(word);
+      if (object) {
+        const [, revision, file] = object;
+        if (/(^|\/)\.\.(\/|$)/.test(revision!) || /^[\\/]|\\|(^|\/)\.\.(\/|$)/.test(file!)) return null;
+      } else reads.push(word);
+    }
+  }
+  return reads;
+}

@@ -66,6 +66,16 @@ component source, patterns and the gallery specimens.
     runs in the user's own home with only those settings, and Basis says so on the console. No Windows sandbox is
     configured in Basis' home, so on Windows Codex asks before every command: the elevated sandbox is set up per
     home with an administrator prompt, and the unelevated one cannot start PowerShell installed from the Store.
+  - Basis approves Codex's commands that only read (`isCodexRead` in `server/agent.ts`), as Claude Code's reads are.
+    Codex reports every command as `execute`, but its approval request carries the command line (the shell and
+    script, POSIX-quoted, `"…\pwsh.exe" -Command 'Get-Content a.ts'`) and its folder. `server/commands.ts` reads
+    PowerShell and POSIX scripts in a strict subset: plain words and quotes, `;`, `|`, `&&`, `||` and dropping
+    errors (`2>$null`, `2>&1`); listed cmdlets with listed parameters (Get-Content, Get-ChildItem, Select-String,
+    Test-Path, Get-Item, Resolve-Path and filters like Select-Object) and programs with listed options (`rg`,
+    `git status|diff|log|show`, and in POSIX shells `cat`, `head`, `tail`, `wc`, `ls`, `grep`, `find`). Anything
+    else (variables, subexpressions, script blocks, redirection into files, wildcards in paths, other programs or
+    options) asks. Every path it reads, the folder and Codex's own locations must be in the workspace or the repo,
+    and a shell started by path must not be.
   - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` tool. The agent
     starts `server/agent-tools-mcp.mjs` with Node over stdio (the transport every ACP agent supports); the script
     has no dependencies and only speaks MCP's JSON-RPC, forwarding `tools/list` and `tools/call` to the chrome
@@ -424,11 +434,11 @@ comparison of the whole gallery between two history entries, the icon, and publi
   through CSS variables, is not found by `reach.ts`; its section is then left out of "Also changed".
 - **Codex** on macOS and Linux runs read-only commands in its sandbox without asking, even in read-only mode.
   Such reads do not reach Basis' approval as Claude Code's do; whether its sandbox lets them read outside the
-  workspace has not been tested. On Windows it asks before every command instead, reads included (one prompt per
-  `Get-Content`), since Basis' Codex home has no Windows sandbox; approving Codex's single-file reads inside the
-  workspace automatically, as Claude Code's are, would need the kind and path from the tool call it reported
-  before, since the approval request carries neither. A user whose Codex login is not in `auth.json` gets Codex
-  with their own AGENTS.md and config.
+  workspace has not been tested. On Windows it asks before every command instead, since Basis' Codex home has no
+  Windows sandbox; Basis approves the reads it can tell apart (`server/commands.ts`), and a read it does not
+  understand still asks: a wildcard in a path (`Get-Content *.css`), `ForEach-Object` or `Where-Object`, a
+  variable, a pipe into an unlisted cmdlet, or a program other than `rg` and `git`. A user whose Codex login is
+  not in `auth.json` gets Codex with their own AGENTS.md and config.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

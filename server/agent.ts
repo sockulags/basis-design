@@ -25,6 +25,7 @@ import { basisTool, basisToolTitle } from "./agent-tools.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import { CLAUDE_MISSING, findClaude } from "./claude.ts";
 import { codexEnv } from "./codex.ts";
+import { isApprovableRead } from "./commands.ts";
 import type { Workspace } from "./workspace.ts";
 
 interface LaunchSpec {
@@ -114,7 +115,8 @@ const SESSION_META = {
 /**
  * Per agent, the session mode in which it asks before every edit, so edits go through onPermission and Basis'
  * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked,
- * except on Windows, where Basis' Codex home has no sandbox (server/codex.ts) and every command asks.
+ * except on Windows, where Basis' Codex home has no sandbox (server/codex.ts) and every command asks; Basis then
+ * approves the ones that only read the workspace or the linked repo (isCodexRead).
  */
 const ASKING_MODES: Record<AgentId, string> = { claude: "default", codex: "read-only" };
 const MAX_AUTO_FIXES = 2;
@@ -714,7 +716,8 @@ ${message}`
     const allowOnce = options.find((option) => option.kind === "allow_once");
     // Basis' own tools only look at the design, so they need no approval.
     const ownTool = basisTool(call) ?? this.basisCalls.get(`tool-${call.toolCallId}`);
-    if ((autoAllow || ownTool) && allowOnce) return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
+    if ((autoAllow || ownTool || this.isCodexRead(call)) && allowOnce)
+      return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
 
     const id = this.nextId("permission");
     const title = call.title ?? "The agent wants to run a tool";
@@ -727,6 +730,19 @@ ${message}`
     return chosen
       ? { outcome: { outcome: "selected", optionId: chosen.optionId } }
       : { outcome: { outcome: "cancelled" } };
+  }
+
+  /**
+   * A command Codex asks to run that only reads the workspace or the linked repo, as Claude Code's reads do there.
+   * Codex reports every command, reads included, as `execute`; the approval request carries the command line and
+   * its folder (`server/commands.ts` decides from those), and the paths Codex itself saw in it as locations, which
+   * must be readable too. Claude Code's own shell commands still ask.
+   */
+  private isCodexRead(call: acp.RequestPermissionRequest["toolCall"]): boolean {
+    if (this.state.id !== "codex" || call.kind !== "execute") return false;
+    const readable = (target: string) => relativeInside(this.workspace.dir, target) !== null || this.inRepo(target);
+    const located = (call.locations ?? []).every((location) => readable(location.path));
+    return located && isApprovableRead(call.rawInput, this.workspace.dir, readable);
   }
 
   private async readTextFile(params: acp.ReadTextFileRequest): Promise<acp.ReadTextFileResponse> {

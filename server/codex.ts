@@ -18,7 +18,8 @@ import path from "node:path";
  *
  * No Windows sandbox is chosen, so on Windows Codex asks before every command, reads included: the elevated
  * sandbox is set up per home with an administrator prompt, and the unelevated one cannot start PowerShell when it
- * comes from the Microsoft Store.
+ * comes from the Microsoft Store. Basis answers the requests for commands that only read the workspace or the
+ * linked repo itself (server/commands.ts).
  */
 export const CODEX_SETTINGS = {
   skills: { include_instructions: false, bundled: { enabled: false } },

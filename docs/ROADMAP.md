@@ -87,7 +87,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       turns (found while building the screenshot tool). Start Codex so it reads only what Basis gives it, the way
       Claude is started, keeping the user's login. Done when: a real Codex turn no longer lists or reads the user's
       skills, and still works with the screenshot tool.
-- [ ] **Codex reads without a prompt each.** Since Codex runs in Basis' own home without a sandbox on Windows, it
+- [x] **Codex reads without a prompt each.** Since Codex runs in Basis' own home without a sandbox on Windows, it
       asks before every command, reads included, which makes a design turn tedious. Approve Codex's read-only
       commands automatically when every path they touch is inside the workspace or the linked repo, as Claude
       Code's reads are; Codex's approval request carries neither the command's kind nor its path, so take them
@@ -183,6 +183,46 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Codex reads without a prompt each. Logged from a real Codex turn first: the step assumed the approval
+  request carries neither kind nor path, and that held only for the kind. Every request says `execute`, with Codex's
+  own title ("Read file", "Run command") and, for a command Codex parsed as a single read, its path as a location;
+  but its `rawInput` is the whole command line and folder, `{ command: "\"…\\pwsh.exe\" -Command 'Get-Content
+  AGENTS.md'", cwd }`, the argument list Codex runs joined with POSIX quotes. The tool call reported before has
+  less: no raw input at all for a read, and only the script without its shell otherwise. So Basis decides from the
+  request's own command line, which is exactly what the approval runs, and requires Codex's locations to be
+  readable too; nothing is remembered from the earlier report. `server/commands.ts` takes the line apart as POSIX
+  words, finds `pwsh`/`powershell` with `-Command` (only `-NoProfile`, `-NoLogo` and `-NonInteractive` besides) or
+  `bash`/`sh`/`zsh -lc`, and reads the script in a strict subset: plain words, quotes without expansions, `;`,
+  `|`, `&&`, `||` and only the redirections that drop or merge errors. Everything else is refused: `$` in any form,
+  backticks, parentheses, braces, `@`, `[`, `#`, `&`, other redirections, `--%`, newlines, and any character that is
+  not printable ASCII, since PowerShell reads typographic quotes and dashes as quotes and dashes. Then every command
+  of the script must be a listed read: Get-Content, Get-ChildItem, Select-String, Test-Path, Get-Item, Resolve-Path,
+  Get-Location and the filters Select-Object, Sort-Object, Measure-Object, Format-Table, Format-List and Out-String
+  (with Windows' aliases), each with an exact list of parameters, so `-Wait`, `-Stream`, `-FollowSymlink` and
+  abbreviations ask; `rg` without `--pre`, `-z`, `-L`, `-f` or `--ignore-file`; `git status`, `diff`, `log` and `show`
+  without global options other than `--no-optional-locks` and `--no-pager`, and without `--output`, `--no-index`,
+  `--ext-diff`, `-O`, `--contents` or `--show-signature`; and in POSIX shells `cat`, `head`, `tail`, `wc`, `ls`,
+  `grep` (no `-R`, no `-f`) and `find` (only tests that filter and print). Patterns are left out of the paths;
+  every other argument that may name a file is resolved against the folder and checked like Claude Code's reads
+  (inside the workspace, the workspace itself included, or the linked repo, after following links). A path is
+  refused before resolving when resolving cannot be trusted: wildcards, `~`, UNC and device paths, a colon other
+  than a drive's (`env:`, `HKLM:`, alternate data streams, `C:file`), and names ending in a dot or space, which
+  Windows trims (`.. ` would be `..`). Arguments for `rg` and `git` from PowerShell are refused when PowerShell may
+  pass them differently than written (arrays, empty, with `"`, and in Windows PowerShell 5.1 with spaces), and 5.1
+  may not recurse, since its Get-ChildItem follows links. A shell started by path must not lie in the workspace or
+  the repo, where the agent writes files. A request that also asks for network access or extra permissions has
+  more in its raw input and asks. When the adapter has taken `bash -lc` off a POSIX line, its single quotes come as
+  `'"'"'` that cannot be read back, so such a line asks. Only Codex's requests are read this way; Claude Code's
+  shell commands still ask, since its own read and search tools cover what it needs. Verified with unit tests (the
+  commands from the logged turn, and hostile ones: `cat a; rm -rf b`, `Get-Content x | Set-Content y`,
+  `rg foo > out`, `..\..\` escapes, absolute paths outside, UNC paths, `$env:USERPROFILE`, `$(...)` and backticks)
+  and on a throwaway instance with a copy of the Harbor fixture linked: a Codex design turn on the danger button
+  read four times (Get-Content of three workspace files and the guidelines, `rg` in components, `rg --files` and
+  Get-Content in the repo) with no prompt, a follow-up turn changed the weight, read the stylesheet again and took
+  a screenshot with no prompt, while `Get-Content` of a file in `$TEMP` outside the workspace, the same file by
+  `..\..\..\`, and `rg danger components > found.txt` each asked. A Claude turn on the same instance then read
+  and searched without a prompt and still asked for `git status --short` in its shell.
 
 - 2026-10-19: Keep Codex out of the user's own setup. Codex 0.160.1 (the adapter's) reads `AGENTS.md` from its home
   folder through a provider with no setting to turn it off, and `thread/start` cannot replace it, so config
