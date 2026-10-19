@@ -30,6 +30,8 @@ const GALLERY_LABELS = [gallery.groupTitle, gallery.colHead, gallery.caption].ma
 let timer: ReturnType<typeof setTimeout> | undefined;
 let running = false;
 let again = false;
+/** A run is asked for and has not started: a run ending meanwhile does not end the checking. */
+let scheduled = false;
 /** This document's findings by check, and the ones the copy in the other theme reported, as the preview lists them. */
 let own: Record<Check, string[]> = { Accessibility: [], Layout: [] };
 let other: string[] = [];
@@ -73,6 +75,7 @@ export function onOwnFindings(listener: (findings: string[], running: boolean) =
 
 /** Asks for the checks soon; the fix loop waits for them, so they report as running from now on. */
 export function scheduleDemoChecks(): void {
+  scheduled = true;
   setOwn(null, true);
   clearTimeout(timer);
   timer = setTimeout(() => void run(), DELAY_MS);
@@ -84,6 +87,7 @@ async function run(): Promise<void> {
     return;
   }
   running = true;
+  scheduled = false;
   try {
     const roots = [...document.querySelectorAll(`[${CHECKED}]`)];
     if (roots.length) {
@@ -101,7 +105,8 @@ async function run(): Promise<void> {
       again = false;
       scheduleDemoChecks();
     } else {
-      setOwn(own, false);
+      // A run that started before the last change does not check what the page shows now (new widths, say).
+      setOwn(own, scheduled);
     }
   }
 }

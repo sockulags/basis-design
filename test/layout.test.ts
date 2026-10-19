@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { atWidth, innermost, layoutFinding, startTag, sticksOut, textCut, type Box } from "../shared/layout.ts";
+import {
+  atWidth,
+  findingWidth,
+  innermost,
+  layoutFinding,
+  startTag,
+  sticksOut,
+  textCut,
+  type Box,
+} from "../shared/layout.ts";
 
 const box = (left: number, top: number, right: number, bottom: number): Box => ({ left, top, right, bottom });
 const frame = box(0, 0, 343, 800);
@@ -55,5 +64,11 @@ describe("layout check", () => {
       'Team members, dark, at 375px: content does not fit the frame: it runs past an edge or scrolls sideways, for example <div class="_scroll_1">',
     );
     assert.match(layoutFinding("Buttons", "light", "fit", "target-size", "<button>"), /WCAG 2\.5\.8/);
+  });
+
+  test("the width a finding names is read back, so a change of widths is not blamed on the agent", () => {
+    assert.equal(findingWidth(`Layout: ${layoutFinding("Navbar", "light", 390, "overflow", "<nav>")}`), 390);
+    assert.equal(findingWidth(`Layout: ${layoutFinding("Navbar", "light", "fit", "overflow", "<nav>")}`), null);
+    assert.equal(findingWidth("Accessibility: Navbar, light: Buttons must have discernible text, at 390px: "), null);
   });
 });

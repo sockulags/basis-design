@@ -112,6 +112,53 @@ describe("after a turn, the fix loop", () => {
   });
 });
 
+describe("the layout check after the user changes the widths", () => {
+  const layout = (width: number) =>
+    `Layout: Navbar, light, at ${width}px: content does not fit the frame: it runs past an edge or scrolls sideways, for example <nav>`;
+  const mobile = { mobile: 390, tablet: 768, desktop: 1440 };
+
+  function fixLoop() {
+    const agent = new AgentHost(new Workspace(path.join(root, "widths")), "claude", undefined, [], root);
+    const inner = agent as unknown as { noteChecksBefore(): void; collectProblems(): Promise<string | null> };
+    return { agent, turnStarts: () => inner.noteChecksBefore(), problems: () => inner.collectProblems() };
+  }
+
+  test("does not blame a turn for findings at the new widths the preview had not checked when it started", async () => {
+    const { agent, turnStarts, problems } = fixLoop();
+    agent.setPreviewErrors([], [], false, 1);
+    agent.widthsChanged(mobile, { mobile: 375, tablet: 768, desktop: 1440 });
+    // A report from before the preview saw the new widths does not count as their check.
+    agent.setPreviewErrors([], [], false, 1);
+    turnStarts();
+    agent.setPreviewErrors([], [layout(390), layout(1440)], false, 1);
+    const sent = (await problems()) ?? "";
+    assert.ok(!sent.includes("at 390px"), "the finding at the new width is the user's change");
+    assert.ok(sent.includes("at 1440px"), "a finding at a width that did not change is the turn's");
+    assert.ok(sent.includes("the project's Mobile width, 375px"));
+  });
+
+  test("blames the next turn once the preview has checked the new widths", async () => {
+    const { agent, turnStarts, problems } = fixLoop();
+    agent.setPreviewErrors([], [], false, 1);
+    agent.widthsChanged(mobile, { mobile: 375, tablet: 768, desktop: 1440 });
+    agent.setPreviewErrors([], [], true, 1);
+    agent.setPreviewErrors([], [], false, 1);
+    turnStarts();
+    agent.setPreviewErrors([], [layout(390)], false, 1);
+    assert.match((await problems()) ?? "", /at 390px/);
+  });
+
+  test("leaves findings at widths the user chose during the turn out of it", async () => {
+    const { agent, turnStarts, problems } = fixLoop();
+    agent.setPreviewErrors([], [], false, 1);
+    turnStarts();
+    agent.widthsChanged(mobile, { mobile: 375, tablet: 768, desktop: 1440 });
+    agent.setPreviewErrors([], [], true, 1);
+    agent.setPreviewErrors([], [layout(390)], false, 1);
+    assert.equal(await problems(), null);
+  });
+});
+
 describe("threads", () => {
   /** Waits for a condition the agent reaches on its own. */
   async function until(done: () => boolean): Promise<void> {

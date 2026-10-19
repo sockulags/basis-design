@@ -4,7 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import readline from "node:readline";
 import { test } from "node:test";
-import { captureShots, type CaptureList } from "../shared/capture.ts";
+import { captureShots, DEFAULT_CAPTURE_WIDTHS, type CaptureList } from "../shared/capture.ts";
 import {
   basisTool,
   basisToolTitle,
@@ -36,6 +36,7 @@ const list: CaptureList = {
     },
   ],
   problems: [],
+  widths: DEFAULT_CAPTURE_WIDTHS,
 };
 
 const sizes = (plan: ReturnType<typeof planCapture>) => plan.shots.map((shot) => `${shot.width}-${shot.theme}`);
@@ -57,6 +58,11 @@ test("a screenshot call defaults to the narrowest width in both themes", () => {
     "768-dark",
     "1440-dark",
   ]);
+});
+
+test("a specimen's narrowest width is the project's Mobile width", () => {
+  const project = { ...list, widths: [390, 768, 1440] };
+  assert.deepEqual(sizes(planCapture(project, ...args({ target: "buttons" }))), ["390-light", "390-dark"]);
 });
 
 function args(raw: unknown) {

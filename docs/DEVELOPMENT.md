@@ -113,7 +113,7 @@ component source, patterns and the gallery specimens.
     server at `/agent-tools/<project>/` on 127.0.0.1 with a secret made at each start (in the script's env), so no
     other program or page can use the route. Each project's server has its own URL (`toolsUrl`), so the tool
     photographs through that project's `screenshots` whichever project a tab shows: by default
-    the narrowest width in both themes, at most four images, full pages cut at 2000 px with the cut said in the
+    the narrowest width (for a specimen, the project's Mobile width) in both themes, at most four images, full pages cut at 2000 px with the cut said in the
     text. `onPermission` approves Basis' own tools without asking: Claude Code titles them `mcp__basis__<tool>`,
     Codex `mcp.basis.<tool>`, and Codex's approval request carries only the id of the tool call it reported
     before, so `AgentHost` remembers those ids. The chat shows such a call as "Screenshot of <target>".
@@ -172,6 +172,13 @@ component source, patterns and the gallery specimens.
   - `reviews.ts`: the open review (see below).
   - `snapshots.ts`: read-only copies of past versions in `.basis/snapshots/<commit>/`.
   - `paths.ts`, `exec.ts`: shared paths, git and tsc helpers.
+  - `widths.ts`: the project's widths for Mobile, Tablet and Desktop (`shared/widths.ts`, defaults 375, 768 and
+    1440) in `.basis/widths.json`: Basis' file, outside git, so Undo, restores and reviews leave them alone, and
+    copied with a project. `Workspace.setWidths` saves them and emits `widths`; `OpenProject` sends them to the
+    project's tabs at once (a `widths` message, never held like `design`) and tells `AgentHost`, which names them
+    in every turn's context. The control next to Show at (in the preview, `FrameBar.tsx`) sends `widths-set`,
+    which the chrome passes on only right after a user action in the frame, as with full screen; the server
+    checks them again (`parseWidths`).
 - `server/brief.ts`: the agent's instructions, also sent as an appended system prompt.
 - `server/guidelines.md`: design guidelines distilled from WCAG 2.2, the ARIA practices, Material, Apple, GOV.UK,
   Carbon, Atlassian, Polaris, Spectrum and Nielsen Norman Group, written to `.basis/guidelines.md` on every start.
@@ -183,7 +190,7 @@ component source, patterns and the gallery specimens.
   - `capture.html` renders one screen of one view alone (`?view=&screen=&theme=`), one specimen's blocks as the
     gallery renders them without the section header (`?specimen=&theme=`, at the width the browser gives it), or
     lists every specimen, every view's screens and the shots their flow blocks ask for (`?list`, into
-    `window.__basisCapture`). It reads the tokens
+    `window.__basisCapture`; `&widths=` gives the project's widths for flows without their own, `listQuery`). It reads the tokens
     from `./design.json`: the preview server answers that path with the open design, and the kit's static copy
     has the file beside it. It sets `data-basis-ready` on `<html>` once fonts, images and the layout's size
     have settled, and `data-basis-error` when the screen threw. The chrome origin 404s it like `preview.html`.
@@ -243,7 +250,8 @@ component source, patterns and the gallery specimens.
   The chrome reaches both through `POST /api/pick-folder` and `POST /api/repos`, which answer only POSTs from its
   own origin, so another page can neither open dialogs nor read the list. `FolderField` and `BrowseButton`
   (`src/shell/FolderField.tsx`) use them in the project dialogs and the export.
-- `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `tokens.ts` (CSS variables and
+- `shared/`: `design.ts` (zod schema and defaults for `design-system.json`), `widths.ts` (the project's widths and
+  their validation), `tokens.ts` (CSS variables and
   exports), `protocol.ts` (bridge messages), `frame.ts` (chrome-iframe messages, pages, and the parser for
   untrusted preview input), `review.ts` (review.json format), `contracts.ts`, `annotations.ts`, `diff.ts`.
 - `src/` (chrome): `App.tsx` keeps the bridge, tags what each workbench sends with its project, and mounts
@@ -303,7 +311,9 @@ A change to a variable every component inherits from the gallery root (font, tex
 leading) reaches everything.
 
 A target can ask for `widths`; the preview then renders each block in frames (`Framed` in `specimens.tsx`),
-which are size containers. The gallery's Show at bar uses the same frames, and can also show both themes; a
+which are size containers at the project's widths (`ProjectWidths`, from `PreviewView.widths`), sized as content
+boxes so the content gets exactly the width shown with the frame's padding outside it; a view's screen
+(`.flowScreen`) draws its edge as an outline for the same reason. The gallery's Show at bar uses the same frames, and can also show both themes; a
 review shows one theme at a time (Lucas prefers toggling), which starts from the system theme. Blink
 stacks the panes in one grid cell and hides all but one; the panes of a view's target share its flow position
 (`FlowSync` in `specimens.tsx`), so every side shows the same screen; the chrome forwards the B key to the preview, so it
@@ -353,9 +363,14 @@ line clamp (vertically), judged on the text's own line boxes so clipped images a
 count; and axe's `target-size` rule (WCAG 2.5.8, off by default in axe, enabled in the same axe run since axe runs
 one at a time), which exempts links in running text and small targets with enough space around them. The gallery's
 own wrappers and scroll areas (the matrix that scrolls on a phone on purpose) never count, and invisible content
-(a tooltip until hovered) does not count as past the edge. Findings name the demo, theme, width and an example
-element, one per demo, theme, width and rule. The copy in the other theme always adds the 375px width to its
-frames, the review's live side included, so a phone is checked whatever widths the user looks at. The fix loop sends introduced layout findings in a
+(a tooltip until hovered) does not count as past the edge. A Show at frame is judged by its content box (the width shown,
+without the frame's padding). Findings name the demo, theme, width and an example element, one per demo, theme,
+width and rule. The copy in the other theme always adds the project's Mobile width to its frames, the review's
+live side included, so a phone is checked whatever widths the user looks at. When the user changes the widths,
+`AgentHost.widthsChanged` notes the new ones until the preview has reported checks running and then done; a
+turn that starts before that, or during which they change, does not get layout findings at those widths (they
+name their width, `findingWidth`). A check run that ends while another is scheduled reports itself as still
+running (`scheduled` in `a11y.ts`), so a quiet report always covers what the page shows. The fix loop sends introduced layout findings in a
 section of their own that points at the screenshot tool.
 
 Views that render differently each time (`server/stability.ts`) are problems rather than findings, since such a
@@ -511,6 +526,8 @@ TypeScript server through tsx). Publishing is the maintainer's call.
 - **Screenshots only match on the same machine:** fonts, hinting and antialiasing differ between operating
   systems, so the kit's README has the implementing agent capture the design and the implementation with the same
   browser on the same machine; `screens/` is the reference only when nothing else is there.
+- **No form submits in the preview:** its sandbox has no `allow-forms`, so a `<form>`'s submit (Enter in a field
+  included) is blocked before any `submit` event. Handle Enter on the fields, as the widths control does.
 - **Section ids** must stay under 80 characters: the chrome truncates longer ones from the preview. Repeated ids
   become `id-2`, `id-3` (they used to grow as `id-2-2-2`, which broke navigation with many duplicates).
 

@@ -20,8 +20,9 @@ import {
   type ThreadSummary,
   type ToolStatus,
 } from "../shared/protocol.ts";
-import { LAYOUT_CHECK } from "../shared/layout.ts";
+import { findingWidth, LAYOUT_CHECK } from "../shared/layout.ts";
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
+import { describeWidths, widthList, type Widths } from "../shared/widths.ts";
 import {
   loadThreads,
   newThreadId,
@@ -223,6 +224,14 @@ export class AgentHost extends EventEmitter<Events> {
   private checks: string[] = [];
   private checksBefore = new Set<string>();
   private checking = false;
+  /**
+   * Widths the user chose that the preview has not checked yet (see widthsChanged), and those of them the running
+   * turn started with or saw chosen: layout findings at them are the user's change, not the turn's.
+   */
+  private uncheckedWidths = new Set<number>();
+  private turnWidths = new Set<number>();
+  /** Whether the preview reported checks running since the widths changed, so its next quiet report has them. */
+  private checkedSinceWidths = false;
   /** The generation of the reporting tab's preview document, or null when no tab reports (see server/hold.ts). */
   private previewGeneration: number | null = null;
   /** The generation the gallery reloaded after the last turn reports, or null when the turn changed nothing it shows. */
@@ -274,6 +283,20 @@ export class AgentHost extends EventEmitter<Events> {
   /** Links or unlinks the product repo; the session gets it as a working directory from the next turn (syncRepo). */
   setRepo(repo: string | undefined): void {
     this.repo = repo;
+  }
+
+  /**
+   * The user chose other widths. The layout check finds what it finds at the new ones once the preview has checked
+   * them; until then (and in a turn that runs meanwhile) findings at them are not the agent's to fix.
+   */
+  widthsChanged(widths: Widths, before: Widths): void {
+    const previous = widthList(before);
+    for (const width of widthList(widths)) {
+      if (previous.includes(width)) continue;
+      this.uncheckedWidths.add(width);
+      this.turnWidths.add(width);
+    }
+    this.checkedSinceWidths = false;
   }
 
   private inRepo(target: string): boolean {
@@ -598,7 +621,7 @@ export class AgentHost extends EventEmitter<Events> {
     await this.workspace.beginTurn(turn.label, thread.title);
     // Each turn, the fix-ups included, holds the preview on its own: the fix loop needs to see each one's result.
     this.preview?.hold();
-    this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
+    this.noteChecksBefore();
     const message = turn.text || "See the attached context.";
     const body = thread.needsPreamble
       ? `${FIRST_PROMPT_PREAMBLE}
@@ -606,7 +629,7 @@ export class AgentHost extends EventEmitter<Events> {
 ${message}`
       : message;
     thread.needsPreamble = false;
-    const blocks: acp.ContentBlock[] = [];
+    const blocks: acp.ContentBlock[] = [{ type: "text", text: widthsContext(this.workspace.widths) }];
     if (this.repo) {
       const hasNotes = existsSync(path.join(this.workspace.dir, PRODUCT_FILE));
       blocks.push({ type: "text", text: repoContext(this.repo, hasNotes) });
@@ -703,6 +726,12 @@ ${message}`
     ].join(" ");
   }
 
+  /** What there is when a turn starts, so the fix loop sends the agent only what the turn introduced. */
+  private noteChecksBefore(): void {
+    this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
+    this.turnWidths = new Set(this.uncheckedWidths);
+  }
+
   /**
    * Render errors and check findings of the current tab's preview (chosen by PreviewReports); they feed the
    * auto-fix loop.
@@ -721,6 +750,9 @@ ${message}`
     this.previewErrors = strings(errors, 10, 600);
     this.checks = strings(checks, 60, 400);
     this.checking = checking;
+    // A quiet report after checks that ran since the widths changed has the new widths' findings.
+    if (checking) this.checkedSinceWidths = true;
+    else if (this.checkedSinceWidths) this.uncheckedWidths.clear();
     this.previewGeneration = generation;
   }
 
@@ -787,8 +819,10 @@ ${message}`
     // Only what this turn introduced: findings that were there before are the user's to ask about, and
     // repeating them would send the agent after them on every turn.
     const introduced = checks.filter((check) => !this.checksBefore.has(check));
-    const layout = introduced.filter((check) => check.startsWith(`${LAYOUT_CHECK}: `));
-    const accessibility = introduced.filter((check) => !layout.includes(check));
+    const layout = introduced.filter(
+      (check) => check.startsWith(`${LAYOUT_CHECK}: `) && !this.turnWidths.has(findingWidth(check) ?? 0),
+    );
+    const accessibility = introduced.filter((check) => !check.startsWith(`${LAYOUT_CHECK}: `));
     if (accessibility.length) {
       sections.push(
         `Your change fails these accessibility checks (WCAG 2 AA). Fix them, unless the user asked for exactly this; then say so instead:\n${list(accessibility)}`,
@@ -796,7 +830,7 @@ ${message}`
     }
     if (layout.length) {
       sections.push(
-        `Your change breaks the layout of these demos at the widths named (Basis checks every demo at 375px as well as at the widths the gallery shows). Look at each with the screenshot tool at that width, fix it and look again, unless the user asked for exactly this; then say so instead:\n${list(layout)}`,
+        `Your change breaks the layout of these demos at the widths named (Basis checks every demo at the project's Mobile width, ${this.workspace.widths.mobile}px, as well as at the widths the gallery shows). Look at each with the screenshot tool at that width, fix it and look again, unless the user asked for exactly this; then say so instead:\n${list(layout)}`,
       );
     }
     const fixedColors = this.workspace.state.colorFindings.filter((finding) => !this.checksBefore.has(finding));
@@ -1162,6 +1196,11 @@ interface Turn {
   annotations: Annotation[];
   label: string;
   instruction?: string;
+}
+
+/** Tells the agent the project's widths on every turn, since the user may change them between turns. */
+function widthsContext(widths: Widths): string {
+  return `This project's widths: ${describeWidths(widths)}. A flow without its own capture widths is captured at these, and Basis checks the layout of every demo at Mobile (see "Seeing your work" in AGENTS.md).`;
 }
 
 /** Tells the agent about the product repo linked to the project, on every turn. */

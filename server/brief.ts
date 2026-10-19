@@ -148,8 +148,8 @@ The rules that always apply:
   loading, error and long content, whichever apply, plus any state of its own. Every pattern that shows data
   should cover them; they are what reviews and the user check first.
 - Make patterns responsive with container queries (\`@container (max-width: 640px) { ... }\`), not \`@media\`.
-  The gallery can show every block at mobile, tablet and desktop widths inside a size container, and a pattern
-  lives in columns of any width in a real app, so it should respond to the space it gets, not the screen.
+  The gallery can show every block at the project's Mobile, Tablet and Desktop widths inside a size container, and
+  a pattern lives in columns of any width in a real app, so it should respond to the space it gets, not the screen.
 
 ## Views: whole screens
 
@@ -182,10 +182,11 @@ The rules that always apply:
   values, or animations and loading states that never settle. After a turn that changes a view, Basis captures
   each of its screens twice, the second time with the clock a day later, and reports the ones that differ and
   the ones that load images from other sites.
-- A flow block may say how its screens are captured: \`capture: { widths: [375, 768, 1440], height: "full",
-  themes: ["light"] }\` (those are the defaults). \`height\` is \`"full"\` for the whole page or a number for
-  exactly one viewport; add \`"dark"\` to \`themes\` when the product has a dark theme. Set widths to the
-  product's breakpoints when you know them.
+- A flow block may say how its screens are captured: \`capture: { widths: [360, 1280], height: "full",
+  themes: ["light"] }\`. Without \`widths\` its screens are captured at the project's Mobile, Tablet and Desktop
+  widths, which the user chooses in Basis and every message names. \`height\` is \`"full"\` (the default) for the
+  whole page or a number for exactly one viewport; add \`"dark"\` to \`themes\` when the product has a dark theme.
+  Set widths only when the view needs other widths than the project's.
 - Views are not exported with the design system and need no contract or index.
 - To review a view, show its specimen; \`rows\` picks screens by label or id (\`"rows": ["Shipment"]\`). The panes
   of a review move through the flow together, so before and after always show the same screen.
@@ -267,16 +268,18 @@ A project may design for a real product whose repo is linked in Basis; when it i
 Basis gives you a \`screenshot\` tool (its MCP server \`basis\`) that photographs the live design from what is saved:
 a specimen alone, as its gallery section shows it (\`target\`: its id or title, such as \`buttons\` or \`Navbar\`), or
 one screen of a view (\`target\`: the view, \`screen\`: the screen's id or label). By default it takes the narrowest
-width the target is shown at, in light and dark; \`widths\` and \`theme\` change that, up to ${MAX_SCREENSHOTS} images a call.
+width the target is shown at (the project's Mobile width, unless a view's flow names its own), in light and dark;
+\`widths\` and \`theme\` change that, up to ${MAX_SCREENSHOTS} images a call.
 
 - Look after every visual change, and before you open or update a review: at the narrowest width, in both themes.
 - Check what the code cannot tell you: text that wraps, clips or overflows, controls that crowd or misalign,
   spacing that is uneven, a state or colour that reads wrong in one theme. Fix what you see, then look again.
 - Look at wider widths too when the change is about layout. Tall pages are cut at ${MAX_SHOT_HEIGHT} px and the result says so.
-- Basis also checks the layout of every demo at 375px and at the widths the gallery shows: content that runs past
-  the edge or scrolls sideways (a strip meant to scroll uses scroll snapping), text cut off by \`overflow: hidden\`
-  without an ellipsis or line clamp, and controls smaller than 24 by 24px with too little space around them.
-  Findings name the width; look there with the tool.
+- Basis also checks the layout of every demo at the project's Mobile width (every message names the project's
+  widths) and at the widths the gallery shows: content that runs past the edge or scrolls sideways (a strip meant
+  to scroll uses scroll snapping), text cut off by \`overflow: hidden\` without an ellipsis or line clamp, and
+  controls smaller than 24 by 24px with too little space around them. Findings name the width; look there with
+  the tool.
 - In your reply, say what you looked at and what you fixed after looking.
 
 ## How to work

@@ -1,6 +1,8 @@
 import type { BrowserContext, Page } from "playwright-core";
 import {
   captureShots,
+  DEFAULT_CAPTURE_WIDTHS,
+  listQuery,
   type CaptureList,
   type CaptureOptions,
   type CaptureShot,
@@ -58,7 +60,8 @@ export interface CapturePlan {
 
 /**
  * Resolves a target against what the capture page lists and works out its shots. A specimen gets the defaults
- * of a flow without capture options; a view screen starts from what its flow block asks for. Given widths,
+ * of a flow without capture options (the project's widths the list was made with); a view screen starts from what
+ * its flow block asks for. Given widths,
  * themes or height replace those. Throws with the ids there are when the target is not among them.
  */
 export function planCapture(list: CaptureList, target: ShotTarget, options: ShotOptions = {}): CapturePlan {
@@ -108,7 +111,7 @@ export function planCapture(list: CaptureList, target: ShotTarget, options: Shot
         `No specimen "${target.specimen}". There are: ${list.specimens.map((specimen) => specimen.id).join(", ") || "none"}.`,
       );
     }
-    return limit({ query: { specimen: target.specimen }, shots: captureShots(given) });
+    return limit({ query: { specimen: target.specimen }, shots: captureShots(given, list.widths) });
   }
   const view = list.views.find((item) => item.id === target.view);
   if (!view) {
@@ -248,18 +251,27 @@ export interface ScreenshotsOptions {
   /** How long a page may take to settle; a compile error in the preview means it never does. */
   timeoutMs?: number;
   launch?: () => Promise<CaptureBrowser>;
+  /** The project's widths, narrowest first: what a flow without its own capture widths, or a specimen, gets. */
+  widths?: () => number[];
 }
 
 /** Screenshots from one preview server's capture page (`http://127.0.0.1:<preview port>/capture.html`). */
 export class Screenshots {
   private readonly browser: Keeper<OpenBrowser>;
   private readonly timeoutMs: number;
+  private readonly widths: () => number[];
 
   constructor(
     private readonly pageUrl: string,
-    { idleMs = 60_000, timeoutMs = 30_000, launch = launchCaptureBrowser }: ScreenshotsOptions = {},
+    {
+      idleMs = 60_000,
+      timeoutMs = 30_000,
+      launch = launchCaptureBrowser,
+      widths = () => DEFAULT_CAPTURE_WIDTHS,
+    }: ScreenshotsOptions = {},
   ) {
     this.timeoutMs = timeoutMs;
+    this.widths = widths;
     this.browser = new Keeper<OpenBrowser>(
       async () => {
         const opened = await launch();
@@ -376,9 +388,10 @@ export class Screenshots {
   }
 
   private async readList(page: Page): Promise<CaptureList> {
-    await this.settled(() => openCapturePage(page, `${this.pageUrl}?list`, this.timeoutMs));
+    const widths = this.widths();
+    await this.settled(() => openCapturePage(page, `${this.pageUrl}${listQuery(widths)}`, this.timeoutMs));
     const listed = await page.evaluate(() => window.__basisCapture);
-    return listed ?? { specimens: [], views: [], problems: [] };
+    return listed ?? { specimens: [], views: [], problems: [], widths };
   }
 
   /** Says what a timeout most likely means rather than Playwright's selector message. */

@@ -42,11 +42,28 @@ function paddingBox(element: Element): Box {
   return { left, top, right: left + element.clientWidth, bottom: top + element.clientHeight };
 }
 
+/**
+ * Inside a Show at frame's padding: the width the demo is shown at. The frame's padding lies outside that width,
+ * so content that reaches into it is past the edge.
+ */
+function contentBox(element: Element): Box {
+  const box = paddingBox(element);
+  const style = getComputedStyle(element);
+  return {
+    left: box.left + parseFloat(style.paddingLeft),
+    top: box.top + parseFloat(style.paddingTop),
+    right: box.right - parseFloat(style.paddingRight),
+    bottom: box.bottom - parseFloat(style.paddingBottom),
+  };
+}
+
 interface Frame {
   element: Element;
   where: string;
   theme: string;
   width: FrameWidth;
+  /** A Show at frame, judged by its content box; otherwise the box around the demo, by its padding box. */
+  framed: boolean;
 }
 
 function frameWidth(element: Element): FrameWidth {
@@ -64,6 +81,7 @@ function framesOf(root: Element): Frame[] {
     where,
     theme: element.closest("[data-theme]")?.getAttribute("data-theme") ?? "light",
     width: marked.length ? frameWidth(element) : "fit",
+    framed: marked.length > 0,
   }));
 }
 
@@ -73,7 +91,7 @@ function describe(element: Element): string {
 
 /** What one frame shows wrong: content past its edges or scrolling sideways, and text cut off. */
 function checkFrame(frame: Frame, add: (rule: LayoutRule, example: string) => void): void {
-  const edges = paddingBox(frame.element);
+  const edges = frame.framed ? contentBox(frame.element) : paddingBox(frame.element);
   const outside: Element[] = [];
   const scrollers: Element[] = [];
   const clipped: string[] = [];

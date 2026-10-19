@@ -6,7 +6,7 @@ import {
   type Page,
   type Request,
 } from "playwright-core";
-import { READY_ATTRIBUTE, shotFile, type CaptureShot, type CaptureView } from "../shared/capture.ts";
+import { listQuery, READY_ATTRIBUTE, shotFile, type CaptureShot, type CaptureView } from "../shared/capture.ts";
 import { boxesExpression, MEDIA_SELECTOR, type Boxes } from "./verify-kit/compare.mjs";
 
 /*
@@ -151,17 +151,19 @@ export async function takeShot(
 
 /**
  * Captures every shot of every view the capture page at `pageUrl` lists. `pageUrl` is the page without a query
- * (".../capture.html" on the preview server, ".../index.html" in the kit's copy of the design).
+ * (".../capture.html" on the preview server, ".../index.html" in the kit's copy of the design). `widths` are the
+ * project's, for flows without capture widths of their own.
  */
 export async function captureViews(
   pageUrl: string,
   browser: Browser,
+  widths: number[],
   onProgress?: (done: number, total: number) => void,
 ): Promise<CaptureResult> {
   const context = await browser.newContext(CAPTURE_CONTEXT);
   try {
     const page = await context.newPage();
-    await openCapturePage(page, `${pageUrl}?list`);
+    await openCapturePage(page, `${pageUrl}${listQuery(widths)}`);
     const listed = await page.evaluate(() => window.__basisCapture);
     const views = listed?.views ?? [];
     const problems = listed?.problems ?? [];

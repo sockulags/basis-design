@@ -6,6 +6,7 @@ import path from "node:path";
 import { createServer as createVite } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
 import { isComponentName, isPageId, pageById } from "../shared/frame.ts";
+import { parseWidths, widthList } from "../shared/widths.ts";
 import {
   AGENT_IDS,
   type AgentId,
@@ -257,6 +258,7 @@ async function verificationKit(
     const { files, summary } = await buildVerificationKit({
       design: target.workspace.state.design,
       workspaceDir: target.workspace.dir,
+      widths: widthList(target.widths),
       onProgress: (step, done, total) => sendProject(id, { type: "verify-progress", step, done, total }),
     });
     if (project === undefined) {
@@ -327,6 +329,7 @@ function hello(ws: WebSocket, project: OpenProject, wanted?: string | null): voi
     review: project.workspace.review,
     previewWaiting: project.hold.waiting,
     status: open.statuses(),
+    widths: project.widths,
   });
 }
 
@@ -542,6 +545,12 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
         Number.isSafeInteger(message.generation) ? Number(message.generation) : 0,
       );
       return;
+    case "widths-set": {
+      // Checked here too: the chrome only passes on what the control next to Show at sends.
+      const widths = message.widths === null ? null : parseWidths(message.widths);
+      if (widths || message.widths === null) await project.setWidths(widths);
+      return;
+    }
     case "export-manifest": {
       const files = await starterKit(project);
       send(socket, {

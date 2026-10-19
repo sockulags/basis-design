@@ -2,6 +2,7 @@ import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
 import type { PageId } from "./frame.ts";
 import type { ReviewState } from "./review.ts";
+import type { Widths } from "./widths.ts";
 
 /** Messages between the browser and the Basis server over the /bridge WebSocket. */
 
@@ -238,6 +239,8 @@ export type ServerMessage =
       previewWaiting: boolean;
       /** What the projects in the background are up to, by id. */
       status: Record<string, ProjectStatus>;
+      /** The project's widths for Mobile, Tablet and Desktop (see shared/widths.ts). */
+      widths: Widths;
     }
   | { type: "projects"; projects: ProjectEntry[] }
   /** What the projects are up to changed (see ProjectStatus); sent to every tab. */
@@ -249,6 +252,8 @@ export type ServerMessage =
   | { type: "review"; review: ReviewState | null }
   | { type: "baseline"; baseline: Baseline }
   | { type: "design"; design: DesignState }
+  /** The project's widths changed; unlike the design, never held back while a turn runs, since the user chose them. */
+  | { type: "widths"; widths: Widths }
   /** The running turn changed what the preview shows, which it shows once the turn ends (server/hold.ts); false then. */
   | { type: "preview-waiting"; waiting: boolean }
   | { type: "history"; history: HistoryEntry[] }
@@ -308,6 +313,8 @@ export type ClientMessage =
       checking?: boolean;
       generation?: number;
     }
+  /** Sets the project's widths, or with null goes back to Basis' defaults. */
+  | { type: "widths-set"; widths: Widths | null }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean }
   /**

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
+import type { Widths } from "../../shared/widths.ts";
 import { FrameBar, useFrameChoice } from "./FrameBar.tsx";
 import { FullScreenLayer, useFullScreen } from "./FullScreen.tsx";
 import { Impact } from "./Impact.tsx";
@@ -13,7 +14,7 @@ import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
 import styles from "./Preview.module.css";
 import { findSpecimen } from "./narrow.ts";
 import { onReveal, useProgressiveCount } from "./progressive.ts";
-import { loadSpecimens, SpecimenSection } from "./specimens.tsx";
+import { loadSpecimens, ProjectWidths, SpecimenSection } from "./specimens.tsx";
 
 /** Introductions under the title of every page but the design system page, which has its own hero. */
 const INTROS: Partial<Record<PageId, string>> = {
@@ -38,7 +39,7 @@ interface PreviewProps {
  * .ds-root is styled only by the generated tokens.
  */
 export function Preview({ view, post, themeCheck = false }: PreviewProps) {
-  const { design, theme, page, review } = view;
+  const { design, theme, page, review, widths } = view;
   // A view alone over everything else; the copy in the other theme never shows one.
   const fullScreen = useFullScreen(themeCheck ? null : view.fullscreen, theme, post);
   const { open, left, exit } = fullScreen;
@@ -104,7 +105,12 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   // Anything that changes what the live demos render asks for the checks once things settle.
   const [hotVersion, setHotVersion] = useState(0);
   useEffect(() => onHotUpdate(() => setHotVersion((value) => value + 1)), []);
-  useEffect(() => scheduleDemoChecks(), [design, theme, page, review, rendered, frames, sectionsKey, hotVersion]);
+  useEffect(
+    () => scheduleDemoChecks(),
+    [design, theme, page, review, rendered, frames, widths, sectionsKey, hotVersion],
+  );
+  // The project's widths, changed from the control next to Show at; the chrome passes them on to Basis.
+  const onWidths = useCallback((next: Widths | null) => post({ type: "widths-set", widths: next }), [post]);
 
   const props = { design, onAsk };
   const inFullScreen = fullScreen.shown && specimens.find((specimen) => specimen.id === fullScreen.shown?.specimen);
@@ -114,7 +120,7 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
     if (gone) exit();
   }, [gone, exit]);
   return (
-    <>
+    <ProjectWidths.Provider value={widths}>
       <style>{css}</style>
       {design.typography.fontImports.map((href) => (
         <link key={href} rel="stylesheet" href={href} />
@@ -163,7 +169,9 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
                 {INTROS[page] && <p className={styles.description}>{INTROS[page]}</p>}
               </header>
             )}
-            {onPage.length > 0 && <FrameBar choice={frameChoice} onChange={setFrameChoice} />}
+            {onPage.length > 0 && (
+              <FrameBar choice={frameChoice} onChange={setFrameChoice} widths={widths} onWidths={onWidths} />
+            )}
             {onPage.map((specimen, index) =>
               index < rendered ? (
                 <SpecimenSection
@@ -207,6 +215,6 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
           onExit={exit}
         />
       )}
-    </>
+    </ProjectWidths.Provider>
   );
 }

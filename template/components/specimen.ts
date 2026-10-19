@@ -71,7 +71,7 @@ export type SpecimenBlock =
  * every time: no clock, no randomness, no animation that does not settle.
  */
 export interface Capture {
-  /** Viewport widths in CSS pixels; Basis' default is [375, 768, 1440]. */
+  /** Viewport widths in CSS pixels; by default the project's Mobile, Tablet and Desktop widths, chosen in Basis. */
   widths?: number[];
   /**
    * "full" (the default) captures the whole page, which must then also be as tall as the design. A number

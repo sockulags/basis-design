@@ -1,6 +1,6 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { captureShots, READY_ATTRIBUTE, type CaptureList } from "../../shared/capture.ts";
+import { captureShots, listWidths, READY_ATTRIBUTE, type CaptureList } from "../../shared/capture.ts";
 import { parseDesignText, type Design } from "../../shared/design.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import type { ScreenProps, SpecimenBlock } from "../../template/components/specimen.ts";
@@ -13,8 +13,9 @@ import styles from "./Specimen.module.css";
  * screenshots: `?view=<view id>&screen=<screen id>&theme=light|dark`. `?specimen=<id>&theme=light|dark` renders
  * one specimen's blocks the way the gallery does, without its section header, for Basis' own screenshots
  * (server/screenshots.ts). `?list` instead reports every specimen, every view and the shots its screens ask for
- * (window.__basisCapture). The design comes from design.json beside this page, so the same page runs on Basis'
- * preview server and as the kit's static copy of the design.
+ * (window.__basisCapture), with `&widths=` the project's widths for flows that name none. The design comes from
+ * design.json beside this page, so the same page runs on Basis' preview server and as the kit's static copy of the
+ * design.
  */
 
 declare global {
@@ -32,6 +33,7 @@ function flows(specimen: LoadedSpecimen): FlowBlock[] {
 
 function list(): CaptureList {
   const { specimens, problems } = loadSpecimens();
+  const widths = listWidths(params.get("widths"));
   const views = specimens
     .filter((specimen) => specimen.page === "views")
     .map((specimen) => ({
@@ -39,7 +41,11 @@ function list(): CaptureList {
       title: specimen.title,
       file: specimen.file,
       screens: flows(specimen).flatMap((flow) =>
-        flow.screens.map((screen) => ({ id: screen.id, label: screen.label, shots: captureShots(flow.capture) })),
+        flow.screens.map((screen) => ({
+          id: screen.id,
+          label: screen.label,
+          shots: captureShots(flow.capture, widths),
+        })),
       ),
     }))
     .filter((view) => view.screens.length > 0);
@@ -47,6 +53,7 @@ function list(): CaptureList {
     specimens: specimens.map(({ id, title, page }) => ({ id, title, page })),
     views,
     problems: problems.map((problem) => `${problem.file}: ${problem.message}`),
+    widths,
   };
 }
 

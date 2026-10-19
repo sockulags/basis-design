@@ -194,10 +194,10 @@ function ThemeChecker({ view }: { view: PreviewView }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [generation, setGeneration] = useState(0);
   // The copy checks the gallery, never a view in full screen, so moves there do not reach it.
-  const { design, theme, page, review } = view;
+  const { design, theme, page, review, widths } = view;
   const checked = useMemo<PreviewView>(
-    () => ({ design, theme: theme === "dark" ? "light" : "dark", page, review, fullscreen: null }),
-    [design, theme, page, review],
+    () => ({ design, theme: theme === "dark" ? "light" : "dark", page, review, fullscreen: null, widths }),
+    [design, theme, page, review, widths],
   );
 
   useEffect(() => {

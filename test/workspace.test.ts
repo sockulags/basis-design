@@ -85,6 +85,27 @@ describe("history", () => {
     assert.deepEqual(last?.changed, ["color.light.primary"]);
   });
 
+  test("the project's widths are no history entry, and restoring a past version keeps them", async () => {
+    const dir = await folder();
+    let workspace = await start(dir);
+    assert.deepEqual(workspace.widths, { mobile: 375, tablet: 768, desktop: 1440 });
+    await turn(workspace, "Warmer primary", () => setToken(dir, "#c2410c"));
+    const changes: unknown[] = [];
+    workspace.on("widths", (widths, before) => changes.push([widths.mobile, before.mobile]));
+    await workspace.setWidths({ mobile: 390, tablet: 768, desktop: 1440 });
+    assert.deepEqual(changes, [[390, 375]]);
+    assert.equal(workspace.entries.length, 2);
+    await workspace.revert(workspace.entries[0]!.id);
+    assert.notEqual(await token(dir), "#c2410c");
+    assert.equal(workspace.widths.mobile, 390);
+    // They are the workspace's, so they are there after a restart; null goes back to the defaults.
+    await workspace.close();
+    workspace = await start(dir);
+    assert.equal(workspace.widths.mobile, 390);
+    await workspace.setWidths(null);
+    assert.equal(workspace.widths.mobile, 375);
+  });
+
   test("a turn reports colours that ignore the theme, in tokens and stylesheets", async () => {
     const dir = await folder();
     const workspace = await start(dir);

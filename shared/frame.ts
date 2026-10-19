@@ -1,6 +1,7 @@
 import type { Annotation } from "./annotations.ts";
 import type { Design } from "./design.ts";
 import type { ReviewTarget } from "./review.ts";
+import { parseWidths, type Widths } from "./widths.ts";
 
 /**
  * postMessage protocol between the chrome and the sandboxed preview iframe.
@@ -102,6 +103,8 @@ export interface PreviewView {
   review: ReviewView | null;
   /** A view in full screen over everything else, or null. */
   fullscreen: FullScreenView | null;
+  /** The project's widths, which Show at's frames and the layout check use. */
+  widths: Widths;
 }
 
 export type ToPreview =
@@ -129,7 +132,9 @@ export type FromPreview =
   /** Full screen asked for from a view's screen strip; the chrome takes it only right after a click. */
   | ({ type: "fullscreen-open" } & FullScreenView)
   /** The full-screen bar's Exit, or Esc where the browser leaves it to the page. */
-  | { type: "fullscreen-exit" };
+  | { type: "fullscreen-exit" }
+  /** New widths for the project from the control next to Show at (null: Basis' defaults); taken only after a click. */
+  | { type: "widths-set"; widths: Widths | null };
 
 const text = (value: unknown, max: number): string | null => (typeof value === "string" ? value.slice(0, max) : null);
 
@@ -249,6 +254,11 @@ export function parseFromPreview(data: unknown): FromPreview | null {
     }
     case "fullscreen-exit":
       return { type: "fullscreen-exit" };
+    case "widths-set": {
+      if (raw.widths === null) return { type: "widths-set", widths: null };
+      const widths = parseWidths(raw.widths);
+      return widths ? { type: "widths-set", widths } : null;
+    }
     default:
       return null;
   }

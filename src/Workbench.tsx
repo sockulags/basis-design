@@ -215,14 +215,18 @@ export function Workbench({
           return setFullscreen({ view: message.view, screen: message.screen, theme: message.theme });
         case "fullscreen-exit":
           return setFullscreen(null);
+        case "widths-set":
+          // Only right after the user acted in the gallery, so the preview's code cannot change them on its own.
+          if (navigator.userActivation && !navigator.userActivation.isActive) return;
+          return send({ type: "widths-set", widths: message.widths });
       }
     },
-    [ask, finishPicking, setImpact],
+    [ask, finishPicking, setImpact, send],
   );
 
   const view = useMemo<PreviewView | null>(
-    () => (design ? { design, theme, page, review: reviewing.view, fullscreen } : null),
-    [design, theme, page, reviewing.view, fullscreen],
+    () => (design ? { design, theme, page, review: reviewing.view, fullscreen, widths: state.widths } : null),
+    [design, theme, page, reviewing.view, fullscreen, state.widths],
   );
 
   const step = (direction: -1 | 1) => {

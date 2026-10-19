@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { unzipSync } from "fflate";
 import { expect, gallery, historyCount, open, prompt, test } from "./basis.ts";
@@ -261,4 +261,98 @@ export default defineSpecimen({
   expect(findings).toMatch(/text is cut off .* "Save changes"/);
   expect(findings).toMatch(/smaller than 24 by 24px .* aria-label="One"/);
   expect(findings).not.toMatch(/the guide/);
+});
+
+test("the project's widths are chosen next to Show at, and a view gets exactly the width shown", async ({
+  page,
+  basis,
+}) => {
+  // The preview reports its checks to the chrome; keep the latest report.
+  await page.addInitScript(() => {
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "checks") (window as unknown as { checks: unknown }).checks = event.data;
+    });
+  });
+  const settled = async () => {
+    await page.waitForFunction(() => {
+      const report = (window as unknown as { checks?: { running: boolean } }).checks;
+      return report && !report.running;
+    });
+    return page.evaluate(() => (window as unknown as { checks: { checks: string[] } }).checks.checks);
+  };
+  await open(page, basis);
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  const frame = gallery(page);
+  await frame.getByRole("button", { name: "Mobile", exact: true }).click();
+  await frame.getByRole("button", { name: "Fit", exact: true }).click();
+  // The screen's own width, inside the frame's padding and the screen's edge.
+  const screenWidth = () =>
+    frame
+      .locator('[data-frame] [class*="flowScreen"]')
+      .first()
+      .evaluate((element) => element.clientWidth);
+  await expect(frame.getByText("Mobile · 375px").first()).toBeVisible();
+  expect(await screenWidth()).toBe(375);
+
+  const control = frame.getByRole("button", { name: /^The project's widths: Mobile 375, Tablet 768, Desktop 1440/ });
+  await control.click();
+  const mobile = frame.getByRole("spinbutton", { name: "Mobile" });
+  // A width out of range, or not narrower than the next, is refused with the reason.
+  await mobile.fill("250");
+  await mobile.press("Enter");
+  await expect(frame.locator("#basis-widths").getByRole("status")).toHaveText(
+    "Mobile must be a whole number from 280 to 3840px.",
+  );
+  await mobile.fill("900");
+  await mobile.press("Enter");
+  await expect(frame.locator("#basis-widths").getByRole("status")).toHaveText("Mobile must be narrower than Tablet.");
+  expect(await screenWidth()).toBe(375);
+
+  await mobile.fill("390");
+  await mobile.press("Enter");
+  await expect(frame.getByText("Mobile · 390px").first()).toBeVisible();
+  expect(await screenWidth()).toBe(390);
+  expect(JSON.parse(await readFile(path.join(basis.workspace, ".basis", "widths.json"), "utf8"))).toEqual({
+    mobile: 390,
+    tablet: 768,
+    desktop: 1440,
+  });
+
+  // The layout check measures at the new width: a demo 400px wide fits no longer, and 375 is not checked.
+  await page.getByRole("button", { name: "Design system", exact: true }).first().click();
+  await writeFile(
+    path.join(basis.workspace, "components", "Wide.specimen.tsx"),
+    `import { defineSpecimen } from "./specimen.ts";
+
+export default defineSpecimen({
+  title: "Wide",
+  blocks: [{ kind: "block", render: () => <div style={{ width: 400, height: 20 }}>Wider than 390</div> }],
+});
+`,
+  );
+  await expect
+    .poll(async () => (await settled()).filter((check) => check.startsWith("Layout: Wide")).join("\n"))
+    .toMatch(/at 390px: content does not fit the frame/);
+  expect((await settled()).filter((check) => check.includes("at 375px"))).toEqual([]);
+
+  // The kit's shots of a flow without its own capture widths are the project's.
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("tab", { name: "Verification kit" }).click();
+  await page.getByRole("button", { name: "Build .zip" }).click();
+  await expect(page.getByText(/Captured \d+ shots of \d+ screens/)).toBeVisible({ timeout: 90_000 });
+  const response = await page.request.get(`${basis.url}/export/verification-kit.zip`);
+  const files = unzipSync(new Uint8Array(await response.body()));
+  const manifest = JSON.parse(new TextDecoder().decode(files["basis-verify/basis-verify.json"]));
+  for (const screen of manifest.views[0].screens as { shots: { width: number }[] }[]) {
+    expect(screen.shots.map((shot) => shot.width)).toEqual([390, 768, 1440]);
+  }
+
+  // They are the project's: a reload keeps them, and Reset goes back to Basis' own.
+  await page.reload();
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  await expect(frame.getByText("Mobile · 390px").first()).toBeVisible();
+  await frame.getByRole("button", { name: /^The project's widths: Mobile 390/ }).click();
+  await frame.getByRole("button", { name: "Reset to 375, 768, 1440" }).click();
+  await expect(frame.getByText("Mobile · 375px").first()).toBeVisible();
+  expect(await screenWidth()).toBe(375);
 });

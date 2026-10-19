@@ -6,6 +6,7 @@ import { DEFAULT_DESIGN, parseDesignText } from "../shared/design.ts";
 import type { ProjectEntry } from "../shared/protocol.ts";
 import { slug } from "./export.ts";
 import { DESIGN_FILE, SOURCE_DIRS } from "./paths.ts";
+import { copyWidths } from "./widths.ts";
 
 /*
  * The list of projects. A project is a workspace folder: its own design
@@ -91,8 +92,8 @@ export class Projects {
 
   /**
    * Creates a project in <home>/workspaces/. It starts from Basis' defaults, or
-   * as a copy of another project's design system (tokens and source, not its
-   * history, chat or review). Either way the design system takes the new name.
+   * as a copy of another project's design system (tokens, source and widths, not
+   * its history, chat or review). Either way the design system takes the new name.
    */
   async create(name: string, from?: ProjectEntry): Promise<ProjectEntry> {
     const title = name.trim().slice(0, 80) || "Untitled";
@@ -104,6 +105,7 @@ export class Projects {
         const source = path.join(from.dir, folder);
         if (existsSync(source)) await cp(source, path.join(dir, folder), { recursive: true });
       }
+      await copyWidths(from.dir, dir).catch(() => undefined);
       const copied = parseDesignText(await readFile(path.join(from.dir, DESIGN_FILE), "utf8").catch(() => ""));
       if (copied.ok) design = copied.design;
     }

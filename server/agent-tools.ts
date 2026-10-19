@@ -56,7 +56,7 @@ export const TOOLS: ToolDefinition[] = [
       "Photographs the live design the way the gallery renders it, from what is saved now.",
       "`target` is a specimen (a component's, pattern's or view's section, by id or title, such as `buttons` or `Navbar`): it is shown alone, as in its gallery section.",
       "For a view, `target` is the view and `screen` one of its screens (id or label; the first when left out): the bare screen, as the verification kit photographs it.",
-      `By default it takes the narrowest width the target is shown at, in light and dark. \`widths\` picks widths in CSS pixels and \`theme\` one theme; at most ${MAX_SCREENSHOTS} images a call.`,
+      `By default it takes the narrowest width the target is shown at (the project's Mobile width, unless a view's flow names its own), in light and dark. \`widths\` picks widths in CSS pixels and \`theme\` one theme; at most ${MAX_SCREENSHOTS} images a call.`,
       `Pages taller than ${MAX_SHOT_HEIGHT} px are cut there, and the result says so.`,
     ].join(" "),
     inputSchema: {
@@ -68,7 +68,8 @@ export const TOOLS: ToolDefinition[] = [
           type: "array",
           items: { type: "integer", minimum: MIN_WIDTH, maximum: MAX_WIDTH },
           maxItems: MAX_SCREENSHOTS,
-          description: "Widths in CSS pixels, e.g. [375, 1440]. Default: the narrowest the target is shown at.",
+          description:
+            "Widths in CSS pixels, e.g. [768, 1440]. Default: the narrowest the target is shown at (the project's Mobile width).",
         },
         theme: { type: "string", enum: ["light", "dark", "both"], description: "Default: both." },
       },

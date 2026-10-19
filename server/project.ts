@@ -5,6 +5,7 @@ import type * as acp from "@agentclientprotocol/sdk";
 import { createServer as createVite, type Connect, type ViteDevServer } from "vite";
 import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
+import { widthList, type Widths } from "../shared/widths.ts";
 import { AgentHost } from "./agent.ts";
 import { BackgroundPreview, pageForFiles } from "./background.ts";
 import { PreviewHold } from "./hold.ts";
@@ -93,6 +94,7 @@ export class OpenProject {
         page: pageForFiles(workspace.turnFiles),
         review: null,
         fullscreen: null,
+        widths: workspace.widths,
       }),
       (report) =>
         report
@@ -140,7 +142,9 @@ export class OpenProject {
     previewPort: number,
   ): Promise<OpenProject> {
     const { root, broadcast } = options;
-    const screenshots = new Screenshots(`http://${options.host}:${previewPort}/capture.html`);
+    const screenshots = new Screenshots(`http://${options.host}:${previewPort}/capture.html`, {
+      widths: () => widthList(workspace.widths),
+    });
     const views = new ViewStability(entry.dir, screenshots, () => workspace.state.design);
     const hold = new PreviewHold(broadcast);
     const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home, views, hold);
@@ -150,6 +154,11 @@ export class OpenProject {
     workspace.on("design", (design) => hold.send({ type: "design", design }));
     workspace.on("history", (history) => broadcast({ type: "history", history }));
     workspace.on("review", (review) => hold.send({ type: "review", review }));
+    // The user chose them, so they reach the preview at once, also while a turn holds it.
+    workspace.on("widths", (widths, before) => {
+      agent.widthsChanged(widths, before);
+      broadcast({ type: "widths", widths });
+    });
     agent.on("agent", (state) => broadcast({ type: "agent", agent: state }));
     // Every thread's chat goes to every tab that shows the project; a tab keeps the thread it shows.
     agent.on("chat", (item, thread) => broadcast({ type: "chat-upsert", thread, item }));
@@ -213,6 +222,16 @@ export class OpenProject {
 
   get entry(): ProjectEntry {
     return this.current;
+  }
+
+  /** The widths the project shows and checks its design at (shared/widths.ts). */
+  get widths(): Widths {
+    return this.workspace.widths;
+  }
+
+  /** Sets the project's widths, or with null goes back to Basis' defaults; every tab that shows it hears of it. */
+  setWidths(widths: Widths | null): Promise<void> {
+    return this.workspace.setWidths(widths);
   }
 
   /** The agent runs a turn, its fix-ups or the prompts queued behind it. */

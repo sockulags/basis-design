@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Page } from "playwright-core";
 import type { PreviewView } from "../shared/frame.ts";
+import { DEFAULT_WIDTHS } from "../shared/widths.ts";
 import { BackgroundPreview, pageForFiles, parseReport, type BackgroundReport } from "../server/background.ts";
 import { OpenProjects } from "../server/open-projects.ts";
 
@@ -30,6 +31,7 @@ const view: PreviewView = {
   page: "system",
   review: null,
   fullscreen: null,
+  widths: DEFAULT_WIDTHS,
 };
 
 /** Pages that report what the host page would, held open until the session stops. */

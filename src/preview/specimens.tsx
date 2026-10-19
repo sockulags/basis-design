@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { Design } from "../../shared/design.ts";
 import { PAGES, type PageId } from "../../shared/frame.ts";
+import { DEFAULT_WIDTHS, WIDTH_LABELS, WIDTH_NAMES, type WidthName, type Widths } from "../../shared/widths.ts";
 import type { Specimen, SpecimenBlock } from "../../template/components/specimen.ts";
 import { Flow, Grid, Group, Matrix, Row, Section, Specimen as Labelled, States } from "./Gallery.tsx";
 import galleryStyles from "./Gallery.module.css";
@@ -312,15 +313,16 @@ function FlowBlock({ screens, design, specimen }: { screens: Screens; design: De
   );
 }
 
-export type FrameWidth = "fit" | "mobile" | "tablet" | "desktop";
+export type FrameWidth = "fit" | WidthName;
 
-/** The fixed widths a block can be shown at; "fit" is the column's own width. */
-export const FRAME_WIDTHS: { id: FrameWidth; label: string; px?: number }[] = [
+/** The widths a block can be shown at: "fit" is the column's own width, the others the project's (ProjectWidths). */
+export const FRAME_WIDTHS: { id: FrameWidth; label: string }[] = [
   { id: "fit", label: "Fit" },
-  { id: "mobile", label: "Mobile", px: 375 },
-  { id: "tablet", label: "Tablet", px: 768 },
-  { id: "desktop", label: "Desktop", px: 1280 },
+  ...WIDTH_NAMES.map((name) => ({ id: name, label: WIDTH_LABELS[name] })),
 ];
+
+/** The project's widths (PreviewView.widths), which the frames take; Preview provides them. */
+export const ProjectWidths = createContext<Widths>(DEFAULT_WIDTHS);
 
 /** How each block of a specimen is shown: at which widths, in the current theme or in both. */
 export interface Frames {
@@ -336,7 +338,8 @@ const preventSubmit = (event: FormEvent) => event.preventDefault();
 /**
  * A block at each chosen width and theme. Every copy is a size container (so a
  * pattern's @container rules respond to it) and a form of its own (so named
- * radio groups in the copies stay apart).
+ * radio groups in the copies stay apart). A copy's content box is exactly the
+ * width it is shown at; the frame's padding and border lie outside it.
  */
 function Framed({
   block,
@@ -349,8 +352,12 @@ function Framed({
   frames: Frames;
   specimen: string;
 }) {
+  const projectWidths = useContext(ProjectWidths);
   const themes = frames.bothThemes ? (["light", "dark"] as const) : [frames.theme];
-  const widths = FRAME_WIDTHS.filter((width) => frames.widths.includes(width.id));
+  const widths = FRAME_WIDTHS.filter((width) => frames.widths.includes(width.id)).map((width) => ({
+    ...width,
+    px: width.id === "fit" ? undefined : projectWidths[width.id],
+  }));
   return (
     <div className={galleryStyles.frames}>
       {widths.map((width) => (

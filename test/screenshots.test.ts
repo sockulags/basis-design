@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { captureShots, type CaptureList } from "../shared/capture.ts";
+import { captureShots, DEFAULT_CAPTURE_WIDTHS, type CaptureList } from "../shared/capture.ts";
 import { captureUrl, Keeper, planCapture } from "../server/screenshots.ts";
 
 const list: CaptureList = {
@@ -21,6 +21,7 @@ const list: CaptureList = {
     },
   ],
   problems: [],
+  widths: DEFAULT_CAPTURE_WIDTHS,
 };
 
 const sizes = (plan: ReturnType<typeof planCapture>) =>
@@ -30,6 +31,11 @@ test("a specimen is shot with the defaults of a flow without capture options", (
   const plan = planCapture(list, { specimen: "buttons" });
   assert.deepEqual(plan.query, { specimen: "buttons" });
   assert.deepEqual(plan.shots, captureShots(undefined));
+});
+
+test("a specimen takes the project's widths the capture page listed with", () => {
+  const plan = planCapture({ ...list, widths: [390, 820, 1280] }, { specimen: "buttons" });
+  assert.deepEqual(sizes(plan), ["390xfull-light", "820xfull-light", "1280xfull-light"]);
 });
 
 test("given widths and themes replace the defaults, and empty ones do not", () => {

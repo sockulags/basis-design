@@ -4,6 +4,8 @@
  * renders one screen) and the server (which takes the screenshots).
  */
 
+import { DEFAULT_WIDTHS, widthList } from "./widths.ts";
+
 export type CaptureTheme = "light" | "dark";
 
 /** What a flow block may say about capturing (template/components/specimen.ts, `Capture`). */
@@ -22,7 +24,8 @@ export interface CaptureShot {
   theme: CaptureTheme;
 }
 
-export const DEFAULT_CAPTURE_WIDTHS = [375, 768, 1440];
+/** The widths of a flow without its own, in a project that kept Basis' widths (the project's own replace them). */
+export const DEFAULT_CAPTURE_WIDTHS = widthList(DEFAULT_WIDTHS);
 
 /**
  * The viewport height that goes with a width, for full-page captures too: elements sized in vh (an app shell,
@@ -37,9 +40,15 @@ export function viewportHeightFor(width: number): number {
 const MIN_SIZE = 200;
 const MAX_SIZE = 4000;
 
-/** The screenshots a flow block asks for, with Basis' defaults filled in and nonsense left out. */
-export function captureShots(options: CaptureOptions | undefined): CaptureShot[] {
-  const widths = [...new Set((options?.widths?.length ? options.widths : DEFAULT_CAPTURE_WIDTHS).map(Math.round))]
+/**
+ * The screenshots a flow block asks for, with the defaults filled in and nonsense left out. `defaultWidths` are the
+ * project's widths, for a flow that names none.
+ */
+export function captureShots(
+  options: CaptureOptions | undefined,
+  defaultWidths: number[] = DEFAULT_CAPTURE_WIDTHS,
+): CaptureShot[] {
+  const widths = [...new Set((options?.widths?.length ? options.widths : defaultWidths).map(Math.round))]
     .filter((width) => width >= MIN_SIZE && width <= MAX_SIZE)
     .sort((a, b) => a - b);
   const themes = [...new Set(options?.themes?.length ? options.themes : (["light"] as CaptureTheme[]))].filter(
@@ -85,6 +94,25 @@ export interface CaptureList {
   specimens: CaptureSpecimen[];
   views: CaptureView[];
   problems: string[];
+  /** The default widths the list was made with: a flow without its own `capture` widths gets these. */
+  widths: number[];
+}
+
+/**
+ * The capture page's `?list` query, with the project's widths as the defaults for flows without their own
+ * (`&widths=390,768,1440`); the page reads them back with `listWidths`.
+ */
+export function listQuery(widths: number[]): string {
+  return `?list&widths=${widths.join(",")}`;
+}
+
+/** The default widths a `?list` query names, or Basis' own when it names none that can be used. */
+export function listWidths(param: string | null): number[] {
+  const widths = (param ?? "")
+    .split(",")
+    .map(Number)
+    .filter((width) => Number.isInteger(width) && width >= MIN_SIZE && width <= MAX_SIZE);
+  return widths.length ? widths : DEFAULT_CAPTURE_WIDTHS;
 }
 
 /** The verification kit's folder in the product repo, and the folder inside its zip. */

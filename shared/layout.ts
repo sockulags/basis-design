@@ -61,6 +61,13 @@ export function atWidth(width: FrameWidth): string {
   return width === "fit" ? "at the gallery's full width" : `at ${width}px`;
 }
 
+/** The width a layout finding names (see layoutFinding), or null for the gallery's full width or another finding. */
+export function findingWidth(finding: string): number | null {
+  if (!finding.startsWith(`${LAYOUT_CHECK}: `)) return null;
+  const match = /, at (\d+)px: /.exec(finding);
+  return match ? Number(match[1]) : null;
+}
+
 const RULES: Record<LayoutRule, string> = {
   overflow: "content does not fit the frame: it runs past an edge or scrolls sideways",
   clipped: "text is cut off by overflow: hidden or clip, with no ellipsis or line clamp",

@@ -27,7 +27,9 @@ Round 2 (from 2026-10-18) has three aims, in this order of priority:
   pushed. A project folder inside a product repo links that repo by itself. Several projects run at once with
   their agents working in the background while one is shown. Threads are separate chats in one project whose turns
   take turns, not parallel worktrees.
-- 2026-10-19, later: views in full screen come next, ahead of the rest of round 2.
+- 2026-10-19, later: views in full screen come next, ahead of the rest of round 2. Then exact widths: each
+  project chooses its widths for Mobile, Tablet and Desktop, and everything that shows or checks a width follows
+  them.
 
 ## How each round works
 
@@ -112,6 +114,15 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       nears it switches screens and themes and exits; Esc exits too, back to the same screen in the gallery. Agent
       turns show when they end, as in the gallery. Done when: an e2e test opens a view in full screen, moves through
       its flow and exits, and in a real browser the view fills the screen at its width with no Basis chrome.
+
+- [x] **Exact widths, chosen per project.** Show at's frames pad their content by 16px, so Mobile renders a view at
+      about 340px instead of 375. A width shown is the width the content gets: the frame's padding goes outside
+      it, for every block. Each project sets its own widths for Mobile, Tablet and Desktop (defaults 375, 768 and
+      1440), saved in the workspace so they follow the project, from a small control next to Show at. The layout
+      check, the agent's screenshot tool, the stability check and the kit's default shots (a flow without its own
+      `capture`) use the project's widths, and the brief tells the agent what they are. Done when: Mobile set to
+      390 renders a view at exactly 390px in the gallery, the layout check and the kit's shots use 390, and an
+      existing workspace without the setting keeps 375, 768 and 1440.
 
 ### The agent's work
 
@@ -240,6 +251,44 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Exact widths, chosen per project. Show at's frames are now content boxes: a frame's content is
+  exactly the width shown and its 16px padding and dashed border lie outside it, for every block; a view's screen
+  draws its edge as an outline instead of a border, so the page inside gets the full width too. Fit is unchanged.
+  Decisions: the widths live in `.basis/widths.json`, Basis' own file, not in `design-system.json`, which is the
+  agent's and validated as the design; the agent learns them from a line in every turn's context ("This project's
+  widths: Mobile 390px, Tablet 768px and Desktop 1440px"), since the brief is fixed for a session and the user can
+  change them between turns, and the brief says every message names them. Being outside git, they are no history
+  entry: Undo, restoring a past version and discarding a review keep the widths the user chose, which is what a
+  view setting should do. A copied project takes them along with the tokens and source. A workspace without the
+  file (or with one that is not a usable set) has 375, 768 and 1440, as before; the workspace format stays,
+  since an older Basis never reads the file and only shows its own widths. Desktop in the gallery was 1280px while
+  the kit captured 1440; it is now the project's Desktop, 1440 by default, so the gallery and the kit agree. The
+  control sits in Show at's bar, where the widths are used: a button listing them (`375 · 768 · 1440`) opens a
+  field per width, which applies on Enter or when the field is left, if the three are whole numbers from 280 to
+  3840 and narrowest first; otherwise the reason shows under them and nothing changes. Reset removes the file, so a
+  project on the defaults follows Basis' defaults should they ever change. The bar is in the preview, so the chrome
+  passes its `widths-set` on only right after a user action in the frame (as with full screen) and the server checks
+  the set again; the preview's sandbox blocks form submission, so Enter is handled on the fields. A change reaches
+  the tabs at once, not held back while a turn runs like the design, since the user made it; measured 70 ms from
+  Enter to the frame at its new width. Everything that shows or checks a width follows them: the frames, the layout
+  check (the copy in the other theme adds the project's Mobile, and frames are judged by their content box), the
+  agent's screenshot tool (its default for a specimen is the project's Mobile), the stability check (a view's first
+  shot) and the kit's default shots (the capture page's `?list` takes `&widths=`, and the README's and
+  `exceptions.example.json`'s examples use the narrowest). A flow's own `capture` widths still win. Full screen is
+  not affected: it shows the window's width. Attribution: when the user changes the widths, the new ones count as
+  unchecked until the preview has reported its checks running and then done; a turn that starts before that, or
+  during which the widths change, gets no layout findings at those widths (findings name their width), and the next
+  turn starts from them as from any finding that was there. Accessibility findings do not name a width, so one that
+  appears only at a new width would still reach the agent; none of the starter's do. Fixed on the way: a check run
+  that ended while another was already scheduled reported "done", so a report could cover an older page. Verified
+  with unit tests (the widths and their file, the capture defaults and `?list` query, `findingWidth`, the
+  attribution in the fix loop, restore keeping the widths), an e2e test (Mobile at 375 gives a 375px screen,
+  250 and 900 are refused with the reason, 390 gives a 390px screen and the file, a 400px demo is then a finding at
+  390px and nothing is checked at 375, the kit's shots of the starter view are 390, 768 and 1440, a reload keeps
+  them, Reset brings back 375), the whole e2e suite, and on a throwaway instance: the frame's content box, the
+  screen and the page inside it all measured 390px at Mobile, the starter had no findings at 390, and a real Claude
+  turn named the widths from its context and got its Navbar screenshot at 390 by default.
 
 - 2026-10-19: Views in full screen. Full screen at the end of a view's screen strip (in the gallery only, not in
   reviews or `capture.html`) shows that view's current screen alone over everything. Decisions: the chrome, not the

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
-import { captureShots, shotFile, viewportHeightFor } from "../shared/capture.ts";
+import { captureShots, listQuery, listWidths, shotFile, viewportHeightFor } from "../shared/capture.ts";
 import { isRemoteMedia } from "../server/capture.ts";
 import {
   boxesExpression,
@@ -27,6 +27,26 @@ test("a flow without capture options is shot at three widths, full page, light",
     { width: 768, viewportHeight: 1024, fullPage: true, theme: "light" },
     { width: 1440, viewportHeight: 900, fullPage: true, theme: "light" },
   ]);
+});
+
+test("a flow without capture widths takes the project's, and its own widths win", () => {
+  const project = [390, 820, 1280];
+  assert.deepEqual(
+    captureShots({ themes: ["dark"] }, project).map((shot) => `${shot.width}-${shot.theme}`),
+    ["390-dark", "820-dark", "1280-dark"],
+  );
+  assert.deepEqual(
+    captureShots({ widths: [1024] }, project).map((shot) => shot.width),
+    [1024],
+  );
+});
+
+test("the capture page's list query carries the project's widths, and nonsense falls back to Basis' own", () => {
+  assert.equal(listQuery([390, 768, 1440]), "?list&widths=390,768,1440");
+  assert.deepEqual(listWidths("390,768,1440"), [390, 768, 1440]);
+  assert.deepEqual(listWidths("390,abc,90000"), [390]);
+  assert.deepEqual(listWidths(null), [375, 768, 1440]);
+  assert.deepEqual(listWidths(""), [375, 768, 1440]);
 });
 
 test("capture options are deduplicated, sorted and kept within sensible sizes", () => {

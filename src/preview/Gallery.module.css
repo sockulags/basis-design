@@ -184,16 +184,19 @@
   font-size: var(--text-xs);
 }
 
+/* The screen gets the whole width it is shown at: its edge is an outline, drawn outside it rather than a border
+   that would take a pixel off each side. */
 .flowScreen {
   min-height: 420px;
   overflow: hidden;
-  border: var(--border-thin) solid var(--color-border);
+  outline: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg);
 }
 
 /* Widths and themes: each copy of a block in a frame of its own. The frame is a size container, so a
-   pattern's @container rules respond to the frame's width the way they would to a column of that width. */
+   pattern's @container rules respond to the frame's width the way they would to a column of that width. Its
+   content box is the width shown (content-box sizing), with the padding and the dashed border outside it. */
 .frames {
   display: grid;
   gap: var(--space-5);
@@ -219,7 +222,7 @@
 }
 
 .frameBody {
-  box-sizing: border-box;
+  box-sizing: content-box;
   max-width: none;
   /* .ds-root fills the viewport as the page root; a frame only needs its content. */
   min-height: 0;
@@ -234,5 +237,6 @@
 }
 
 .frameBody[data-fit] {
+  box-sizing: border-box;
   width: 100%;
 }

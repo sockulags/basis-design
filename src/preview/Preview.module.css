@@ -101,3 +101,72 @@
   margin: 0 var(--space-1);
   background: var(--color-border);
 }
+
+/* The project's widths next to Show at, and the fields that change them. Basis' own controls, like the bar's
+   buttons (.ask-button in preview.css). */
+.widthsButton {
+  font-variant-numeric: tabular-nums;
+}
+
+.widthsEditor {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 12px;
+}
+
+.widthsField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.widthsField input {
+  box-sizing: border-box;
+  width: 8ch;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+/* Whole pixels are typed; the spinner's arrows would cover four digits. */
+.widthsField input::-webkit-inner-spin-button,
+.widthsField input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.widthsField input:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.widthsField input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.widthsNote {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.widthsNote[data-problem] {
+  color: var(--color-danger);
+}

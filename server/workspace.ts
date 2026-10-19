@@ -6,6 +6,7 @@ import { DEFAULT_DESIGN, parseDesignText, type Design } from "../shared/design.t
 import { fixedColorFindings } from "../shared/fixed-colors.ts";
 import type { DesignState, HistoryEntry, Snapshot, TemplateUpdate } from "../shared/protocol.ts";
 import { REVIEW_FILE, type ReviewState } from "../shared/review.ts";
+import { DEFAULT_WIDTHS, type Widths } from "../shared/widths.ts";
 import { git, lines, typecheck } from "./exec.ts";
 import { commitToHistory, describeSource, loadHistory, type EntryMeta, type Source } from "./history.ts";
 import { DESIGN_FILE, isSourcePath, PRODUCT_FILE, relativeInside, SOURCE_DIRS } from "./paths.ts";
@@ -14,10 +15,17 @@ import { Reviews } from "./reviews.ts";
 import { claimWorkspaceFormat, seedWorkspace, writeGeneratedFiles } from "./setup.ts";
 import { recordTemplateVersion, templateUpdate, writeTemplateCopy } from "./template.ts";
 import { Snapshots } from "./snapshots.ts";
+import { readWidths, saveWidths } from "./widths.ts";
 
 const DIFF_LIMIT = 400_000;
 
-type Events = { design: [DesignState]; history: [HistoryEntry[]]; review: [ReviewState | null] };
+type Events = {
+  design: [DesignState];
+  history: [HistoryEntry[]];
+  review: [ReviewState | null];
+  /** The project's widths changed (the new ones, and the ones before). */
+  widths: [Widths, Widths];
+};
 
 /**
  * The folder the agent works in: design-system.json plus the source in
@@ -51,6 +59,8 @@ export class Workspace extends EventEmitter<Events> {
   private closed = false;
   /** A newer starter template this workspace has not caught up with (see server/template.ts). */
   private template: TemplateUpdate | null = null;
+  /** The project's widths for Mobile, Tablet and Desktop (server/widths.ts). */
+  private currentWidths: Widths = DEFAULT_WIDTHS;
   /** True while an agent turn runs; its changes are committed once, when the turn ends. */
   agentActive = false;
   /** The tree the running turn started from, and what the last turn changed (turnFiles). */
@@ -71,6 +81,7 @@ export class Workspace extends EventEmitter<Events> {
   async init(): Promise<void> {
     await claimWorkspaceFormat(this.dir);
     await writeGeneratedFiles(this.dir);
+    this.currentWidths = await readWidths(this.dir);
     if (!existsSync(this.file)) await writeFile(this.file, serialize(DEFAULT_DESIGN));
     const note = await seedWorkspace(this.dir);
     if (!existsSync(path.join(this.dir, ".git"))) await git(this.dir, ["init", "-q", "-b", "main"]);
@@ -113,6 +124,22 @@ export class Workspace extends EventEmitter<Events> {
       workspace: this.dir,
       templateUpdate: this.template,
     };
+  }
+
+  /** The widths the project shows and checks its design at. */
+  get widths(): Widths {
+    return this.currentWidths;
+  }
+
+  /**
+   * Sets the project's widths, or with null goes back to Basis' defaults. They are Basis' setting, outside git: no
+   * history entry, and restoring a past version or discarding a review keeps them.
+   */
+  async setWidths(widths: Widths | null): Promise<void> {
+    await saveWidths(this.dir, widths);
+    const before = this.currentWidths;
+    this.currentWidths = widths ?? DEFAULT_WIDTHS;
+    this.emit("widths", this.currentWidths, before);
   }
 
   get templateUpdate(): TemplateUpdate | null {

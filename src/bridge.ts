@@ -16,6 +16,7 @@ import type {
   VerifyKitResult,
 } from "../shared/protocol.ts";
 import type { ReviewState } from "../shared/review.ts";
+import { DEFAULT_WIDTHS, type Widths } from "../shared/widths.ts";
 
 export interface BridgeState {
   connected: boolean;
@@ -46,6 +47,8 @@ export interface BridgeState {
   previewPort: number | null;
   /** The running turn changed what the preview shows, which it shows once the turn ends. */
   previewWaiting: boolean;
+  /** The project's widths for Mobile, Tablet and Desktop. */
+  widths: Widths;
   exportManifest: { folder: string; files: { path: string; bytes: number }[] } | null;
   exportResult: ExportWriteResult | null;
   /** The verification kit being built (its current step), or null. */
@@ -71,6 +74,7 @@ const initial: BridgeState = {
   baselines: {},
   previewPort: null,
   previewWaiting: false,
+  widths: DEFAULT_WIDTHS,
   exportManifest: null,
   exportResult: null,
   verifyProgress: null,
@@ -104,6 +108,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         chat: action.chat,
         review: action.review,
         previewWaiting: action.previewWaiting,
+        widths: action.widths,
         // The server may have restarted and removed its copies of past versions; ask for them again.
         baselines: {},
       };
@@ -125,6 +130,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, design: action.design };
     case "preview-waiting":
       return { ...state, previewWaiting: action.waiting };
+    case "widths":
+      return { ...state, widths: action.widths };
     case "history":
       return { ...state, history: action.history };
     case "agent":
