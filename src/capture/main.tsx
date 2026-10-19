@@ -37,6 +37,7 @@ function list(): CaptureList {
     .map((specimen) => ({
       id: specimen.id,
       title: specimen.title,
+      file: specimen.file,
       screens: flows(specimen).flatMap((flow) =>
         flow.screens.map((screen) => ({ id: screen.id, label: screen.label, shots: captureShots(flow.capture) })),
       ),

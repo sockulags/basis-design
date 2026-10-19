@@ -7,6 +7,7 @@ import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts
 import { AgentHost } from "./agent.ts";
 import { rebasePlugin } from "./rebase.ts";
 import { Screenshots } from "./screenshots.ts";
+import { ViewStability } from "./stability.ts";
 import { Workspace } from "./workspace.ts";
 
 export interface ProjectOptions {
@@ -73,7 +74,9 @@ export class OpenProject {
     const { root, broadcast } = options;
     const workspace = new Workspace(entry.dir);
     await workspace.init();
-    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home);
+    const screenshots = new Screenshots(`http://${options.host}:${options.previewPort}/capture.html`);
+    const views = new ViewStability(entry.dir, screenshots, () => workspace.state.design);
+    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home, views);
     await agent.restore();
 
     workspace.on("design", (design) => broadcast({ type: "design", design }));
@@ -133,7 +136,6 @@ export class OpenProject {
       previewServer.listen(options.previewPort, options.host, resolve);
     });
 
-    const screenshots = new Screenshots(`http://${options.host}:${options.previewPort}/capture.html`);
     void agent.start();
     return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, screenshots);
   }

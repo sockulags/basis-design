@@ -68,6 +68,8 @@ export function shotFile(view: string, screen: string, shot: CaptureShot): strin
 export interface CaptureView {
   id: string;
   title: string;
+  /** The specimen file it comes from, workspace-relative (`views/Team.specimen.tsx`). */
+  file: string;
   screens: { id: string; label: string; shots: CaptureShot[] }[];
 }
 

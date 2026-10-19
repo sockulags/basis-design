@@ -94,7 +94,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       from the tool call reported just before it. Anything that writes, runs scripts or reaches outside still
       asks. Done when: a real Codex design turn reads files without prompts, and a command outside the workspace
       still asks.
-- [ ] **Stable views when they are built.** After a turn that changed files in `views/`, the server captures the
+- [x] **Stable views when they are built.** After a turn that changed files in `views/`, the server captures the
       changed views' screens twice at their first width with the step-one module, and reports a screen that renders
       differently as a problem in the fix loop ("Screen X of view Y renders differently each time; look for clocks,
       random values or animations that do not settle"). Decision: a problem rather than a check, since such a
@@ -183,6 +183,38 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Stable views when they are built. `server/stability.ts` runs in the fix loop after a turn whose
+  changed files include one in `views/`; any other turn takes no screenshots, so the loop is as fast as before for
+  them. What a turn changed comes from git: `Workspace` writes the working tree as a tree object when the turn
+  begins (after a hand edit has its own entry) and when it ends, and `turnFiles` is the difference, which works
+  the same in history and inside a review. The changed files are followed through the views' imports (`reach.ts`
+  with the design unchanged), so a changed `views/team-data.ts` checks the views that import it; the capture
+  list now carries each view's file to match them. `Screenshots.repeat` photographs every screen of those views
+  at the first shot its flow asks for (the narrowest width in the first theme), twice, and the kit's own
+  `compareImages` decides, with equal bytes as the quick case. Two plain captures a fraction of a second apart
+  would miss a screen showing the time to the minute, or the date, most of the time, so the second capture runs
+  in a page of its own whose `Date` is a day, an hour, a minute and a second ahead (an init script, so the shared
+  context and the agent's screenshots keep the real clock; a string, since tsx may add helpers to a function's
+  source). Math.random differs between loads by itself. The check starts when the loop does and runs while it
+  waits for the preview to settle. A differing screen is a problem in its own section ("Screen "Overview"
+  (overview) of view "Status" (views/Status.specimen.tsx) renders differently each time at 375px; look for clocks,
+  random values or animations that do not settle."), with no pixel counts, so the text stays the same while the
+  problem does. A screen that throws on the capture page joins the render errors with its message, unless the
+  preview already reports the view's section by its title; a screen further into a flow is only rendered when
+  someone clicks there, so usually nothing else reports it. Views found wrong are checked again after the fix-up
+  turn whatever files it changed, and the list is cleared when the next prompt starts. When the browser cannot
+  launch or the capture page does not settle (a compile error the preview reports anyway), the check finds
+  nothing and logs its reason once per message. The brief now says when Basis captures views and that the second
+  capture is a day later. Verified with unit tests (same pixels in different bytes, stable texts, left-out failed
+  screens, the shifted clock in a VM, only reached views photographed, one warning for a missing browser, and
+  `turnFiles` in history, in a review and with a hand edit before the turn), against a throwaway instance (a
+  planted view with a clock to the minute, a screen that throws and one with Math.random came out as two unstable
+  screens and one failure in 2.7 s with the browser starting; the three starter screens were stable in 2.0 s; a
+  changed component took no screenshots), and with a real Claude turn: asked only to rename the heading of a
+  planted Status view whose "Last checked at" came from `Date.now()`, Claude renamed it, said it had noticed the
+  clock but left it as asked, the fix loop reported the Overview screen, and the fix-up turn replaced the time
+  with a fixed "09:41"; the check after it found nothing, so the loop ended (18 s for the whole prompt).
 
 - 2026-10-19: Codex reads without a prompt each. Logged from a real Codex turn first: the step assumed the approval
   request carries neither kind nor path, and that held only for the kind. Every request says `execute`, with Codex's

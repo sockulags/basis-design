@@ -13,6 +13,7 @@ const list: CaptureList = {
     {
       id: "team",
       title: "Team",
+      file: "views/Team.specimen.tsx",
       screens: [
         { id: "list", label: "List", shots: captureShots({ widths: [390, 1280], themes: ["light", "dark"] }) },
         { id: "member", label: "Member", shots: captureShots({ widths: [390], height: 700 }) },

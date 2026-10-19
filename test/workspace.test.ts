@@ -305,6 +305,24 @@ describe("views", () => {
     assert.ok(existsSync(path.join(dir, "views", "TeamMembers.specimen.tsx")));
     assert.equal(workspace.entries.at(-1)?.label, "Basis added a starter view");
   });
+
+  test("a turn knows which files it changed, in history and in a review, but not a hand edit's", async () => {
+    const dir = await folder();
+    const workspace = await start(dir);
+    // A hand edit before the turn is its own entry, not the turn's.
+    await writeFile(path.join(dir, "views", "notes-data.ts"), "export const notes = [];\n");
+    await turn(workspace, "A clock in the header", async () => {
+      await writeFile(path.join(dir, "views", "clock-data.ts"), "export const now = 0;\n");
+      await setToken(dir, "#b4232a");
+    });
+    assert.deepEqual(workspace.turnFiles, ["design-system.json", "views/clock-data.ts"]);
+    await turn(workspace, "Nothing", async () => undefined);
+    assert.deepEqual(workspace.turnFiles, []);
+    await turn(workspace, "Open a review", () => openReview(dir));
+    await turn(workspace, "Remove the clock", () => rm(path.join(dir, "views", "clock-data.ts")));
+    assert.ok(workspace.review);
+    assert.deepEqual(workspace.turnFiles, ["views/clock-data.ts"]);
+  });
 });
 
 describe("reviews", () => {

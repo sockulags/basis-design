@@ -133,6 +133,38 @@ export function planCapture(list: CaptureList, target: ShotTarget, options: Shot
   });
 }
 
+/** One screen of a view photographed twice (`Screenshots.repeat`). */
+export interface RepeatedShot {
+  view: { id: string; title: string; file: string };
+  screen: { id: string; label: string };
+  shot: CaptureShot;
+  first: Buffer;
+  /** Taken with the clock moved on; the first image again when the screen failed. */
+  second: Buffer;
+  /** What the screen threw while rendering, or null when it rendered. */
+  error: string | null;
+}
+
+/** How far `Screenshots.repeat` moves the clock for the second image: a day, an hour, a minute, a second and a bit. */
+export const CLOCK_SHIFT_MS = ((24 * 60 + 61) * 60 + 1) * 1000 + 1;
+
+/**
+ * A script for the page to run before its own: `Date` keeps running, `shift` ms ahead. A proxy rather than a
+ * subclass, so `Date()` without `new` and `instanceof Date` still work. A string rather than a function, since the
+ * TypeScript loader may add helpers to a function's source that the page does not have.
+ */
+export function shiftClockScript(shift: number): string {
+  return `(() => {
+  const RealDate = Date;
+  const now = () => RealDate.now() + ${Math.round(shift)};
+  globalThis.Date = new Proxy(RealDate, {
+    construct: (target, args, newTarget) => Reflect.construct(target, args.length ? args : [now()], newTarget),
+    apply: () => new RealDate(now()).toString(),
+    get: (target, key, receiver) => (key === "now" ? now : Reflect.get(target, key, receiver)),
+  });
+})();`;
+}
+
 /** The capture page's URL for a plan's query in one theme. */
 export function captureUrl(pageUrl: string, query: Record<string, string>, theme: CaptureTheme): string {
   return `${pageUrl}?${new URLSearchParams({ ...query, theme })}`;
@@ -267,6 +299,55 @@ export class Screenshots {
         return { plan, shots };
       } finally {
         await page.close();
+      }
+    });
+  }
+
+  /**
+   * Photographs every screen of the views whose specimen file is among `files` twice, at the first shot its flow
+   * asks for: once as usual, and once with the page's clock moved on by `CLOCK_SHIFT_MS`, so a screen that shows
+   * the time or the date comes out different whatever it rounds to. For the check that views render the same
+   * every time (server/stability.ts).
+   */
+  repeat(files: string[]): Promise<RepeatedShot[]> {
+    return this.browser.use(async ({ context }) => {
+      const page = await context.newPage();
+      // The shift is this page's own, so the agent's screenshots in the same context keep the real clock.
+      const shifted = await context.newPage();
+      try {
+        await shifted.addInitScript({ content: shiftClockScript(CLOCK_SHIFT_MS) });
+        const wanted = new Set(files);
+        const views = (await this.readList(page)).views.filter((view) => wanted.has(view.file));
+        const repeated: RepeatedShot[] = [];
+        for (const view of views) {
+          for (const screen of view.screens) {
+            const shot = screen.shots[0];
+            if (!shot) continue;
+            const url = captureUrl(this.pageUrl, { view: view.id, screen: screen.id }, shot.theme);
+            const first = await this.settled(() => takeShot(page, url, shot, this.timeoutMs));
+            const error = first.failed
+              ? (await page.locator(".capture-problem").first().textContent())?.replace(
+                  /^This screen failed to render:\s*/,
+                  "",
+                )
+              : null;
+            const second = first.failed
+              ? first
+              : await this.settled(() => takeShot(shifted, url, shot, this.timeoutMs));
+            repeated.push({
+              view: { id: view.id, title: view.title, file: view.file },
+              screen: { id: screen.id, label: screen.label },
+              shot,
+              first: first.png,
+              second: second.png,
+              error: first.failed ? (error ?? "it threw while rendering") : null,
+            });
+          }
+        }
+        return repeated;
+      } finally {
+        await page.close();
+        await shifted.close();
       }
     });
   }

@@ -86,7 +86,8 @@ component source, patterns and the gallery specimens.
     Codex `mcp.basis.<tool>`, and Codex's approval request carries only the id of the tool call it reported
     before, so `AgentHost` remembers those ids. The chat shows such a call as "Screenshot of <target>".
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,
-    render errors reported by the preview) and sends them back to the agent, at most twice. Every open tab
+    render errors reported by the preview, views that do not render the same twice; see Checks) and sends them
+    back to the agent, at most twice. Every open tab
     reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
     looked at last), so a stale or second tab cannot send the agent after problems that are not there.
   - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
@@ -139,7 +140,9 @@ component source, patterns and the gallery specimens.
     what its flow asks for, and given options replace them; the screenshot tool's limits (only the narrowest
     width, a cap on images, a cut height) are options too. It uses the kit's capture page and render settings,
     so its images look like the kit's. One browser and context stay open between calls
-    (`Keeper`) and close a minute after the last one, or when the project closes.
+    (`Keeper`) and close a minute after the last one, or when the project closes. `repeat(files)` photographs
+    every screen of the views in those specimen files twice at the first shot their flow asks for, the second
+    time in a page of its own whose `Date` runs a day, an hour, a minute and a second ahead (`shiftClockScript`).
   - `server/verify.ts` builds `capture.html` with Vite into a temporary folder (the same aliases as the preview,
     `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
     `basis-verify.json` (every shot and the render settings), a README for the implementing agent, and the two
@@ -247,6 +250,19 @@ own wrappers and scroll areas (the matrix that scrolls on a phone on purpose) ne
 element, one per demo, theme, width and rule. The copy in the other theme always adds the 375px width to its
 frames, the review's live side included, so a phone is checked whatever widths the user looks at. The fix loop sends introduced layout findings in a
 section of their own that points at the screenshot tool.
+
+Views that render differently each time (`server/stability.ts`) are problems rather than findings, since such a
+screen can never pass the verification kit, so they are sent while they last. `Workspace.turnFiles` lists what the last turn changed (the
+working tree as a git tree when the turn begins and when it ends, so a review's iterations and a hand edit before
+the turn do not count). When that includes a file in `views/`, the fix loop finds the view specimens it reaches
+through their imports (`reach.ts`), has `Screenshots.repeat` photograph their screens, and compares each pair
+with the kit's own `compareImages`. The check runs while the loop waits for the preview to settle, so it costs
+only what it takes beyond that; a turn that changed nothing in `views/` takes no screenshots. A screen that
+differs is reported in its own section, and one that throws joins the render errors unless the preview already
+names its view's section. The views found wrong are checked again after the fix-up turn even when it changed
+other files. The texts name screen, view, file, width and theme and nothing else, so they stay the same while the
+problem does. Without a browser, or when the capture page does not settle, the check finds nothing and says why
+once on the console.
 
 Fixed colours (`shared/fixed-colors.ts`) are found on the server in `Workspace.check()`: hex, colour functions
 with literal channels, and white/black in tokens outside `color` (typography is skipped) and in the source
@@ -439,6 +455,9 @@ comparison of the whole gallery between two history entries, the icon, and publi
   understand still asks: a wildcard in a path (`Get-Content *.css`), `ForEach-Object` or `Where-Object`, a
   variable, a pipe into an unlisted cmdlet, or a program other than `rg` and `git`. A user whose Codex login is
   not in `auth.json` gets Codex with their own AGENTS.md and config.
+- **The stable-views check** runs only after a turn that changed `views/`, so a component or pattern that starts
+  reading the clock is found when a view next changes, or when the verification kit is built. It follows imports
+  as `reach.ts` does, which needs the file extension (`./team-data.ts`, as the template writes them).
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

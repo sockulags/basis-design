@@ -26,6 +26,7 @@ import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import { CLAUDE_MISSING, findClaude } from "./claude.ts";
 import { codexEnv } from "./codex.ts";
 import { isApprovableRead } from "./commands.ts";
+import { isViewFile, unreported, type ScreenFinding } from "./stability.ts";
 import type { Workspace } from "./workspace.ts";
 
 interface LaunchSpec {
@@ -161,6 +162,8 @@ export class AgentHost extends EventEmitter<Events> {
   private stopping = false;
   /** What to tell the user when the running agent's login fails (from its LaunchSpec). */
   private loginHint = "";
+  /** View files whose screens the last check found wrong, checked again after the next fix-up turn. */
+  private flaggedViews: string[] = [];
 
   constructor(
     private readonly workspace: Workspace,
@@ -171,6 +174,8 @@ export class AgentHost extends EventEmitter<Events> {
     private readonly mcpServers: acp.McpServer[],
     /** Basis' own folder (BASIS_HOME), where Codex gets a home of its own (server/codex.ts). */
     private readonly home: string,
+    /** Checks that the views a turn changed render the same every time (server/stability.ts). */
+    private readonly views?: { check(files: string[]): Promise<ScreenFinding[]> },
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
@@ -343,6 +348,7 @@ export class AgentHost extends EventEmitter<Events> {
   /** One turn plus the fix-up turns for what it left broken. Returns false when it was stopped or failed. */
   private async runChecked(turn: Turn): Promise<boolean> {
     const connection = this.connection;
+    this.flaggedViews = [];
     const completed = await this.runTurn(turn);
     for (let fixes = 0; completed && fixes < MAX_AUTO_FIXES && !this.stopping; fixes += 1) {
       const problems = await this.collectProblems();
@@ -511,6 +517,9 @@ ${message}`
   /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
   private async collectProblems(): Promise<string | null> {
     const { errors, typeErrors, reviewErrors } = this.workspace.state;
+    // Only after a turn that changed views/, and for the views found wrong before; it runs while the preview settles.
+    const viewFiles = new Set([...this.workspace.turnFiles, ...this.flaggedViews].filter(isViewFile));
+    const viewCheck = viewFiles.size && this.views ? this.views.check([...viewFiles]) : Promise.resolve([]);
     // Give the preview a moment to hot-reload the new code and report what failed to render.
     if (!errors && !typeErrors) {
       await sleep(PREVIEW_SETTLE_MS);
@@ -529,7 +538,17 @@ ${message}`
         `The source does not type-check, or no longer satisfies the contracts (.basis/contracts.ts and components/contracts.ts):\n${list(typeErrors)}`,
       );
     }
-    if (this.previewErrors.length) sections.push(`The preview fails to render:\n${list(this.previewErrors)}`);
+    const screens = unreported(await viewCheck, this.previewErrors);
+    this.flaggedViews = screens.map((screen) => screen.file);
+    const failedScreens = screens.filter((screen) => screen.kind === "failed").map((screen) => screen.text);
+    const rendering = [...this.previewErrors, ...failedScreens];
+    if (rendering.length) sections.push(`The preview fails to render:\n${list(rendering)}`);
+    const unstable = screens.filter((screen) => screen.kind === "unstable").map((screen) => screen.text);
+    if (unstable.length) {
+      sections.push(
+        `These view screens render differently each time Basis captures them (twice, the second time with the clock a day later), so no implementation can ever match them pixel for pixel. Make each one render the same every time: fixed dates and data, no random values, nothing that keeps moving:\n${list(unstable)}`,
+      );
+    }
     // Only what this turn introduced: findings that were there before are the user's to ask about, and
     // repeating them would send the agent after them on every turn.
     const introduced = this.checks.filter((check) => !this.checksBefore.has(check));

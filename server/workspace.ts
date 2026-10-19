@@ -51,6 +51,9 @@ export class Workspace extends EventEmitter<Events> {
   private template: TemplateUpdate | null = null;
   /** True while an agent turn runs; its changes are committed once, when the turn ends. */
   agentActive = false;
+  /** The tree the running turn started from, and what the last turn changed (turnFiles). */
+  private turnStart?: string;
+  private changedInTurn: string[] = [];
 
   /** `options.typecheck` replaces the tsc run (tests use a fast stand-in). */
   constructor(
@@ -150,6 +153,7 @@ export class Workspace extends EventEmitter<Events> {
     this.turnLabel = label;
     // Anything changed by hand since the last entry gets its own entry first.
     await this.commit("external", {});
+    this.turnStart = await this.serial(() => this.workingTree()).catch(() => undefined);
   }
 
   /** After a turn: re-read, type-check and record one history entry (or iteration) for everything it changed. */
@@ -160,6 +164,24 @@ export class Workspace extends EventEmitter<Events> {
     await this.check();
     this.agentActive = false;
     await this.commit("agent", { label: this.turnLabel });
+    const start = this.turnStart;
+    this.turnStart = undefined;
+    this.changedInTurn = start
+      ? await this.serial(async () =>
+          lines(await git(this.dir, ["diff", "--name-only", start, await this.workingTree()])),
+        ).catch(() => [])
+      : [];
+  }
+
+  /** The files the last agent turn changed, added or removed, workspace-relative with forward slashes. */
+  get turnFiles(): string[] {
+    return this.changedInTurn;
+  }
+
+  /** The working tree as a git tree object, whether or not it is committed; the index ends up holding it. */
+  private async workingTree(): Promise<string> {
+    await git(this.dir, ["add", "-A"]);
+    return (await git(this.dir, ["write-tree"])).trim();
   }
 
   async revert(historyId: string): Promise<void> {

@@ -27,6 +27,7 @@ const list: CaptureList = {
     {
       id: "team-members",
       title: "Team members",
+      file: "views/TeamMembers.specimen.tsx",
       screens: [
         { id: "list", label: "Member list", shots: captureShots({ widths: [390, 1280] }) },
         { id: "invite", label: "Invite", shots: captureShots({ widths: [390, 1280] }) },

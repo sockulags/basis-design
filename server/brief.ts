@@ -170,8 +170,8 @@ The rules that always apply:
   example responses, its wording), so the implementation can show exactly the same records. Otherwise make it
   up in the product's language. Keep data in the view file or a \`views/*-data.ts\` file.
 - Screens must render the same every time: no \`Date.now()\`, \`new Date()\` without a fixed date, random
-  values, or animations and loading states that never settle. Basis captures each screen twice and reports
-  the ones that differ.
+  values, or animations and loading states that never settle. After a turn that changes a view, Basis captures
+  each of its screens twice, the second time with the clock a day later, and reports the ones that differ.
 - A flow block may say how its screens are captured: \`capture: { widths: [375, 768, 1440], height: "full",
   themes: ["light"] }\` (those are the defaults). \`height\` is \`"full"\` for the whole page or a number for
   exactly one viewport; add \`"dark"\` to \`themes\` when the product has a dark theme. Set widths to the
