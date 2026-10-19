@@ -14,7 +14,7 @@
  * --box-tolerance pixels (default 0). The command exits with 1 when any shot differs by more than --max-diff
  * (default 0).
  */
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -428,7 +428,12 @@ async function main() {
   process.exitCode = failed.length ? 1 : 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// Node gives the main module's URL with links followed (macOS' temp folder is a link), so the path run is too.
+if (
+  process.argv[1] &&
+  existsSync(process.argv[1]) &&
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 2;
