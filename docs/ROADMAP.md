@@ -23,6 +23,10 @@ Round 2 (from 2026-10-18) has three aims, in this order of priority:
   quality checks run in the fix loop; commit and push each verified step and make decisions while the app is early.
 - 2026-10-18, round 2: work through every step below without asking. Where a decision is needed, take it and log
   it. Commit, push and run real agent turns as needed. Lucas publishes to npm himself; never run `npm publish`.
+- 2026-10-19, after testing: the steps under "From Lucas' testing" come first, one at a time, each committed and
+  pushed. A project folder inside a product repo links that repo by itself. Several projects run at once with
+  their agents working in the background while one is shown. Threads are separate chats in one project whose turns
+  take turns, not parallel worktrees.
 
 ## How each round works
 
@@ -57,6 +61,42 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 (fonts across machines, real photos). Decide after trying the kit on a real feature at work.
 
 ## Round 2 steps
+
+### From Lucas' testing
+
+- [ ] **Reading the product repo without prompts.** Claude Code is only given the workspace as `cwd`
+      (`openSession` in `server/agent.ts`), so its shell commands in the linked repo (`cd … && git ls-files`, `ls`,
+      `find`, `grep`) and searches without a path always ask. Pass the linked repo as `additionalDirectories`, and
+      rebuild the session when the link changes. A project whose folder sits inside a git repo links that repo by
+      itself (read only, as a linked repo). On Windows the folder dialog is the old tree picker; use the modern one
+      (`IFileOpenDialog` with `FOS_PICKFOLDERS`) in both Windows PowerShell and pwsh. Done when: a real Claude turn
+      in a project inside a fixture repo reads the repo with shell commands and searches without a prompt, and
+      writes there are still refused.
+- [ ] **The preview waits for the turn.** Mid-turn states (a half-written file, an import of a file not written
+      yet) leave errors that outlive the turn: the preview never reports an empty list after a reload, so the old
+      list stays in the chrome and the server; a new specimen whose first load failed stops taking HMR updates; and
+      the fix loop reads the report after a fixed 1500 ms. Hold the preview's code updates while a turn runs (a
+      plugin in the preview's Vite), reload the gallery once when it ends, have the preview report its errors on
+      `ready` and the chrome reset them, and let the fix loop wait for a report from after the reload. The agent's
+      screenshots keep showing its work mid-turn. Done when: a real turn that creates a new view in several writes
+      ends without stale errors, and the gallery shows the view without a manual reload.
+- [ ] **Images in the kit.** Exceptions can name elements by `selector` (the kit works out their boxes per shot on
+      both sides and still checks the boxes' size), views use local placeholder images marked `data-basis-media`
+      (the brief says so), and a check reports remote image URLs in views. Done when: a view with a photo passes
+      the kit with a selector exception, and a remote image is reported.
+- [ ] **A prompt for the implementing agent.** Merges "Implementation notes in the kit" and "A skill for the
+      implementing agent" below: the kit carries `PROMPT.md` (goal, each view's screens, flow, components and
+      tokens, the capture and compare loop, the exception rules, when to stop) and the Export tab gets "Copy prompt",
+      which tells the agent to read it. Done when: an agent given only the copied prompt in a fixture repo finds the
+      kit and runs the loop.
+- [ ] **Several projects at once.** Projects stay open while their agent works after you switch away; the project
+      menu shows which are busy, done or waiting for an approval. Each open project gets its own preview port, the
+      screenshot tool names its project, and server messages carry the project. A project in the background gets
+      its preview checks from a headless page. Idle projects close after a while. Done when: two projects run turns
+      at the same time and each ends with its own history entry and no crossed messages.
+- [ ] **Threads in a project.** Several chats per project, each its own agent session, listed in the chat panel;
+      their turns queue across threads so history and reviews stay consistent. Done when: two threads in one
+      project keep separate conversations across a restart.
 
 ### The agent's work
 
