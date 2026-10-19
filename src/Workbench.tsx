@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { Annotation } from "../shared/annotations.ts";
 import { isPageId, type FromPreview, type NavSection, type PageId, type PreviewView } from "../shared/frame.ts";
-import type { ClientMessage } from "../shared/protocol.ts";
+import type { ClientMessage, Tagged } from "../shared/protocol.ts";
 import type { BridgeState } from "./bridge.ts";
 import { ChatPanel } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
@@ -29,14 +29,25 @@ const asChatWidth = (stored: string | null) => {
  * Everything for the open project: chat, preview, history, review and dialogs.
  * App mounts it once per project, so switching projects starts it fresh.
  */
-export function Workbench({ state, send }: { state: BridgeState; send: (message: ClientMessage) => void }) {
+export function Workbench({
+  state,
+  send: sendProject,
+}: {
+  state: BridgeState;
+  send: (message: Tagged<ClientMessage>) => void;
+}) {
+  // What the workbench sends names the thread it shows: a prompt goes there, whatever thread runs.
+  const thread = state.thread ?? undefined;
+  const send = useCallback((message: ClientMessage) => sendProject({ ...message, thread }), [sendProject, thread]);
   const [theme, setTheme] = useTheme();
   const [chatWidth, setChatWidth] = usePref("chat-width", asChatWidth);
   const [chatHidden, setChatHidden] = usePref("chat-hidden", asFlag);
   const [sidebarCollapsed, setSidebarCollapsed] = usePref("sidebar-collapsed", asFlag);
   const [page, setPage] = usePref("page", asPage);
-  // The unsent message survives a reload, one per project (the workbench is mounted once per project).
-  const [draft, setDraft] = usePref(`draft:${state.project?.id ?? ""}`, (stored) => stored ?? "", { delay: 300 });
+  // The unsent message survives a reload, one per thread of each project (the workbench is mounted once per project).
+  const [draft, setDraft] = usePref(`draft:${state.project?.id ?? ""}:${thread ?? ""}`, (stored) => stored ?? "", {
+    delay: 300,
+  });
   const [exporting, setExporting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -80,8 +91,10 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
     return () => window.removeEventListener("keydown", onKey);
   }, [setChatHidden]);
 
-  // The agent is blocked until a permission is answered, so bring the chat back for it.
-  const pendingPermission = state.chat.some((item) => item.kind === "permission" && !item.resolved);
+  // The agent is blocked until a permission is answered, so bring the chat back for it (another thread's shows there).
+  const pendingPermission =
+    state.chat.some((item) => item.kind === "permission" && !item.resolved) ||
+    state.threads.some((entry) => entry.status === "waiting");
   useEffect(() => {
     if (pendingPermission) setChatHidden(false);
   }, [pendingPermission, setChatHidden]);
@@ -208,6 +221,8 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
     >
       <ChatPanel
         agent={state.agent}
+        threads={state.threads}
+        thread={state.thread}
         chat={state.chat}
         connected={state.connected}
         problems={problems}
@@ -257,6 +272,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
               onInspect={setInspectId}
               send={send}
               locked={Boolean(review)}
+              showThreads={state.threads.length > 1}
             />
           }
           onExport={() => setExporting(true)}

@@ -2,13 +2,17 @@
 // client's own file methods, so history, checks and reviews run for real. What it does depends on a marker in the
 // prompt: E2E-REVIEW also opens a review of the Buttons specimen, E2E-VIEW writes a new view in two steps, the
 // first importing a file the second writes, E2E-SLOW takes four seconds first (for turns in two projects at once),
-// E2E-ASK first asks for permission to run a command, and E2E-BROKEN writes a specimen with a render error and an
-// accessibility finding, which the fix-up turn repairs. Every turn moves motion.duration.fast by 10ms.
+// E2E-ASK first asks for permission to run a command, E2E-BROKEN writes a specimen with a render error and an
+// accessibility finding, which the fix-up turn repairs, and E2E-WHO has the reply name its session and say whether
+// it was resumed (for threads across a restart). Every turn moves motion.duration.fast by 10ms. Session ids differ
+// between runs, so a resumed session is told from a new one.
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 
+/** Each session's folder, and whether it was resumed rather than made by this process. */
 const sessions = new Map();
+const run = Date.now().toString(36);
 
 const LATER_VIEW = `import { defineSpecimen } from "../components/specimen.ts";
 import { GREETING } from "./later-data.ts";
@@ -34,8 +38,9 @@ const FIXED = {
 };
 
 async function turn(params, client) {
-  const cwd = sessions.get(params.sessionId);
-  if (!cwd) throw new Error(`Unknown session ${params.sessionId}`);
+  const session = sessions.get(params.sessionId);
+  if (!session) throw new Error(`Unknown session ${params.sessionId}`);
+  const { cwd } = session;
   const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("\n");
   if (text.includes("E2E-SLOW")) await new Promise((resolve) => setTimeout(resolve, 4000));
   if (text.includes("E2E-ASK")) {
@@ -95,7 +100,12 @@ async function turn(params, client) {
     sessionId: params.sessionId,
     update: {
       sessionUpdate: "agent_message_chunk",
-      content: { type: "text", text: `Fast motion is now ${fast + 10}ms.` },
+      content: {
+        type: "text",
+        text: `Fast motion is now ${fast + 10}ms.${
+          text.includes("E2E-WHO") ? ` Session ${params.sessionId}${session.resumed ? " resumed" : " new"}.` : ""
+        }`,
+      },
     },
   });
   return { stopReason: "end_turn" };
@@ -105,12 +115,17 @@ acp
   .agent({ name: "basis-e2e-agent" })
   .onRequest("initialize", () => ({
     protocolVersion: acp.PROTOCOL_VERSION,
-    agentCapabilities: { loadSession: false, sessionCapabilities: { systemPrompt: {} } },
+    agentCapabilities: { loadSession: false, sessionCapabilities: { systemPrompt: {}, resume: {} } },
   }))
   .onRequest("session/new", (ctx) => {
-    const sessionId = `e2e-${sessions.size + 1}`;
-    sessions.set(sessionId, ctx.params.cwd);
+    const sessionId = `e2e-${run}-${sessions.size + 1}`;
+    sessions.set(sessionId, { cwd: ctx.params.cwd, resumed: false });
     return { sessionId };
+  })
+  .onRequest("session/resume", (ctx) => {
+    const known = sessions.get(ctx.params.sessionId);
+    sessions.set(ctx.params.sessionId, { cwd: ctx.params.cwd, resumed: known?.resumed ?? !known });
+    return {};
   })
   .onRequest("session/prompt", (ctx) => turn(ctx.params, ctx.client))
   .onNotification("session/cancel", () => {})

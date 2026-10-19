@@ -4,6 +4,8 @@ import { expect, historyCount, open, test } from "./basis.ts";
 test.use({ home: true });
 
 const projectButton = (page: Page) => page.locator('[class*="projectButton"]');
+/** The chat shown (a thread's title repeats its first prompt above it). */
+const conversation = (page: Page) => page.getByRole("region", { name: "Conversation" });
 
 /** Opens the project menu and switches to the project called `name`. */
 async function switchTo(page: Page, name: string): Promise<void> {
@@ -38,13 +40,13 @@ test("two projects run turns at the same time, each into its own chat and histor
   await expect(page.getByText(/Fast motion is now/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Ready", { exact: true })).toBeVisible();
   await expect.poll(() => historyCount(page)).toBe(before + 1);
-  await expect(page.getByText("E2E-SLOW in the second project")).toHaveCount(0);
+  await expect(conversation(page).getByText("E2E-SLOW in the second project")).toHaveCount(0);
 
   // Second finished in the background: the button says so with the menu shut.
   await expect(projectButton(page)).toContainText("Second finished in the background");
   await switchTo(page, "Second");
-  await expect(page.getByText("E2E-SLOW in the second project")).toBeVisible();
-  await expect(page.getByText("E2E-SLOW in the first project")).toHaveCount(0);
+  await expect(conversation(page).getByText("E2E-SLOW in the second project")).toBeVisible();
+  await expect(conversation(page).getByText("E2E-SLOW in the first project")).toHaveCount(0);
   await expect(page.getByText(/Fast motion is now/)).toHaveCount(1);
   await expect.poll(() => historyCount(page)).toBe(before + 1);
   await expect(projectButton(page)).not.toContainText("finished in the background");

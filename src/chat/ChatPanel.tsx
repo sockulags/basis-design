@@ -7,10 +7,12 @@ import {
   type AgentState,
   type ChatItem,
   type ClientMessage,
+  type ThreadSummary,
 } from "../../shared/protocol.ts";
 import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
+import { ThreadMenu } from "./ThreadMenu.tsx";
 
 const STARTERS = [
   "Calm fintech: deep navy and cool greys, generous whitespace, crisp 6px corners, restrained motion.",
@@ -21,6 +23,9 @@ const STARTERS = [
 
 interface ChatPanelProps {
   agent: AgentState | null;
+  /** The project's threads, and the one shown, whose conversation `chat` is. */
+  threads: ThreadSummary[];
+  thread: string | null;
   chat: ChatItem[];
   connected: boolean;
   /** Validation, type and render problems in the workspace; empty when everything is fine. */
@@ -52,6 +57,8 @@ const STATUS_TEXT: Record<AgentState["status"], string> = {
 
 export function ChatPanel({
   agent,
+  threads,
+  thread,
   chat,
   connected,
   problems,
@@ -66,6 +73,10 @@ export function ChatPanel({
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const busy = agent?.status === "busy";
+  // The agent may be busy with another thread's turn; this one's messages then wait in the queue.
+  const running = threads.some(
+    (entry) => entry.id === thread && (entry.status === "working" || entry.status === "waiting"),
+  );
   const ready = connected && agent?.status === "ready";
   const sent = chat.flatMap((item) => (item.kind === "user" && !item.auto && item.text ? [item.text] : []));
 
@@ -95,16 +106,8 @@ export function ChatPanel({
           <span className={styles.statusDot} />
           {connected ? (agent ? STATUS_TEXT[agent.status] : "…") : "Reconnecting"}
         </span>
-        <button
-          type="button"
-          className={styles.iconButton}
-          onClick={() => send({ type: "new-session" })}
-          disabled={!connected || chat.length === 0}
-          title="Start a new conversation (the design stays)"
-        >
-          New chat
-        </button>
       </header>
+      <ThreadMenu threads={threads} thread={thread} empty={chat.length === 0} connected={connected} send={send} />
 
       {agent?.status === "error" && (
         <div className={styles.agentError}>
@@ -158,7 +161,7 @@ export function ChatPanel({
         ) : (
           chat.filter((item) => !isQueued(item)).map((item) => <ChatEntry key={item.id} item={item} send={send} />)
         )}
-        {busy && <div className={styles.working}>Working on it…</div>}
+        {running && <div className={styles.working}>Working on it…</div>}
         {/* Queued messages wait below the running turn, in the order they will run. */}
         {chat.filter(isQueued).map((item) => (
           <ChatEntry key={item.id} item={item} send={send} />
@@ -210,6 +213,7 @@ export function ChatPanel({
       <Composer
         ready={ready}
         busy={busy}
+        running={running}
         sent={sent}
         supportsImages={Boolean(agent?.supportsImages)}
         draft={draft}

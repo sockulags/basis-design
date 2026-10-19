@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 /*
  * Per-viewer UI preferences in localStorage. Storage can be unavailable
@@ -62,14 +62,31 @@ function systemTheme(): Theme {
 /**
  * State that starts from a stored preference and is stored again when it
  * changes. `decode` turns the stored text (or null) into a valid value;
- * `delay` debounces writes for values that change on every keystroke.
+ * `delay` debounces writes for values that change on every keystroke. When
+ * the key changes (the draft of another thread), the value starts again from
+ * what is stored under the new key.
  */
 export function usePref<T>(
   key: string,
   decode: (stored: string | null) => T,
   { encode = String, delay = 0 }: { encode?: (value: T) => string; delay?: number } = {},
 ): [T, Dispatch<SetStateAction<T>>] {
-  const [value, setValue] = useState(() => decode(readPref(key)));
+  const [state, setState] = useState(() => ({ key, value: decode(readPref(key)) }));
+  let current = state;
+  if (state.key !== key) {
+    // Adjusting state while rendering, so no effect ever sees the old value under the new key.
+    current = { key, value: decode(readPref(key)) };
+    setState(current);
+  }
+  const { value } = current;
+  const setValue = useCallback<Dispatch<SetStateAction<T>>>(
+    (next) =>
+      setState((before) => ({
+        key: before.key,
+        value: typeof next === "function" ? (next as (value: T) => T)(before.value) : next,
+      })),
+    [],
+  );
   useEffect(() => {
     if (!delay) return writePref(key, encode(value));
     const timer = setTimeout(() => writePref(key, encode(value)), delay);

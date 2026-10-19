@@ -7,6 +7,7 @@ import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { annotationLabel, formatAnnotations, type Annotation } from "../shared/annotations.ts";
 import {
+  AGENT_LABELS,
   IMAGE_TYPES,
   MAX_IMAGE_BASE64,
   MAX_IMAGES,
@@ -15,11 +16,21 @@ import {
   type ChatItem,
   type PermissionChoice,
   type PromptImage,
+  type ThreadStatus,
+  type ThreadSummary,
   type ToolStatus,
 } from "../shared/protocol.ts";
 import { LAYOUT_CHECK } from "../shared/layout.ts";
 import { ALTERNATIVE_LABELS, describeTarget, MAX_ALTERNATIVES } from "../shared/review.ts";
-import { loadChat, saveChat } from "./chatlog.ts";
+import {
+  loadThreads,
+  newThreadId,
+  removeThreadFile,
+  saveThread,
+  saveThreadList,
+  threadTitle,
+  UNTITLED,
+} from "./chatlog.ts";
 import { PRODUCT_FILE, relativeInside } from "./paths.ts";
 import { basisTool, basisToolTitle } from "./agent-tools.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
@@ -141,28 +152,69 @@ const PREVIEW_RELOAD_MS = 10_000;
 /** How long the fix loop waits at most for the preview's checks to finish after it reported. */
 const CHECKS_WAIT_MS = 8000;
 
-type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-remove": [string]; "chat-reset": [] };
+/** Chat events name the thread they belong to after the item (or its id). */
+type Events = {
+  agent: [AgentState];
+  chat: [ChatItem, string];
+  "chat-remove": [string, string];
+  threads: [ThreadSummary[]];
+};
 type UserItem = Extract<ChatItem, { kind: "user" }>;
 
 /**
- * Runs one ACP agent as a subprocess and acts as its client: streams session
- * updates into a chat transcript, serves file reads/writes inside the
- * workspace and routes permission requests to the browser.
+ * One thread of the project: a conversation of its own in an agent session of its own, kept across restarts by
+ * server/chatlog.ts. Every thread works in the same workspace, so their turns take turns (one queue for all).
+ */
+interface Thread {
+  id: string;
+  title: string;
+  /** When a turn last started in it, or it was made. */
+  at: number;
+  transcript: ChatItem[];
+  /** The agent session its conversation lives in; after a restart its next turn resumes it (openSession). */
+  session?: { agent: AgentId; id: string };
+  /** Its session was opened without the brief as system prompt, so the next turn sends the brief first. */
+  needsPreamble: boolean;
+  /** The linked repo its session was given as a working directory; a changed link reopens it (syncRepo). */
+  sessionRepo?: string;
+  openText?: { id: string; kind: "agent" | "thought" };
+}
+
+export interface PromptOptions {
+  /** The thread the prompt goes to; the one shown last when absent or unknown. */
+  thread?: string;
+  /** With 2 or 3, that many takes on the prompt to choose between. */
+  alternatives?: number;
+}
+
+/**
+ * Runs one ACP agent as a subprocess and acts as its client: streams the
+ * updates of each thread's session into that thread's transcript, serves file
+ * reads/writes inside the workspace and routes permission requests to the
+ * browser. One process holds the sessions of every thread of the project.
  */
 export class AgentHost extends EventEmitter<Events> {
   private state: AgentState;
-  private transcript: ChatItem[] = [];
+  /** Newest first; there is always at least one. */
+  private threads: Thread[];
+  /** The thread shown last, which a tab shows when it does not name one. */
+  private active: string;
   private proc?: ChildProcess;
   private connection?: acp.ClientConnection;
-  private sessionId?: string;
+  /** Sessions opened in the running agent; a thread's session not among them is resumed at its next turn. */
+  private opened = new Set<string>();
+  /** The thread whose turn runs, with its fix-ups or alternatives. */
+  private running?: Thread;
   private supportsSystemPrompt = false;
   private supportsResume = false;
-  /** The saved session the next start tries to resume, from the conversation saved before a restart. */
-  private resumable?: { agent: AgentId; sessionId: string };
   private saveTimer?: NodeJS.Timeout;
-  private needsPreamble = false;
-  private openText?: { id: string; kind: "agent" | "thought" };
-  private permissions = new Map<string, (optionId: string | null) => void>();
+  /** Threads whose conversation changed since the last save; the list is saved with them. */
+  private dirty = new Set<Thread>();
+  /** Saves one after another, so an older write never lands after a newer one. */
+  private saving: Promise<void> = Promise.resolve();
+  /** The thread list as last announced, so it goes out only when it changed. */
+  private listed = "";
+  private permissions = new Map<string, { thread: Thread; resolve: (optionId: string | null) => void }>();
   /** Tool calls of Basis' own tools, by chat id: updates may come without the tool's name. */
   private basisCalls = new Map<string, string>();
   private stderrTail: string[] = [];
@@ -176,16 +228,14 @@ export class AgentHost extends EventEmitter<Events> {
   /** The generation the gallery reloaded after the last turn reports, or null when the turn changed nothing it shows. */
   private reloaded: number | null = null;
   private seq = 0;
-  /** Prompts sent while a turn was running, oldest first. */
-  private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
+  /** Prompts sent while a turn was running, in any thread, oldest first. */
+  private queued: { id: string; thread: Thread; text: string; attachments: Attachments; alternatives: number }[] = [];
   /** Set by Stop; ends the current set of alternatives and the fix loop, not just the running turn. */
   private stopping = false;
   /** What to tell the user when the running agent's login fails (from its LaunchSpec). */
   private loginHint = "";
   /** View files whose screens the last check found wrong, checked again after the next fix-up turn. */
   private flaggedViews: string[] = [];
-  /** The linked repo the open session was given as a working directory; a changed link reopens it (syncRepo). */
-  private sessionRepo?: string;
 
   constructor(
     private readonly workspace: Workspace,
@@ -203,6 +253,9 @@ export class AgentHost extends EventEmitter<Events> {
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
+    const first = this.makeThread();
+    this.threads = [first];
+    this.active = first.id;
   }
 
   /** Resolves once the agent is ready for a prompt (true), or has failed or stopped instead (false). */
@@ -231,21 +284,120 @@ export class AgentHost extends EventEmitter<Events> {
     return this.state;
   }
 
-  get chat(): ChatItem[] {
-    return this.transcript;
-  }
-
-  /** True while a permission request waits for the user's answer. */
+  /** True while a permission request waits for the user's answer, in any thread. */
   get waiting(): boolean {
     return this.permissions.size > 0;
   }
 
-  /** Brings back the conversation saved before the last restart; the next start tries to resume its session. */
+  /** The threads, newest first, with what each is up to. */
+  get threadList(): ThreadSummary[] {
+    return this.threads.map(({ id, title, at }) => {
+      const status = this.threadStatus(id);
+      return status ? { id, title, at, status } : { id, title, at };
+    });
+  }
+
+  /** The thread shown last. */
+  get activeThread(): string {
+    return this.current.id;
+  }
+
+  /** A thread's conversation, or undefined for a thread there is not. */
+  threadChat(id: string): ChatItem[] | undefined {
+    return this.find(id)?.transcript;
+  }
+
+  /** Shows a thread: a tab that does not name one shows it from now on. Returns its conversation. */
+  showThread(id: string): ChatItem[] | undefined {
+    const thread = this.find(id);
+    if (!thread) return undefined;
+    this.active = thread.id;
+    this.scheduleSave();
+    return thread.transcript;
+  }
+
+  /**
+   * Starts a thread, with a session of its own from its first turn on, and shows it. A thread nothing was asked in
+   * yet is new enough, so that one moves to the top instead of another empty one.
+   */
+  newThread(): string {
+    const empty = this.threads.find((thread) => thread.transcript.length === 0 && !this.threadStatus(thread.id));
+    const thread = empty ?? this.makeThread();
+    thread.at = Date.now();
+    this.threads = [thread, ...this.threads.filter((other) => other !== thread)];
+    this.active = thread.id;
+    this.scheduleSave();
+    this.announce();
+    return thread.id;
+  }
+
+  /** Removes an idle thread and its conversation. False when it is the last one or has something under way. */
+  removeThread(id: string): boolean {
+    const thread = this.find(id);
+    if (!thread || this.threads.length === 1 || this.threadStatus(id)) return false;
+    this.threads = this.threads.filter((other) => other !== thread);
+    this.dirty.delete(thread);
+    if (this.active === id) this.active = this.threads[0]!.id;
+    this.saving = this.saving
+      .then(() => removeThreadFile(this.workspace.dir, id))
+      .catch((error: Error) => console.error("[basis] could not remove the thread:", error.message));
+    this.scheduleSave();
+    this.announce();
+    return true;
+  }
+
+  /** What a thread is up to: waiting for an answer, working, queued behind another turn, or nothing. */
+  private threadStatus(id: string): ThreadStatus | undefined {
+    if ([...this.permissions.values()].some((entry) => entry.thread.id === id)) return "waiting";
+    if (this.running?.id === id) return "working";
+    if (this.queued.some((item) => item.thread.id === id)) return "queued";
+    return undefined;
+  }
+
+  private get current(): Thread {
+    return this.find(this.active) ?? this.threads[0]!;
+  }
+
+  private find(id: string | undefined): Thread | undefined {
+    return id === undefined ? undefined : this.threads.find((thread) => thread.id === id);
+  }
+
+  private makeThread(): Thread {
+    return { id: newThreadId(), title: UNTITLED, at: Date.now(), transcript: [], needsPreamble: false };
+  }
+
+  /** The thread whose session this is, while that session is open. */
+  private sessionThread(sessionId: string): Thread | undefined {
+    if (!this.opened.has(sessionId)) return undefined;
+    return this.threads.find((thread) => thread.session?.id === sessionId);
+  }
+
+  /** Tells whoever listens about the thread list when it changed (a title, a status, a thread made or removed). */
+  private announce(): void {
+    const list = this.threadList;
+    const listed = JSON.stringify(list);
+    if (listed === this.listed) return;
+    this.listed = listed;
+    this.emit("threads", list);
+  }
+
+  /**
+   * Brings back the threads saved before the last restart (or the one conversation from before threads); each
+   * resumes its session at its next turn, and the one shown last as the agent starts.
+   */
   async restore(): Promise<void> {
-    const saved = await loadChat(this.workspace.dir);
-    if (!saved) return;
-    this.transcript = saved.chat;
-    if (saved.sessionId) this.resumable = { agent: saved.agent, sessionId: saved.sessionId };
+    const saved = await loadThreads(this.workspace.dir);
+    if (!saved.threads.length) return;
+    this.threads = saved.threads.map(({ id, title, at, saved: chat }) => ({
+      id,
+      title,
+      at,
+      transcript: chat?.chat ?? [],
+      session: chat?.sessionId ? { agent: chat.agent, id: chat.sessionId } : undefined,
+      needsPreamble: false,
+    }));
+    this.active = saved.active;
+    this.listed = "";
   }
 
   async start(agentId: AgentId = this.state.id): Promise<void> {
@@ -279,7 +431,7 @@ export class AgentHost extends EventEmitter<Events> {
       if (this.proc !== proc) return;
       this.proc = undefined;
       this.connection = undefined;
-      this.sessionId = undefined;
+      this.opened.clear();
       const tail = this.stderrTail.slice(-3).join(" ");
       const hint = spec.exitHint ? ` ${spec.exitHint}` : "";
       this.fail(`The agent exited (code ${code ?? "?"}).${tail ? ` ${tail}` : ""}${hint}`);
@@ -307,7 +459,8 @@ export class AgentHost extends EventEmitter<Events> {
       this.supportsSystemPrompt = Boolean(init.agentCapabilities?.sessionCapabilities?.systemPrompt);
       this.supportsResume = Boolean(init.agentCapabilities?.sessionCapabilities?.resume);
       const supportsImages = Boolean(init.agentCapabilities?.promptCapabilities?.image);
-      await this.openSession(true);
+      // The thread shown last opens now, so Ready means a turn can start; the others open at their first turn.
+      await this.openSession(this.current);
       this.setState({ id: agentId, status: "ready", supportsImages });
     } catch (error) {
       if (this.proc === proc) this.fail(describeError(error, spec.loginHint));
@@ -320,7 +473,7 @@ export class AgentHost extends EventEmitter<Events> {
     this.proc = undefined;
     this.connection?.close();
     this.connection = undefined;
-    this.sessionId = undefined;
+    this.opened.clear();
     if (proc?.pid && proc.exitCode === null) {
       if (process.platform === "win32")
         spawnSync("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { windowsHide: true });
@@ -329,63 +482,64 @@ export class AgentHost extends EventEmitter<Events> {
     this.setState({ ...this.state, status: "stopped", detail: undefined });
   }
 
-  async newSession(): Promise<void> {
-    if (this.state.status === "busy") await this.cancel();
-    this.queued = [];
-    this.transcript = [];
-    this.openText = undefined;
-    this.resumable = undefined;
-    this.emit("chat-reset");
-    this.scheduleSave();
-    if (!this.connection) return this.start();
-    try {
-      await this.openSession();
-      this.setState({ ...this.state, status: "ready", detail: undefined });
-    } catch (error) {
-      this.fail(describeError(error, this.loginHint));
-    }
+  /**
+   * Runs what the user sent in a thread: one turn, or with `alternatives` > 1
+   * that many takes on it to choose between. A prompt sent while the agent
+   * works, in this thread or another, is queued and runs when it is free again.
+   */
+  async prompt(text: string, attachments: Attachments = {}, options: PromptOptions = {}): Promise<void> {
+    const thread = this.find(options.thread) ?? this.current;
+    const count = Math.max(1, Math.min(MAX_ALTERNATIVES, Math.floor(options.alternatives ?? 1) || 1));
+    await this.run(thread, text, attachments, count);
   }
 
-  /**
-   * Runs what the user sent: one turn, or with `alternatives` > 1 that many
-   * takes on it to choose between. A prompt sent while the agent works is
-   * queued and runs when it is free again; `queuedId` is the chat item it was
-   * queued as.
-   */
-  async prompt(text: string, attachments: Attachments = {}, queuedId?: string, alternatives = 1): Promise<void> {
+  /** Runs a prompt in a thread, or queues it; `queuedId` is the chat item it was queued as. */
+  private async run(
+    thread: Thread,
+    text: string,
+    attachments: Attachments,
+    count: number,
+    queuedId?: string,
+  ): Promise<void> {
     const connection = this.connection;
-    if (!connection || !this.sessionId) return;
-    const count = Math.max(1, Math.min(MAX_ALTERNATIVES, Math.floor(alternatives) || 1));
-    if (this.state.status === "busy") return this.enqueue(text, attachments, count);
-    if (this.state.status !== "ready") return;
-    this.stopping = false;
-    this.setState({ ...this.state, status: "busy", detail: undefined });
-    const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
+    if (!connection || (this.state.status !== "busy" && this.state.status !== "ready")) return;
     const annotations = attachments.annotations ?? [];
-    this.push({
+    const label = text || annotations.map(annotationLabel).join(", ") || "Image prompt";
+    // A thread is named after what was first asked in it, queued or not.
+    if (thread.title === UNTITLED && !thread.transcript.some((item) => item.kind === "user")) {
+      thread.title = threadTitle(label);
+    }
+    if (this.state.status === "busy") return this.enqueue(thread, text, attachments, count);
+    this.stopping = false;
+    this.running = thread;
+    thread.at = Date.now();
+    const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
+    this.setState({ ...this.state, status: "busy", detail: undefined });
+    this.push(thread, {
       ...this.userItem(queuedId ?? this.nextId("user"), text, images, annotations, false),
       alternatives: count > 1 ? count : undefined,
     });
-    const label = text || annotations.map(annotationLabel).join(", ") || "Image prompt";
     const turn = { text, images, annotations, label, instruction: attachments.instruction };
-    if (count > 1) await this.runAlternatives(turn, count);
-    else await this.runChecked(turn);
+    if (count > 1) await this.runAlternatives(thread, turn, count);
+    else await this.runChecked(thread, turn);
+    this.running = undefined;
     if (this.connection === connection) this.setState({ ...this.state, status: "ready" });
-    // Whatever the user queued meanwhile runs once everything above is done.
+    else this.announce();
+    // Whatever was queued meanwhile, in any thread, runs once everything above is done.
     await this.runQueued();
   }
 
   /** One turn plus the fix-up turns for what it left broken. Returns false when it was stopped or failed. */
-  private async runChecked(turn: Turn): Promise<boolean> {
+  private async runChecked(thread: Thread, turn: Turn): Promise<boolean> {
     const connection = this.connection;
     this.flaggedViews = [];
-    const completed = await this.runTurn(turn);
+    const completed = await this.runTurn(thread, turn);
     for (let fixes = 0; completed && fixes < MAX_AUTO_FIXES && !this.stopping; fixes += 1) {
       const problems = await this.collectProblems();
       if (!problems || this.connection !== connection) break;
-      this.push(this.userItem(this.nextId("user"), problems, [], [], true));
+      this.push(thread, this.userItem(this.nextId("user"), problems, [], [], true));
       // Fix-up turns are labelled as such in history and reviews, not with the whole problem report.
-      await this.runTurn({ text: problems, images: [], annotations: [], label: "Fixed reported problems" });
+      await this.runTurn(thread, { text: problems, images: [], annotations: [], label: "Fixed reported problems" });
     }
     return completed && !this.stopping;
   }
@@ -396,7 +550,7 @@ export class AgentHost extends EventEmitter<Events> {
    * workspace back; the agent's session remembers the earlier takes, so it can
    * make the next one different.
    */
-  private async runAlternatives(turn: Turn, count: number): Promise<void> {
+  private async runAlternatives(thread: Thread, turn: Turn, count: number): Promise<void> {
     const labels = ALTERNATIVE_LABELS.slice(0, count);
     await this.workspace.beginAlternatives(turn.label, count);
     for (const [index, label] of labels.entries()) {
@@ -404,8 +558,8 @@ export class AgentHost extends EventEmitter<Events> {
         if (!this.workspace.review?.alternatives || this.stopping || !this.connection) break;
         await this.workspace.nextAlternative();
       }
-      this.notice(`Alternative ${label} of ${count}`, "info");
-      const completed = await this.runChecked({
+      this.notice(thread, `Alternative ${label} of ${count}`, "info");
+      const completed = await this.runChecked(thread, {
         ...turn,
         label: `Alternative ${label}: ${turn.label}`,
         instruction: [turn.instruction, alternativeInstruction(index, labels, Boolean(this.workspace.review))]
@@ -415,6 +569,7 @@ export class AgentHost extends EventEmitter<Events> {
       if (!(await this.workspace.alternativeDone(label))) {
         if (index === 0)
           this.notice(
+            thread,
             "The agent made one version without opening a review, so there is nothing to compare it with.",
             "info",
           );
@@ -425,23 +580,32 @@ export class AgentHost extends EventEmitter<Events> {
     await this.workspace.endAlternatives();
   }
 
-  /** Sends one turn to the agent and records what it changed as one undo step (or iteration). */
-  private async runTurn(turn: Turn): Promise<boolean> {
+  /**
+   * Sends one turn to the agent in the thread's session (opened or resumed first when it is not open) and records
+   * what it changed as one undo step (or iteration).
+   */
+  private async runTurn(thread: Thread, turn: Turn): Promise<boolean> {
     const connection = this.connection;
-    const sessionId = this.sessionId;
-    if (!connection || !sessionId) return false;
-    await this.syncRepo(connection, sessionId);
-    await this.workspace.beginTurn(turn.label);
+    if (!connection) return false;
+    let sessionId: string;
+    try {
+      sessionId = await this.openSession(thread);
+    } catch (error) {
+      if (this.connection === connection) this.notice(thread, describeError(error, this.loginHint), "error");
+      return false;
+    }
+    await this.syncRepo(connection, thread, sessionId);
+    await this.workspace.beginTurn(turn.label, thread.title);
     // Each turn, the fix-ups included, holds the preview on its own: the fix loop needs to see each one's result.
     this.preview?.hold();
     this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
     const message = turn.text || "See the attached context.";
-    const body = this.needsPreamble
+    const body = thread.needsPreamble
       ? `${FIRST_PROMPT_PREAMBLE}
 
 ${message}`
       : message;
-    this.needsPreamble = false;
+    thread.needsPreamble = false;
     const blocks: acp.ContentBlock[] = [];
     if (this.repo) {
       const hasNotes = existsSync(path.join(this.workspace.dir, PRODUCT_FILE));
@@ -460,12 +624,12 @@ ${message}`
         prompt: blocks,
       });
       completed = result.stopReason === "end_turn";
-      if (result.stopReason === "cancelled") this.notice("Stopped.", "info");
-      else if (!completed) this.notice(`The agent stopped early (${result.stopReason}).`, "error");
+      if (result.stopReason === "cancelled") this.notice(thread, "Stopped.", "info");
+      else if (!completed) this.notice(thread, `The agent stopped early (${result.stopReason}).`, "error");
     } catch (error) {
-      if (this.connection === connection) this.notice(describeError(error, this.loginHint), "error");
+      if (this.connection === connection) this.notice(thread, describeError(error, this.loginHint), "error");
     } finally {
-      this.openText = undefined;
+      thread.openText = undefined;
       this.cancelPermissions();
     }
     // Stay busy while the turn is checked and recorded as one undo step; the preview shows the result either way.
@@ -479,33 +643,36 @@ ${message}`
 
   /** Removes a queued prompt before it runs. */
   unqueue(id: string): void {
-    const before = this.queued.length;
-    this.queued = this.queued.filter((item) => item.id !== id);
-    if (this.queued.length !== before) this.remove(id);
+    const item = this.queued.find((queued) => queued.id === id);
+    if (!item) return;
+    this.queued = this.queued.filter((queued) => queued !== item);
+    this.remove(item.thread, id);
   }
 
-  private enqueue(text: string, attachments: Attachments, alternatives: number): void {
+  private enqueue(thread: Thread, text: string, attachments: Attachments, alternatives: number): void {
     const id = this.nextId("user");
     const images = this.state.supportsImages ? acceptedImages(attachments.images) : [];
-    this.push({
+    // In the queue before the item goes out, so the thread list says it is queued.
+    this.queued.push({ id, thread, text, attachments, alternatives });
+    this.push(thread, {
       ...this.userItem(id, text, images, attachments.annotations ?? [], false),
       queued: true,
       alternatives: alternatives > 1 ? alternatives : undefined,
     });
-    this.queued.push({ id, text, attachments, alternatives });
   }
 
   private async runQueued(): Promise<void> {
     const next = this.queued.shift();
     if (!next) return;
-    // The message moves from where it was queued to the end of the conversation, where its turn starts.
-    this.remove(next.id);
-    await this.prompt(next.text, next.attachments, next.id, next.alternatives);
+    // The message moves from where it was queued to the end of its conversation, where its turn starts.
+    this.remove(next.thread, next.id);
+    await this.run(next.thread, next.text, next.attachments, next.alternatives, next.id);
   }
 
-  private clearQueue(): void {
-    for (const item of this.queued) this.remove(item.id);
-    this.queued = [];
+  /** Drops the prompts queued in one thread. */
+  private clearQueue(thread: Thread): void {
+    for (const item of this.queued) if (item.thread === thread) this.remove(thread, item.id);
+    this.queued = this.queued.filter((item) => item.thread !== thread);
   }
 
   private userItem(
@@ -643,50 +810,57 @@ ${message}`
       : null;
   }
 
-  /** Stops the running turn; prompts queued behind it are dropped too, since Stop means stop. */
+  /**
+   * Stops the running turn; the prompts queued behind it in its thread are dropped too, since Stop means stop.
+   * Prompts queued in other threads were sent about something else, so they run next.
+   */
   async cancel(): Promise<void> {
+    const thread = this.running;
     this.stopping = true;
-    this.clearQueue();
+    if (thread) this.clearQueue(thread);
     this.cancelPermissions();
-    if (this.connection && this.sessionId) {
-      await this.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId: this.sessionId });
+    const sessionId = thread?.session?.id;
+    if (this.connection && sessionId) {
+      await this.connection.agent.notify(acp.methods.agent.session.cancel, { sessionId });
     }
   }
 
   resolvePermission(id: string, optionId: string | null): void {
-    this.permissions.get(id)?.(optionId);
+    this.permissions.get(id)?.resolve(optionId);
   }
 
   /**
-   * Opens the session turns run in. With `resume`, it first tries to pick up
-   * the saved session, so the agent remembers the conversation the transcript
-   * shows; otherwise, or when that fails, it starts a new one.
+   * Opens the thread's session in the running agent, unless it is open, and returns its id. It first tries to
+   * resume the session the thread had, so the agent remembers the conversation the transcript shows; otherwise
+   * (another agent, or resuming fails) it starts a new one.
    */
-  private async openSession(resume = false): Promise<void> {
+  private async openSession(thread: Thread): Promise<string> {
     const connection = this.connection;
     if (!connection) throw new Error("Agent is not connected");
-    const base = this.sessionBase();
-    const saved = resume ? this.resumable : undefined;
-    this.resumable = undefined;
+    const saved = thread.session;
+    if (saved && this.opened.has(saved.id)) return saved.id;
+    const base = this.sessionBase(thread);
     if (saved && saved.agent === this.state.id && this.supportsResume) {
       try {
         const resumed = await connection.agent.request(acp.methods.agent.session.resume, {
           ...base,
-          sessionId: saved.sessionId,
+          sessionId: saved.id,
           ...(this.supportsSystemPrompt ? { systemPrompt: SYSTEM_PROMPT } : {}),
         });
-        await this.askingMode(connection, saved.sessionId, (resumed as acp.ResumeSessionResponse | undefined)?.modes);
-        this.sessionId = saved.sessionId;
-        this.needsPreamble = false;
-        this.scheduleSave();
-        return;
+        await this.askingMode(connection, saved.id, (resumed as acp.ResumeSessionResponse | undefined)?.modes);
+        this.opened.add(saved.id);
+        thread.needsPreamble = false;
+        return saved.id;
       } catch {
         // Falls through to a new session below.
       }
     }
-    if (saved && this.transcript.length > 0) {
+    if (saved && thread.transcript.length > 0) {
       this.notice(
-        "The agent starts a new conversation after the restart; the messages above are for reference.",
+        thread,
+        saved.agent === this.state.id
+          ? "The agent starts a new conversation after the restart; the messages above are for reference."
+          : `${AGENT_LABELS[this.state.id]} starts a new conversation in this chat; the messages above are for reference.`,
         "info",
       );
     }
@@ -701,17 +875,19 @@ ${message}`
         // Fall back to the preamble below; some agents advertise only "override".
       }
     }
-    this.needsPreamble = response === undefined;
     const session = response ?? (await connection.agent.request(acp.methods.agent.session.new, base));
     if (!session?.sessionId) throw new Error("The agent did not return a session id");
+    thread.needsPreamble = response === undefined;
     await this.askingMode(connection, session.sessionId, session.modes);
-    this.sessionId = session.sessionId;
-    this.scheduleSave();
+    thread.session = { agent: this.state.id, id: session.sessionId };
+    this.opened.add(session.sessionId);
+    this.scheduleSave(thread);
+    return session.sessionId;
   }
 
-  /** What every session is opened with; `sessionRepo` remembers the repo it names. */
-  private sessionBase() {
-    this.sessionRepo = this.repo;
+  /** What every session is opened with; the thread remembers the repo it names. */
+  private sessionBase(thread: Thread) {
+    thread.sessionRepo = this.repo;
     return { cwd: this.workspace.dir, mcpServers: this.mcpServers, _meta: sessionMeta(this.repo) };
   }
 
@@ -720,9 +896,9 @@ ${message}`
    * its session starts; resuming the live session with different ones makes the adapter rebuild it from its
    * transcript, so the conversation goes on. Other agents are not given the repo this way (sessionMeta).
    */
-  private async syncRepo(connection: acp.ClientConnection, sessionId: string): Promise<void> {
-    if (this.repo === this.sessionRepo) return;
-    const base = this.sessionBase();
+  private async syncRepo(connection: acp.ClientConnection, thread: Thread, sessionId: string): Promise<void> {
+    if (this.repo === thread.sessionRepo) return;
+    const base = this.sessionBase(thread);
     if (this.state.id !== "claude" || !this.supportsResume) return;
     try {
       const resumed = await connection.agent.request(acp.methods.agent.session.resume, {
@@ -753,31 +929,54 @@ ${message}`
     await connection.agent.request(acp.methods.agent.session.setMode, { sessionId, modeId: asking });
   }
 
-  /** Saves the conversation shortly after it changes; streamed text changes it many times a second. */
-  private scheduleSave(): void {
+  /**
+   * Saves the thread list, and the conversation of a thread that changed, shortly after; streamed text changes it
+   * many times a second.
+   */
+  private scheduleSave(thread?: Thread): void {
+    if (thread) this.dirty.add(thread);
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      const saved = { agent: this.state.id, sessionId: this.sessionId ?? null, chat: this.transcript };
-      saveChat(this.workspace.dir, saved).catch((error: Error) =>
-        console.error("[basis] could not save the chat:", error.message),
-      );
+      const dirty = [...this.dirty];
+      this.dirty.clear();
+      const list = { active: this.current.id, threads: this.threads };
+      const dir = this.workspace.dir;
+      this.saving = this.saving
+        .then(async () => {
+          for (const changed of dirty) {
+            if (!this.threads.includes(changed)) continue;
+            const { session, transcript } = changed;
+            await saveThread(dir, changed.id, {
+              agent: session?.agent ?? this.state.id,
+              sessionId: session?.id ?? null,
+              chat: transcript,
+            });
+          }
+          await saveThreadList(dir, list);
+        })
+        .catch((error: Error) => console.error("[basis] could not save the chat:", error.message));
     }, 400);
   }
 
   private onUpdate(params: acp.SessionNotification): void {
-    if (params.sessionId !== this.sessionId) return;
+    const thread = this.sessionThread(params.sessionId);
+    if (!thread) return;
     const update = params.update;
     switch (update.sessionUpdate) {
       case "agent_message_chunk":
       case "agent_thought_chunk": {
         if (update.content.type !== "text") return;
-        this.appendText(update.sessionUpdate === "agent_message_chunk" ? "agent" : "thought", update.content.text);
+        this.appendText(
+          thread,
+          update.sessionUpdate === "agent_message_chunk" ? "agent" : "thought",
+          update.content.text,
+        );
         return;
       }
       case "tool_call": {
         const tool = basisTool(update);
         if (tool) this.basisCalls.set(`tool-${update.toolCallId}`, tool);
-        this.push({
+        this.push(thread, {
           kind: "tool",
           id: `tool-${update.toolCallId}`,
           title: tool ? basisToolTitle(tool, update.rawInput) : update.title,
@@ -788,7 +987,7 @@ ${message}`
       }
       case "tool_call_update": {
         const id = `tool-${update.toolCallId}`;
-        const existing = this.transcript.find((item) => item.id === id);
+        const existing = thread.transcript.find((item) => item.id === id);
         if (existing?.kind !== "tool") return;
         const tool = basisTool(update) ?? this.basisCalls.get(id);
         const title = tool
@@ -796,7 +995,7 @@ ${message}`
             ? basisToolTitle(tool, update.rawInput)
             : existing.title
           : (update.title ?? existing.title);
-        this.push({
+        this.push(thread, {
           ...existing,
           title,
           toolKind: update.kind ?? existing.toolKind,
@@ -806,9 +1005,9 @@ ${message}`
       }
       case "plan": {
         const entries = update.entries.map((entry) => ({ content: entry.content, status: entry.status }));
-        const last = this.transcript.findLast((item) => item.kind === "plan" || item.kind === "user");
+        const last = thread.transcript.findLast((item) => item.kind === "plan" || item.kind === "user");
         const id = last?.kind === "plan" ? last.id : this.nextId("plan");
-        this.push({ kind: "plan", id, entries });
+        this.push(thread, { kind: "plan", id, entries });
         return;
       }
       default:
@@ -818,6 +1017,7 @@ ${message}`
 
   private async onPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
     const call = params.toolCall;
+    const thread = this.sessionThread(params.sessionId) ?? this.running ?? this.current;
     // Some tools (grep) name their path only in their input, not as locations.
     const located = (call.locations ?? []).map((location) => location.path);
     const paths = located.length ? located : inputPaths(call.rawInput, this.workspace.dir);
@@ -838,7 +1038,11 @@ ${message}`
     // The linked repo is read-only, though Claude Code has it as a working directory: edits there are refused unasked.
     const inProduct = paths.find((p) => this.inRepo(p) && relativeInside(this.workspace.dir, p) === null);
     if (call.kind === "edit" && inProduct) {
-      this.notice(`Basis refused an edit in the linked product repo (${inProduct}); the agent only reads it.`, "info");
+      this.notice(
+        thread,
+        `Basis refused an edit in the linked product repo (${inProduct}); the agent only reads it.`,
+        "info",
+      );
       const reject = options.find((option) => option.kind === "reject_once");
       return reject
         ? { outcome: { outcome: "selected", optionId: reject.optionId } }
@@ -849,12 +1053,12 @@ ${message}`
     const title = call.title ?? "The agent wants to run a tool";
     const detail = describeRawInput(call.rawInput) ?? (paths.length ? paths.join("\n") : undefined);
     // Waiting before the item goes out, so whoever hears of it sees the agent waiting (see `waiting`).
-    const answered = new Promise<string | null>((resolve) => this.permissions.set(id, resolve));
-    this.push({ kind: "permission", id, title, detail, options });
+    const answered = new Promise<string | null>((resolve) => this.permissions.set(id, { thread, resolve }));
+    this.push(thread, { kind: "permission", id, title, detail, options });
     const optionId = await answered;
     this.permissions.delete(id);
     const chosen = options.find((option) => option.optionId === optionId);
-    this.push({ kind: "permission", id, title, detail, options, resolved: chosen?.name ?? "Cancelled" });
+    this.push(thread, { kind: "permission", id, title, detail, options, resolved: chosen?.name ?? "Cancelled" });
     return chosen
       ? { outcome: { outcome: "selected", optionId: chosen.optionId } }
       : { outcome: { outcome: "cancelled" } };
@@ -894,36 +1098,38 @@ ${message}`
     return {};
   }
 
-  private appendText(kind: "agent" | "thought", chunk: string): void {
-    const open = this.openText;
-    const current = open?.kind === kind ? this.transcript.find((item) => item.id === open.id) : undefined;
+  private appendText(thread: Thread, kind: "agent" | "thought", chunk: string): void {
+    const open = thread.openText;
+    const current = open?.kind === kind ? thread.transcript.find((item) => item.id === open.id) : undefined;
     if (current && (current.kind === "agent" || current.kind === "thought")) {
-      this.push({ ...current, text: current.text + chunk }, true);
+      this.push(thread, { ...current, text: current.text + chunk }, true);
       return;
     }
     const id = this.nextId(kind);
-    this.push({ kind, id, text: chunk }, true);
-    this.openText = { id, kind };
+    this.push(thread, { kind, id, text: chunk }, true);
+    thread.openText = { id, kind };
   }
 
-  /** Inserts or replaces a transcript item and broadcasts it. */
-  private push(item: ChatItem, keepTextOpen = false): void {
-    if (!keepTextOpen) this.openText = undefined;
-    const index = this.transcript.findIndex((existing) => existing.id === item.id);
-    if (index === -1) this.transcript.push(item);
-    else this.transcript[index] = item;
-    this.emit("chat", item);
-    this.scheduleSave();
+  /** Inserts or replaces an item in a thread's transcript and broadcasts it. */
+  private push(thread: Thread, item: ChatItem, keepTextOpen = false): void {
+    if (!keepTextOpen) thread.openText = undefined;
+    const index = thread.transcript.findIndex((existing) => existing.id === item.id);
+    if (index === -1) thread.transcript.push(item);
+    else thread.transcript[index] = item;
+    this.emit("chat", item, thread.id);
+    this.scheduleSave(thread);
+    this.announce();
   }
 
-  private remove(id: string): void {
-    this.transcript = this.transcript.filter((item) => item.id !== id);
-    this.emit("chat-remove", id);
-    this.scheduleSave();
+  private remove(thread: Thread, id: string): void {
+    thread.transcript = thread.transcript.filter((item) => item.id !== id);
+    this.emit("chat-remove", id, thread.id);
+    this.scheduleSave(thread);
+    this.announce();
   }
 
-  private notice(text: string, tone: "info" | "error"): void {
-    this.push({ kind: "notice", id: this.nextId("notice"), text, tone });
+  private notice(thread: Thread, text: string, tone: "info" | "error"): void {
+    this.push(thread, { kind: "notice", id: this.nextId("notice"), text, tone });
   }
 
   private fail(detail: string): void {
@@ -933,13 +1139,14 @@ ${message}`
   }
 
   private cancelPermissions(): void {
-    for (const resolve of this.permissions.values()) resolve(null);
+    for (const { resolve } of this.permissions.values()) resolve(null);
     this.permissions.clear();
   }
 
   private setState(next: AgentState): void {
     this.state = next;
     this.emit("agent", next);
+    this.announce();
   }
 
   private nextId(prefix: string): string {

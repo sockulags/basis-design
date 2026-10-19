@@ -111,3 +111,79 @@ describe("after a turn, the fix loop", () => {
     assert.equal(await settled(), false);
   });
 });
+
+describe("threads", () => {
+  /** Waits for a condition the agent reaches on its own. */
+  async function until(done: () => boolean): Promise<void> {
+    for (let waited = 0; !done(); waited += 50) {
+      if (waited > 20_000) throw new Error("timed out");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  const replies = (agent: AgentHost, thread: string) =>
+    (agent.threadChat(thread) ?? []).flatMap((item) => (item.kind === "agent" ? [item.text] : []));
+  const prompts = (agent: AgentHost, thread: string) =>
+    (agent.threadChat(thread) ?? []).flatMap((item) => (item.kind === "user" ? [item.text] : []));
+
+  test("take turns in one queue, each in its own session, and resume their own after a restart", async () => {
+    const script = process.env.BASIS_AGENT_SCRIPT;
+    process.env.BASIS_AGENT_SCRIPT = path.join(import.meta.dirname, "e2e", "fake-agent.mjs");
+    const dir = path.join(root, "threads");
+    const workspace = new Workspace(dir, { typecheck: async () => [] });
+    await workspace.init();
+    const hosts: AgentHost[] = [];
+    try {
+      const agent = new AgentHost(workspace, "claude", undefined, [], root);
+      hosts.push(agent);
+      await agent.restore();
+      await agent.start();
+      assert.equal(agent.agent.status, "ready");
+      const first = agent.activeThread;
+      assert.equal(agent.newThread(), first, "an empty thread is new enough, so no other is made");
+
+      // The first thread's slow turn runs; the second thread's prompt waits for it.
+      const both = agent.prompt("E2E-SLOW E2E-WHO first", {}, { thread: first });
+      await until(() => agent.threadList.find((thread) => thread.id === first)?.status === "working");
+      const second = agent.newThread();
+      assert.notEqual(second, first);
+      await agent.prompt("E2E-WHO second", {}, { thread: second });
+      assert.equal(agent.threadList.find((thread) => thread.id === second)?.status, "queued");
+      assert.equal(agent.removeThread(second), false, "a queued thread stays");
+      await both;
+      assert.deepEqual(
+        agent.threadList.map(({ title, status }) => [title, status]),
+        [
+          ["E2E-WHO second", undefined],
+          ["E2E-SLOW E2E-WHO first", undefined],
+        ],
+      );
+      assert.deepEqual(prompts(agent, first), ["E2E-SLOW E2E-WHO first"]);
+      assert.deepEqual(prompts(agent, second), ["E2E-WHO second"]);
+      const session = (thread: string) => /Session (\S+) new\./.exec(replies(agent, thread).join(" "))?.[1];
+      assert.ok(session(first) && session(second) && session(first) !== session(second), "a session each");
+      // Each history entry names the thread its turn ran in.
+      assert.deepEqual(
+        workspace.entries.slice(-2).map((entry) => entry.thread),
+        ["E2E-SLOW E2E-WHO first", "E2E-WHO second"],
+      );
+
+      await agent.stop();
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      const restarted = new AgentHost(workspace, "claude", undefined, [], root);
+      hosts.push(restarted);
+      await restarted.restore();
+      assert.equal(restarted.activeThread, second, "the thread shown last is shown again");
+      assert.deepEqual(prompts(restarted, first), ["E2E-SLOW E2E-WHO first"]);
+      await restarted.start();
+      await restarted.prompt("E2E-WHO again", {}, { thread: first });
+      await restarted.prompt("E2E-WHO again", {}, { thread: second });
+      assert.match(replies(restarted, first).at(-1) ?? "", new RegExp(`Session ${session(first)} resumed`));
+      assert.match(replies(restarted, second).at(-1) ?? "", new RegExp(`Session ${session(second)} resumed`));
+    } finally {
+      for (const host of hosts) await host.stop();
+      await workspace.close();
+      if (script === undefined) delete process.env.BASIS_AGENT_SCRIPT;
+      else process.env.BASIS_AGENT_SCRIPT = script;
+    }
+  });
+});

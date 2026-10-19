@@ -15,7 +15,10 @@ import { imageAttachment, type Attachment } from "./images.ts";
 
 interface ComposerProps {
   ready: boolean;
+  /** The agent runs a turn, in this thread or another: a message is queued. */
   busy: boolean;
+  /** The turn running is this thread's, so Stop stops it. */
+  running: boolean;
   /** Earlier prompts, oldest first, for recalling with the arrow keys. */
   sent: string[];
   /** True while a review is open; every message is part of it. */
@@ -36,6 +39,7 @@ interface ComposerProps {
 export function Composer({
   ready,
   busy,
+  running,
   sent,
   reviewing,
   supportsImages,
@@ -263,17 +267,17 @@ export function Composer({
               </button>
             ))}
           </div>
-          {busy && (
+          {running && (
             <button
               type="button"
               className={styles.stop}
               onClick={() => send({ type: "cancel" })}
-              title="Stop the agent and drop queued messages"
+              title="Stop the agent and drop the messages queued in this chat"
             >
               Stop
             </button>
           )}
-          {(!busy || hasContent) && (
+          {(!running || hasContent) && (
             <button
               type="submit"
               className={styles.send}

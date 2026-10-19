@@ -12,6 +12,7 @@ import type {
   ServerMessage,
   Snapshot,
   Tagged,
+  ThreadSummary,
   VerifyKitResult,
 } from "../shared/protocol.ts";
 import type { ReviewState } from "../shared/review.ts";
@@ -31,6 +32,9 @@ export interface BridgeState {
   design: DesignState | null;
   history: HistoryEntry[];
   agent: AgentState | null;
+  /** The project's threads, and the one this tab shows, whose chat `chat` is. */
+  threads: ThreadSummary[];
+  thread: string | null;
   chat: ChatItem[];
   /** History snapshots fetched for inspection, by entry id. */
   snapshots: Record<string, Snapshot>;
@@ -59,6 +63,8 @@ const initial: BridgeState = {
   design: null,
   history: [],
   agent: null,
+  threads: [],
+  thread: null,
   chat: [],
   snapshots: {},
   review: null,
@@ -93,6 +99,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         design: action.design,
         history: action.history,
         agent: action.agent,
+        threads: action.threads,
+        thread: action.thread,
         chat: action.chat,
         review: action.review,
         previewWaiting: action.previewWaiting,
@@ -121,9 +129,13 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, history: action.history };
     case "agent":
       return { ...state, agent: action.agent };
-    case "chat-reset":
-      return { ...state, chat: [] };
+    case "threads":
+      return { ...state, threads: action.threads };
+    case "thread":
+      return { ...state, thread: action.thread, chat: action.chat };
     case "chat-upsert": {
+      // Another thread's chat is not the one this tab shows.
+      if (action.thread !== state.thread) return state;
       const index = state.chat.findIndex((item) => item.id === action.item.id);
       if (index === -1) return { ...state, chat: [...state.chat, action.item] };
       const chat = state.chat.slice();
@@ -142,6 +154,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       // A review that ends takes the server's copies of past versions with it.
       return { ...state, review: action.review, baselines: action.review ? state.baselines : {} };
     case "chat-remove":
+      if (action.thread !== state.thread) return state;
       return { ...state, chat: state.chat.filter((item) => item.id !== action.id) };
     case "baseline":
       return { ...state, baselines: { ...state.baselines, [action.baseline.id]: action.baseline } };
@@ -151,26 +164,30 @@ function reduce(state: BridgeState, action: Action): BridgeState {
 }
 
 /**
- * Keeps a WebSocket to the Basis server open and mirrors the state of the project this tab shows. What the chrome
- * sends names the project it was sent from (App tags it), so a message sent while the next one opens still
- * reaches the project it was meant for.
+ * Keeps a WebSocket to the Basis server open and mirrors the state of the project this tab shows, with the chat of
+ * the thread it shows. What the chrome sends names the project it was sent from (App tags it) and the thread
+ * (Workbench tags it), so a message sent while the next one opens still reaches the project it was meant for.
  */
 export function useBridge(): { state: BridgeState; send: (message: Tagged<ClientMessage>) => void } {
   const [state, dispatch] = useReducer(reduce, initial);
   const socket = useRef<WebSocket | null>(null);
-  /** The project of the last hello: what this tab shows, and asks for again when it reconnects. */
-  const shown = useRef<string | undefined>(undefined);
+  /** The project of the last hello and the thread shown: what this tab shows, and asks for again when it reconnects. */
+  const shown = useRef<{ project: string; thread: string } | undefined>(undefined);
 
   useEffect(() => {
     let closed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
-      const query = shown.current ? `?project=${encodeURIComponent(shown.current)}` : "";
+      const query = shown.current
+        ? `?project=${encodeURIComponent(shown.current.project)}&thread=${encodeURIComponent(shown.current.thread)}`
+        : "";
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/bridge${query}`);
       socket.current = ws;
       ws.onmessage = (event) => {
         const message = JSON.parse(String(event.data)) as Tagged<ServerMessage>;
-        if (message.type === "hello") shown.current = message.project.id;
+        if (message.type === "hello") shown.current = { project: message.project.id, thread: message.thread };
+        if (message.type === "thread" && shown.current && shown.current.project === message.projectId)
+          shown.current = { project: shown.current.project, thread: message.thread };
         dispatch(message);
       };
       ws.onclose = () => {

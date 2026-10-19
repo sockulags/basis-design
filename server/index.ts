@@ -305,7 +305,13 @@ function sendProject(id: string, message: ServerMessage): void {
   for (const ws of open.viewers(id)) send(ws, { ...message, projectId: id });
 }
 
-function hello(ws: WebSocket, project: OpenProject): void {
+/** The thread each tab shows, of the project it shows. */
+const threadOf = new Map<WebSocket, string>();
+
+/** Everything about a project for a tab, with the thread it asks for (when the project has it) or the one shown last. */
+function hello(ws: WebSocket, project: OpenProject, wanted?: string | null): void {
+  const thread = wanted && project.agent.threadChat(wanted) ? wanted : project.agent.activeThread;
+  threadOf.set(ws, thread);
   send(ws, {
     type: "hello",
     projectId: project.entry.id,
@@ -315,18 +321,29 @@ function hello(ws: WebSocket, project: OpenProject): void {
     design: project.workspace.state,
     history: project.workspace.entries,
     agent: project.agent.agent,
-    chat: project.agent.chat,
+    threads: project.agent.threadList,
+    thread,
+    chat: project.agent.threadChat(thread) ?? [],
     review: project.workspace.review,
     previewWaiting: project.hold.waiting,
     status: open.statuses(),
   });
 }
 
+/** Shows one of a project's threads in a tab, with its chat; a new tab shows it from now on too. */
+function showThread(ws: WebSocket, project: OpenProject, id: string): void {
+  const chat = project.agent.showThread(id);
+  if (!chat) return;
+  threadOf.set(ws, id);
+  send(ws, { type: "thread", projectId: project.entry.id, thread: id, chat });
+}
+
 /**
- * Shows `entry` in a tab, opening it unless it is open. The project the tab showed goes on in the background, its
- * agent included. If the new one fails to open, the tab stays where it was and the error is shown.
+ * Shows `entry` in a tab, opening it unless it is open, at the thread `thread` when it has that one. The project the
+ * tab showed goes on in the background, its agent included. If the new one fails to open, the tab stays where it
+ * was and the error is shown.
  */
-async function showIn(ws: WebSocket, entry: ProjectEntry): Promise<boolean> {
+async function showIn(ws: WebSocket, entry: ProjectEntry, thread?: string | null): Promise<boolean> {
   const before = open.shownBy(ws);
   if (before?.entry.id === entry.id) return true;
   if (!open.get(entry.id)) send(ws, { type: "project-switching", project: entry });
@@ -340,7 +357,7 @@ async function showIn(ws: WebSocket, entry: ProjectEntry): Promise<boolean> {
     // Its preview no longer speaks for the project it left.
     before?.forget(ws);
     await projects.setActive(entry.id);
-    hello(ws, project);
+    hello(ws, project, thread);
     return true;
   } catch (error) {
     send(ws, { type: "project-error", message: `Could not open ${entry.name}: ${(error as Error).message}` });
@@ -350,9 +367,10 @@ async function showIn(ws: WebSocket, entry: ProjectEntry): Promise<boolean> {
 }
 
 sockets.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
-  // A tab that reconnects names the project it showed; a new one gets the project shown last.
-  const wanted = new URL(req.url ?? "/", "http://local").searchParams.get("project");
-  void showIn(ws, (wanted && projects.find(wanted)) || projects.active!);
+  // A tab that reconnects names the project and thread it showed; a new one gets the ones shown last.
+  const query = new URL(req.url ?? "/", "http://local").searchParams;
+  const wanted = query.get("project");
+  void showIn(ws, (wanted && projects.find(wanted)) || projects.active!, query.get("thread"));
   ws.on("message", (data) => {
     let message: Tagged<ClientMessage>;
     try {
@@ -365,6 +383,7 @@ sockets.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
   ws.on("close", () => {
     open.shownBy(ws)?.forget(ws);
     open.hide(ws);
+    threadOf.delete(ws);
   });
 });
 
@@ -417,7 +436,7 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
       const target = open.get(entry.id);
       target?.update(entry);
       broadcast({ type: "projects", projects: projects.list });
-      if (message.bringIn === true && target) await bringInDesign(target, socket);
+      if (message.bringIn === true && target) await bringInDesign(target, socket, message.thread);
       return;
     }
   }
@@ -435,8 +454,7 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
         await agent.prompt(
           text,
           { images: message.images, annotations: message.annotations },
-          undefined,
-          Number(message.alternatives) || 1,
+          { thread: message.thread, alternatives: Number(message.alternatives) || 1 },
         );
       return;
     }
@@ -453,15 +471,24 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
         page.kind === "view"
           ? viewInstruction(page.folder, name, purpose)
           : createInstruction(page.kind, page.folder, name, purpose);
-      await agent.prompt(text, { instruction });
+      await agent.prompt(text, { instruction }, { thread: message.thread });
       return;
     }
     case "cancel":
       return agent.cancel();
     case "permission":
       return agent.resolvePermission(message.id, message.optionId);
-    case "new-session":
-      return agent.newSession();
+    case "thread-new":
+      return showThread(socket, project, agent.newThread());
+    case "thread-open":
+      return showThread(socket, project, String(message.id ?? ""));
+    case "thread-remove": {
+      // Not one a tab shows: that tab would be left on a thread there is not.
+      const id = String(message.id ?? "");
+      const shown = [...threadOf].some(([ws, thread]) => thread === id && open.shownBy(ws) === project);
+      if (!shown) agent.removeThread(id);
+      return;
+    }
     case "switch-agent":
       if (AGENT_IDS.includes(message.agent)) {
         defaultAgent = message.agent;
@@ -570,9 +597,9 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
       return;
     }
     case "import-design":
-      return bringInDesign(project, socket);
+      return bringInDesign(project, socket, message.thread);
     case "template-update":
-      return bringInTemplate(project);
+      return bringInTemplate(project, message.thread);
     case "template-skip":
       return workspace.settleTemplateUpdate();
   }
@@ -583,24 +610,29 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
  * starter files. The workspace counts as caught up once the turn has run (or is queued); its review shows what came
  * in.
  */
-async function bringInTemplate(project: OpenProject): Promise<void> {
+async function bringInTemplate(project: OpenProject, thread?: string): Promise<void> {
   const update = project.workspace.templateUpdate;
   if (!update) return;
   const instruction = templateInstruction(await templateChanges(update.from), update.files);
-  await project.agent.prompt("Bring in the improvements to Basis' starter template", { instruction });
+  await project.agent.prompt("Bring in the improvements to Basis' starter template", { instruction }, { thread });
   await project.workspace.settleTemplateUpdate();
 }
 
-/** Starts (or queues, while the agent works) the guided turn that brings in the linked repo's design system. */
-async function bringInDesign(project: OpenProject, socket: WebSocket): Promise<void> {
+/**
+ * Starts (or queues, while the agent works) the guided turn that brings in the linked repo's design system, in the
+ * thread the tab shows (or the one shown last).
+ */
+async function bringInDesign(project: OpenProject, socket: WebSocket, thread?: string): Promise<void> {
   const repo = project.entry.repo;
   if (!repo) {
     send(socket, { type: "project-error", message: "Link a product repo first." });
     return;
   }
-  await project.agent.prompt(`Bring in the design system from ${path.basename(repo)}`, {
-    instruction: importInstruction(repo),
-  });
+  await project.agent.prompt(
+    `Bring in the design system from ${path.basename(repo)}`,
+    { instruction: importInstruction(repo) },
+    { thread },
+  );
 }
 
 chromeServer.once("error", (error) => {

@@ -40,6 +40,8 @@ export class Workspace extends EventEmitter<Events> {
   private settleTimer?: NodeJS.Timeout;
   private reviewTimer?: NodeJS.Timeout;
   private turnLabel = "";
+  /** The title of the thread whose turn runs, for its history entry. */
+  private turnThread?: string;
   /** A set of alternatives being made before a review holds it: what was asked, and where the takes start. */
   private pendingAlternatives?: { prompt: string; start: string; count: number };
   /** Serialises git operations; concurrent commits would race on the index. */
@@ -146,11 +148,12 @@ export class Workspace extends EventEmitter<Events> {
     return relative === DESIGN_FILE || relative === REVIEW_FILE || relative === PRODUCT_FILE || isSourcePath(relative);
   }
 
-  /** Marks the start of an agent turn; `label` is the prompt that started it. */
-  async beginTurn(label: string): Promise<void> {
+  /** Marks the start of an agent turn; `label` is the prompt that started it, `thread` the title of its thread. */
+  async beginTurn(label: string, thread?: string): Promise<void> {
     // Set first, so a hand edit's check still under way (onFsEvent) does not record the agent's changes as its own.
     this.agentActive = true;
     this.turnLabel = label;
+    this.turnThread = thread;
     // Anything changed by hand since the last entry gets its own entry first.
     await this.commit("external", {});
     this.turnStart = await this.serial(() => this.workingTree()).catch(() => undefined);
@@ -163,7 +166,7 @@ export class Workspace extends EventEmitter<Events> {
     await this.readReviewRequest();
     await this.check();
     this.agentActive = false;
-    await this.commit("agent", { label: this.turnLabel });
+    await this.commit("agent", { label: this.turnLabel, thread: this.turnThread });
     const start = this.turnStart;
     this.turnStart = undefined;
     this.changedInTurn = start

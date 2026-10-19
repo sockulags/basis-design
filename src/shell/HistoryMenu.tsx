@@ -10,9 +10,18 @@ interface HistoryMenuProps {
   send: (message: ClientMessage) => void;
   /** True while a review is open: history waits until it is approved or discarded. */
   locked?: boolean;
+  /** The project has several threads, so each agent change names the one it came from. */
+  showThreads?: boolean;
 }
 
-export function HistoryMenu({ history, inspecting, onInspect, send, locked = false }: HistoryMenuProps) {
+export function HistoryMenu({
+  history,
+  inspecting,
+  onInspect,
+  send,
+  locked = false,
+  showThreads = false,
+}: HistoryMenuProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -84,6 +93,7 @@ export function HistoryMenu({ history, inspecting, onInspect, send, locked = fal
                 {entry.label && <span className={styles.menuLabel}>{entry.label}</span>}
                 <span className={styles.muted}>
                   {when(entry.at)} · {describeChanges(entry)}
+                  {showThreads && entry.thread && ` · in “${entry.thread}”`}
                 </span>
               </button>
             );

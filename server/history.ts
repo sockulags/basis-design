@@ -9,11 +9,12 @@ import { DESIGN_FILE, isSourcePath } from "./paths.ts";
 /*
  * History is the workspace's git log: one commit per agent turn, approved
  * review, restore or hand edit, with Basis-* trailers carrying what the
- * history list shows (source, label, changed tokens, restore lineage).
+ * history list shows (source, label, changed tokens, restore lineage, and the
+ * thread an agent change came from).
  */
 
 export type Source = HistoryEntry["source"];
-export type EntryMeta = Pick<HistoryEntry, "label" | "restoredFrom">;
+export type EntryMeta = Pick<HistoryEntry, "label" | "restoredFrom" | "thread">;
 
 const HISTORY_LIMIT = 300;
 
@@ -64,6 +65,7 @@ export async function commitToHistory(
     `Basis-Name: ${designName}`,
     label ? `Basis-Label: ${label}` : "",
     meta.restoredFrom ? `Basis-Restored-From: ${meta.restoredFrom}` : "",
+    meta.thread ? `Basis-Thread: ${meta.thread.replace(/\s+/g, " ").trim()}` : "",
     changed.length ? `Basis-Changed: ${changed.join(",")}` : "",
   ]
     .filter((line, index) => index < 2 || line)
@@ -96,6 +98,7 @@ export async function loadHistory(dir: string): Promise<HistoryEntry[]> {
       name: trailers.get("Name") ?? "",
       label: trailers.get("Label"),
       restoredFrom: trailers.get("Restored-From"),
+      thread: trailers.get("Thread"),
       changed: trailers.get("Changed")?.split(",").filter(Boolean) ?? [],
       files: names
         .split("\n")

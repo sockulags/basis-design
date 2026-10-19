@@ -100,7 +100,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       errors and checks, so the fix loop's wait for the reloaded gallery and its checks works there too; it closes
       when a tab shows the project again or the agent is done. Done when: a turn in a project in the background
       that leaves a render error and an accessibility finding gets both back in its fix loop.
-- [ ] **Threads in a project.** Several chats per project, each its own agent session, listed in the chat panel;
+- [x] **Threads in a project.** Several chats per project, each its own agent session, listed in the chat panel;
       their turns queue across threads so history and reviews stay consistent. Done when: two threads in one
       project keep separate conversations across a restart.
 
@@ -231,6 +231,49 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Threads in a project, in one round. A thread is a chat with its own agent session, and every thread of
+  a project lives in the project's one agent process (`Thread` in `server/agent.ts`): ACP lets a process hold
+  several sessions, and updates and permission requests find their thread by session id, so AgentHost did not
+  split into a process host and session objects; the per-session state (transcript, session id, preamble, repo
+  given to the session) moved into the thread. Turns take turns: one queue across threads, oldest first, so git
+  history, reviews, the preview hold and the fix loop see one turn at a time as before. A prompt goes to the
+  thread the tab shows (the chrome tags it with `thread`), guided turns too. Decisions: the open review stays the
+  workspace's, and a turn in any thread iterates it, since the turn changes the same files and every turn is told
+  about the review (`reviewContext`); tying it to the thread that opened it would leave the other threads unable
+  to touch those files. Stop ends the running turn and drops what is queued in its own thread only; messages
+  queued in other threads were about something else and run next. "New chat" makes a thread instead of resetting
+  the one shown (the old `new-session` and `chat-reset` are gone), reusing a thread nothing was asked in, so
+  clicking it twice does not pile up empty ones; a thread is named after its first prompt (also when that prompt
+  is queued), and an idle thread no tab shows can be removed with a second click to confirm, since New chat would
+  otherwise only ever grow the list. Renaming was left out. The agent (Claude or Codex) stays the project's: one
+  process, one agent; a thread whose session belongs to the other agent starts a new one with a notice that the
+  messages above are for reference. Since a thread now keeps its session id until a new session replaces it,
+  Restart agent resumes the shown thread's session instead of silently starting a new one. The thread shown last
+  opens its session when the agent starts (so Ready still means a turn can start), the others at their first
+  turn. Which thread a tab shows is the tab's (two tabs can show different threads), named in the bridge URL on
+  reconnect; the server remembers the one shown last for new tabs. The draft is per thread
+  (`basis:draft:<project>:<thread>`; `usePref` now follows a changed key); the per-project draft is left alone.
+  The project's status in the project menu needed no change: busy and waiting were already the process's, so they
+  cover every thread. A permission waiting in another thread brings the chat back like one in the thread shown,
+  and the thread button shows a dot (red, blinking, for waiting). Agent commits carry `Basis-Thread: <title>`,
+  which the history menu shows once there are several threads. Storage: `.basis/threads.json` (the list, newest
+  first, and the thread shown last) and `.basis/threads/<id>.json` (each transcript with its agent and session);
+  the old `.basis/chat.json` becomes the first thread and stays where it was, so nothing is deleted, and
+  `WORKSPACE_FORMAT` was not raised (an older Basis would only show that old chat). Verified with unit tests
+  (`test/chatlog.test.ts`: threads saved and loaded, migration from chat.json, titles; `test/agent.test.ts`: two
+  threads with the stand-in agent, the second queued behind the first, each in its own session, history entries
+  naming their thread, and after a restart each resuming its own session, which the stand-in now supports and
+  names with `E2E-WHO`), an e2e test (a thread waiting for approval and another queued behind it, statuses in the
+  list and the dot, switching, history labels, the thread shown last after a reload, removing one), and with real
+  Claude turns on a throwaway instance: one thread was told the codeword PELICAN and a second WALRUS, Basis was
+  restarted, and each thread, asked which codeword it had been given, answered with its own, with no notice of a
+  new conversation. Two things seen along the way, not changed here: the click on the project name right after
+  Send that the previous round saw fail in the browser pane opened the menu every time in Chromium through
+  Playwright (18 of 18, headless and headed, 0 to 2500 ms after Send), so it looks like the pane's; and in a
+  fresh project a turn that changed nothing got a fix-up for a layout finding in Feedback & status (the spinner
+  past its frame at full width), so either a finding still being checked when the turn starts counts as
+  introduced, or the rotating spinner is measured mid-turn.
 
 - 2026-10-19: Preview checks for projects in the background. `server/background.ts` runs a project's gallery in a
   page of its screenshot browser (`Screenshots.withPage`, so the browser stays open while it runs and the one

@@ -145,9 +145,10 @@ export class OpenProject {
     workspace.on("history", (history) => broadcast({ type: "history", history }));
     workspace.on("review", (review) => hold.send({ type: "review", review }));
     agent.on("agent", (state) => broadcast({ type: "agent", agent: state }));
-    agent.on("chat", (item) => broadcast({ type: "chat-upsert", item }));
-    agent.on("chat-reset", () => broadcast({ type: "chat-reset" }));
-    agent.on("chat-remove", (id) => broadcast({ type: "chat-remove", id }));
+    // Every thread's chat goes to every tab that shows the project; a tab keeps the thread it shows.
+    agent.on("chat", (item, thread) => broadcast({ type: "chat-upsert", thread, item }));
+    agent.on("chat-remove", (id, thread) => broadcast({ type: "chat-remove", thread, id }));
+    agent.on("threads", (threads) => broadcast({ type: "threads", threads }));
 
     const previewVite = await createVite({
       root,

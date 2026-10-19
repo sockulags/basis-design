@@ -134,9 +134,25 @@ component source, patterns and the gallery specimens.
     the view from Basis on every `ready` (light, no review, the page with most of the turn's files,
     `pageForFiles`) and reports what the gallery reports as a hidden tab would. Until its first report it counts
     as a gallery still loading (generation -1, checking), so the fix loop waits for it.
-  - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
-    (`server/chatlog.ts`) and the agent session is resumed after a restart where the agent supports
-    `session/resume` (Claude Code does).
+  - A project has threads: chats of their own, each with its own agent session, all in the one agent process
+    (`Thread` in `server/agent.ts`; ACP lets a process hold several sessions, and `onUpdate` and `onPermission`
+    find the thread by the session id). They share the workspace, so their turns take turns: one queue for every
+    thread, oldest first, each item naming its thread. The thread whose turn runs is `running`; the list
+    (`threadList`, sent as `threads`) says per thread whether it is `working`, `waiting` for an answer or `queued`.
+    A prompt goes to the thread the tab shows (the chrome tags what it sends with `thread`, as `App` tags the
+    project), and guided turns go there too. Each thread's chat items go out tagged with it (`chat-upsert` and
+    `chat-remove` carry `thread`), to every tab of the project; a tab keeps only the thread it shows, asks for
+    another with `thread-open` and gets its chat back as `thread`, and names it in the bridge URL when it
+    reconnects (`&thread=`). The thread shown last opens in a new tab and opens its session when the agent
+    starts; the others open theirs at their first turn (`openSession`: `session/resume` of the thread's saved
+    session when the agent is the same and supports it, else a new session with a notice when the thread has
+    messages). Stop ends the running turn and drops what is queued in its thread only. New chat makes a thread
+    (`newThread`, which reuses one nothing was asked in), named after its first prompt (`threadTitle`); an idle
+    thread no tab shows can be removed. The agent (Claude or Codex) is the project's, since there is one process.
+    Threads are saved in `.basis/threads.json` (the list, newest first, and the one shown last) and
+    `.basis/threads/<id>.json` (each transcript with its agent and session id) by `server/chatlog.ts`; a workspace
+    from before threads gets its `.basis/chat.json` as the first thread, and that file is left alone. Each agent
+    commit carries its thread's title (`Basis-Thread`), which the history menu shows when there are several.
 - The workspace, one module per concern, coordinated by `server/workspace.ts` (serial git queue, file watcher,
   events):
   - `setup.ts`: seeding from `template/`, migrations of older workspaces, generated files (`AGENTS.md`,
@@ -233,7 +249,7 @@ component source, patterns and the gallery specimens.
 - `src/` (chrome): `App.tsx` keeps the bridge, tags what each workbench sends with its project, and mounts
   `Workbench.tsx` once per project, which wires the
   parts; `shell/` holds the top bar and project menu, sidebar, history, inspect and review bars, dialogs,
-  `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel and composer.
+  `PreviewFrame`, `useReview` and `prefs`; `chat/` holds the panel, the thread menu and the composer.
 - `src/preview/` (iframe): `main.tsx` (messaging, picker, scroll spy, errors, link guard), `Preview.tsx`
   (foundations and specimen sections, or the review), `specimens.tsx` (glob and validation of
   `*.specimen.tsx`), `narrow.ts` (resolving review targets), `Review.tsx`, `Impact.tsx` ("also changed"),
@@ -372,12 +388,14 @@ npm run test:e2e     # Playwright: the app in Chromium, each test with its own B
   once). The `basis` fixture in `test/e2e/basis.ts` starts a Basis per test with a throwaway workspace on port
   5400 and `BASIS_AGENT_SCRIPT` pointing at `fake-agent.mjs`, a stand-in ACP agent that moves
   `motion.duration.fast` by 10ms through the client's file methods (a timing token, so the checks find nothing to
-  fix) and opens a review of Buttons when the prompt contains `E2E-REVIEW`. The gallery is a cross-origin iframe;
+  fix) and opens a review of Buttons when the prompt contains `E2E-REVIEW` (the file's header lists the other
+  markers; `E2E-WHO` names the session and whether it was resumed, which `test/agent.test.ts` uses to check that
+  threads resume their own sessions after a restart). The gallery is a cross-origin iframe;
   Playwright reaches into it with `gallery(page)`. CI runs them on Linux and keeps traces of failures.
 - **Before restarting the dev server**, check that no agent works, in any open project: a turn in flight is lost. A
   small Node script connecting to `ws://127.0.0.1:5320/bridge` with header `origin: http://localhost:5320` gets a
   `hello` message containing `agent.status` of the project it shows and `status`, which names every project whose
-  agent is `working` or `waiting`. The chat and an open review survive the restart.
+  agent is `working` or `waiting`. The chats and an open review survive the restart.
 - **To kill the server on Windows:** `Get-NetTCPConnection -LocalPort 5320 -State Listen | % { taskkill /PID $_.OwningProcess /T /F }`
   (the previews of every open project run in the same process).
 - **Test changes that touch the agent or the workspace** in a separate instance with a throwaway workspace:

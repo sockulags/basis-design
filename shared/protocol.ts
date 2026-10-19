@@ -73,6 +73,22 @@ export type ChatItem =
     }
   | { kind: "notice"; id: string; text: string; tone: "info" | "error" };
 
+/**
+ * What a thread is up to, for the list of threads: its turn runs, waits for an answer to a permission request, or
+ * waits in the queue behind another thread's turn (turns take turns across threads). Idle threads have none.
+ */
+export type ThreadStatus = "working" | "waiting" | "queued";
+
+/** One thread of a project: a chat of its own with its own agent session, in the same workspace. */
+export interface ThreadSummary {
+  id: string;
+  /** From its first prompt; "New chat" until then. */
+  title: string;
+  /** When a turn last started in it (or it was made), for the list. */
+  at: number;
+  status?: ThreadStatus;
+}
+
 export interface HistoryEntry {
   id: string;
   at: number;
@@ -83,6 +99,8 @@ export interface HistoryEntry {
   label?: string;
   /** For restores: the entry whose design was restored. */
   restoredFrom?: string;
+  /** For agent changes: the title of the thread whose turn it was. */
+  thread?: string;
   /** Token paths that differ from the previous entry. */
   changed: string[];
   /** Component files (relative to the workspace) changed in this entry. */
@@ -195,9 +213,10 @@ export type ProjectStatus = "working" | "waiting" | "done";
 /**
  * A message on the bridge with the project it belongs to. Several projects run at once, and a tab shows one: the
  * server tags each project's messages with its id, so a tab that has moved on drops them, and the chrome tags what it
- * sends with the project it showed, so a message sent just before a switch still reaches that project.
+ * sends with the project it showed, so a message sent just before a switch still reaches that project. The chrome
+ * also names the thread it shows, which a prompt goes to.
  */
-export type Tagged<T> = T & { projectId?: string };
+export type Tagged<T> = T & { projectId?: string; thread?: string };
 
 export type ServerMessage =
   | {
@@ -210,6 +229,9 @@ export type ServerMessage =
       design: DesignState;
       history: HistoryEntry[];
       agent: AgentState;
+      /** The project's threads, and the one this tab shows, whose chat follows. */
+      threads: ThreadSummary[];
+      thread: string;
       chat: ChatItem[];
       review: ReviewState | null;
       /** Whether the running turn holds changes back from the preview (see "preview-waiting"). */
@@ -231,9 +253,13 @@ export type ServerMessage =
   | { type: "preview-waiting"; waiting: boolean }
   | { type: "history"; history: HistoryEntry[] }
   | { type: "agent"; agent: AgentState }
-  | { type: "chat-upsert"; item: ChatItem }
-  | { type: "chat-reset" }
-  | { type: "chat-remove"; id: string }
+  /** A thread's chat changed; a tab that shows another thread of the project drops it. */
+  | { type: "chat-upsert"; thread: string; item: ChatItem }
+  | { type: "chat-remove"; thread: string; id: string }
+  /** The project's threads changed: one was made or removed, got its title, or started or stopped working. */
+  | { type: "threads"; threads: ThreadSummary[] }
+  /** Shows a thread in this tab, with its chat (the answer to thread-new and thread-open). */
+  | { type: "thread"; thread: string; chat: ChatItem[] }
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "export-manifest"; folder: string; files: { path: string; bytes: number }[] }
   | { type: "export-result"; result: ExportWriteResult }
@@ -248,7 +274,12 @@ export type ClientMessage =
   | { type: "create"; page: PageId; name: string; purpose: string }
   | { type: "cancel" }
   | { type: "permission"; id: string; optionId: string | null }
-  | { type: "new-session" }
+  /** Starts a new thread (a chat with a session of its own) and shows it; an empty thread there is reused. */
+  | { type: "thread-new" }
+  /** Shows one of the project's threads in this tab. */
+  | { type: "thread-open"; id: string }
+  /** Removes a thread and its conversation; refused while it works, waits, is queued or a tab shows it. */
+  | { type: "thread-remove"; id: string }
   | { type: "switch-agent"; agent: AgentId }
   | { type: "revert"; historyId: string }
   | { type: "snapshot-get"; id: string }
