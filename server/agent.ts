@@ -463,9 +463,12 @@ ${message}`
       this.openText = undefined;
       this.cancelPermissions();
     }
-    // Stay busy while the turn is checked and recorded as one undo step.
-    await this.workspace.endTurn();
-    this.reloaded = this.preview?.release() ?? null;
+    // Stay busy while the turn is checked and recorded as one undo step; the preview shows the result either way.
+    try {
+      await this.workspace.endTurn();
+    } finally {
+      this.reloaded = this.preview?.release() ?? null;
+    }
     return completed && this.connection === connection;
   }
 
