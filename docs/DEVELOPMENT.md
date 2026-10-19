@@ -153,7 +153,8 @@ component source, patterns and the gallery specimens.
   - `server/capture.ts` launches a headless browser (Playwright's Chromium, else Chrome, else Edge, through
     `playwright-core`) with flags that keep rendering the same (`CAPTURE_ARGS`), and takes every shot twice at
     device scale 1 with reduced motion (`CAPTURE_CONTEXT`, `takeShot`); two different images mark the shot
-    unstable.
+    unstable. `takeShot` also lists the images and media the page requested from another origin
+    (`isRemoteMedia`), and `captureViews` measures the elements marked `data-basis-media` for each shot.
   - `server/screenshots.ts` takes screenshots of the live design for Basis itself, from the open project's
     preview server (`OpenProject.screenshots`): `capture({ specimen } | { view, screen? } | { id, screen? },
     { widths, themes, height })` returns the plan and the PNG buffers, `list()` what there is. `{ id }` takes a
@@ -166,14 +167,20 @@ component source, patterns and the gallery specimens.
     time in a page of its own whose `Date` runs a day, an hour, a minute and a second ahead (`shiftClockScript`).
   - `server/verify.ts` builds `capture.html` with Vite into a temporary folder (the same aliases as the preview,
     `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
-    `basis-verify.json` (every shot and the render settings), a README for the implementing agent, and the two
-    scripts from `server/verify-kit/`. The chrome asks for it over the bridge (`verify-kit`), gets
+    `basis-verify.json` (every shot and the render settings, the media marker, and the remote images a shot
+    loads), a `.boxes.json` beside each shot, a README for the implementing agent, and the two scripts from
+    `server/verify-kit/`. Images a view imports are built into `design/assets/` like any Vite asset. The chrome asks for it over the bridge (`verify-kit`), gets
     `verify-progress` and `verify-result` back, and downloads a zip from `GET /export/verification-kit.zip`; or
     the kit is written into `<product>/basis-verify/`, replacing only what Basis generates.
   - `server/verify-kit/capture.mjs` and `compare.mjs` run in the product's repo with its own Playwright and no
     other dependencies: the first captures the design (served from `design/`) or the implementation (URLs from
     `targets.json`) with the manifest's settings, the second decodes the PNGs itself and compares them pixel for
-    pixel, leaving out named exceptions from `exceptions.json`.
+    pixel, leaving out named exceptions from `exceptions.json`. Beside each image `capture.mjs` writes
+    `<shot>.boxes.json`, the boxes of the elements the media marker (`MEDIA_SELECTOR`, `[data-basis-media]`) and
+    the exceptions' selectors match (`boxesExpression`, a string so no loader's helpers reach the page);
+    `compare.mjs` leaves those boxes out on both sides and fails the shot when the two sides do not have as many,
+    at the same places and sizes (`shotExclusions`, exact unless `--box-tolerance`). Both scripts share these
+    helpers through `compare.mjs`, the only module the kit's scripts import.
 - `server/folders.ts`: choosing folders without typing paths. `pickFolder` opens the system's folder dialog
   (on Windows the Explorer-style `IFileOpenDialog` with `FOS_PICKFOLDERS`, through a small C# interop compiled by
   PowerShell's Add-Type, since FolderBrowserDialog is the old tree picker in Windows PowerShell 5.1, with a hidden
@@ -286,7 +293,11 @@ differs is reported in its own section, and one that throws joins the render err
 names its view's section. The views found wrong are checked again after the fix-up turn even when it changed
 other files. The texts name screen, view, file, width and theme and nothing else, so they stay the same while the
 problem does. Without a browser, or when the capture page does not settle, the check finds nothing and says why
-once on the console.
+once on the console. The same pass reports a screen whose first capture requested images or media from another
+origin (a `request` listener in `takeShot`, so URLs from data files, `srcset` and CSS count as much as an `src`), in
+a section of its own that sends the agent to a placeholder in `views/assets/` marked `data-basis-media`. Fonts and
+stylesheets are not media, so Google Fonts pass. Images in the source folders are part of `reach.ts`'s graph (as
+files with no imports), so a changed placeholder reaches the views that import it.
 
 Fixed colours (`shared/fixed-colors.ts`) are found on the server in `Workspace.check()`: hex, colour functions
 with literal channels, and white/black in tokens outside `color` (typography is skipped) and in the source
@@ -492,5 +503,10 @@ comparison of the whole gallery between two history entries, the icon, and publi
   Basis as a plain shell command. Basis leaves it to the user; the brief steers the agent to `ls`, `find`, `grep`
   and its own tools.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
+- **Binary images in past versions:** snapshot copies (`server/snapshots.ts`) are written from `git show` as text,
+  so a PNG or JPEG in `views/assets/` shows broken on a review's before side. The brief has the agent write SVG
+  placeholders, which are text; a user's own binary image would need snapshots written as buffers.
+- **Images used from CSS** (`url(./assets/x.svg)` in a `.module.css`) work in the preview and the kit, but
+  `reach.ts` does not follow `url()`, so changing only such an image does not reach its view.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

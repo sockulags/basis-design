@@ -4,12 +4,15 @@
  * Basis exports; it needs Node 22 and nothing else.
  *
  *   node basis-verify/compare.mjs [--expected <dir>] [--actual <dir>] [--diff <dir>] [--max-diff <percent>]
- *                                 [--tolerance <0-255>]
+ *                                 [--tolerance <0-255>] [--box-tolerance <px>]
  *
  * Expected images come from expected/ (the design captured on this machine by `capture.mjs design`), or from
  * screens/ (captured by Basis) when expected/ has none. Actual images come from actual/ (`capture.mjs app`).
- * Every shot in basis-verify.json is compared; named exceptions in exceptions.json leave regions, or whole
- * shots, out. The command exits with 1 when any shot differs by more than --max-diff (default 0).
+ * Every shot in basis-verify.json is compared; named exceptions in exceptions.json leave regions, elements (by
+ * selector) or whole shots out. Elements marked data-basis-media (the design's placeholder images) are left out
+ * of every shot. An element left out still has to be there, at the same place and size on both sides, within
+ * --box-tolerance pixels (default 0). The command exits with 1 when any shot differs by more than --max-diff
+ * (default 0).
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -193,6 +196,115 @@ export function compareImages(expected, actual, { tolerance = 0, regions = [] } 
   };
 }
 
+/**
+ * The marker of elements holding images that stand in for the product's own (photos, avatars, illustrations).
+ * The kit leaves them out of every shot as long as their boxes match; the implementation marks its own the same.
+ */
+export const MEDIA_SELECTOR = "[data-basis-media]";
+
+/** The file beside a shot that holds the boxes of the elements its exceptions name: `<shot>.boxes.json`. */
+export function boxesFile(shotFile) {
+  return shotFile.replace(/\.png$/, ".boxes.json");
+}
+
+/**
+ * A script for page.evaluate that measures every element each selector matches, in the page's pixels (as a full
+ * page screenshot has them), widened to whole pixels. Elements without a size are skipped; a selector that is not
+ * valid gets null. A string rather than a function, so nothing a loader adds to a function's source reaches it.
+ */
+export function boxesExpression(selectors) {
+  return `(() => {
+  const boxes = {};
+  for (const selector of ${JSON.stringify(selectors)}) {
+    try {
+      boxes[selector] = [...document.querySelectorAll(selector)].flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return [];
+        const x = Math.floor(rect.left + scrollX);
+        const y = Math.floor(rect.top + scrollY);
+        return [{ x, y, width: Math.ceil(rect.right + scrollX) - x, height: Math.ceil(rect.bottom + scrollY) - y }];
+      });
+    } catch {
+      boxes[selector] = null;
+    }
+  }
+  return boxes;
+})()`;
+}
+
+/** The selector an exception names on one side: one for both, or `{ "design": ..., "app": ... }`. */
+export function selectorFor(exception, side) {
+  return typeof exception.selector === "string" ? exception.selector : exception.selector?.[side];
+}
+
+/** Every selector to measure on one side: the media marker and those the exceptions name. */
+export function selectorsFor(exceptions, side, media = MEDIA_SELECTOR) {
+  return [...new Set([media, ...exceptions.map((exception) => selectorFor(exception, side))].filter(Boolean))];
+}
+
+const describeBox = (box) => `${box.width}x${box.height} at ${box.x},${box.y}`;
+
+/**
+ * What one shot leaves out, and what is wrong with the elements it leaves out. Region exceptions leave out their
+ * region. Selector exceptions, and the media marker, leave out the boxes of the elements they match on either
+ * side, provided both sides have as many such elements at the same places and sizes (within `boxTolerance`
+ * pixels); otherwise each mismatch is a problem, so a missing, moved or resized image still fails the shot.
+ * `expectedBoxes` and `actualBoxes` are the shots' boxes files (undefined when there is none).
+ */
+export function shotExclusions(
+  applying,
+  { media = MEDIA_SELECTOR, expectedBoxes, actualBoxes, boxTolerance = 0 } = {},
+) {
+  const regions = [];
+  const names = [];
+  const problems = [];
+  for (const exception of applying) {
+    if (!exception.region) continue;
+    regions.push(exception.region);
+    names.push(exception.name);
+  }
+  const rules = [...(media ? [{ name: "media", selector: media }] : []), ...applying.filter((item) => item.selector)];
+  for (const rule of rules) {
+    const designSelector = selectorFor(rule, "design");
+    const appSelector = selectorFor(rule, "app");
+    const sides = [
+      { label: "the design", selector: designSelector, boxes: expectedBoxes?.[designSelector], capture: "design" },
+      { label: "the implementation", selector: appSelector, boxes: actualBoxes?.[appSelector], capture: "app" },
+    ];
+    const missing = sides.find((side) => !side.selector || side.boxes === undefined || side.boxes === null);
+    if (missing) {
+      problems.push(
+        !missing.selector
+          ? `exception "${rule.name}" names no selector for ${missing.label}`
+          : missing.boxes === null
+            ? `exception "${rule.name}": "${missing.selector}" is not a valid selector`
+            : `exception "${rule.name}": ${missing.label} was captured without measuring "${missing.selector}"; run capture.mjs ${missing.capture} again`,
+      );
+      continue;
+    }
+    const [design, app] = sides.map((side) => side.boxes);
+    // Left out on both sides even when they do not match, so the diff shows the boxes rather than their content.
+    regions.push(...design, ...app);
+    if (design.length || app.length) names.push(rule.name);
+    if (design.length !== app.length) {
+      const count = (n) => `${n} ${n === 1 ? "element matches" : "elements match"}`;
+      problems.push(
+        `exception "${rule.name}": ${count(design.length)} "${designSelector}" in the design, ${count(app.length)} "${appSelector}" in the implementation`,
+      );
+      continue;
+    }
+    const off = (a, b) => ["x", "y", "width", "height"].some((key) => Math.abs(a[key] - b[key]) > boxTolerance);
+    design.forEach((box, index) => {
+      if (off(box, app[index])) {
+        problems.push(
+          `exception "${rule.name}": element ${index + 1} of "${appSelector}" is ${describeBox(app[index])}, in the design ${describeBox(box)}`,
+        );
+      }
+    });
+  }
+  return { regions, names, problems };
+}
+
 /** The exceptions that apply to one shot: those naming its view, and its screen, widths and themes if they say. */
 export function exceptionsFor(exceptions, shot) {
   return exceptions.filter(
@@ -222,11 +334,18 @@ async function main() {
   const diffDir = resolve("--diff", "diff");
   const maxDiff = Number(option(args, "--max-diff", "0"));
   const tolerance = Number(option(args, "--tolerance", "0"));
+  const boxTolerance = Number(option(args, "--box-tolerance", "0"));
   const manifest = JSON.parse(await readFile(path.join(kit, "basis-verify.json"), "utf8"));
   const exceptionsFile = path.join(kit, "exceptions.json");
   const exceptions = existsSync(exceptionsFile)
     ? (JSON.parse(await readFile(exceptionsFile, "utf8")).exceptions ?? [])
     : [];
+  // A kit from before the marker has no media entry, and leaves nothing out by it.
+  const media = manifest.media?.selector ?? null;
+  const readBoxes = async (png) => {
+    const file = boxesFile(png);
+    return existsSync(file) ? JSON.parse(await readFile(file, "utf8")) : undefined;
+  };
 
   const results = [];
   for (const view of manifest.views) {
@@ -239,7 +358,7 @@ async function main() {
         const actualPath = path.join(actualDir, name);
         const result = { file: name, view: view.id, screen: screen.id, width: shot.width, theme: shot.theme };
         const applying = exceptionsFor(exceptions, result);
-        const whole = applying.find((exception) => !exception.region);
+        const whole = applying.find((exception) => !exception.region && !exception.selector);
         if (whole) {
           results.push({ ...result, status: "excepted", exception: whole.name });
           continue;
@@ -250,11 +369,14 @@ async function main() {
         }
         const expected = decodePng(await readFile(expectedPath));
         const actual = decodePng(await readFile(actualPath));
-        const outcome = compareImages(expected, actual, {
-          tolerance,
-          regions: applying.map((exception) => exception.region),
+        const left = shotExclusions(applying, {
+          media,
+          expectedBoxes: await readBoxes(expectedPath),
+          actualBoxes: await readBoxes(actualPath),
+          boxTolerance,
         });
-        const passed = outcome.sameSize && outcome.percent <= maxDiff;
+        const outcome = compareImages(expected, actual, { tolerance, regions: left.regions });
+        const passed = outcome.sameSize && outcome.percent <= maxDiff && left.problems.length === 0;
         if (!passed) {
           const target = path.join(diffDir, name);
           await mkdir(path.dirname(target), { recursive: true });
@@ -267,7 +389,8 @@ async function main() {
           differingPixels: outcome.differing,
           expectedSize: `${expected.width}x${expected.height}`,
           actualSize: `${actual.width}x${actual.height}`,
-          exceptions: applying.map((exception) => exception.name),
+          exceptions: left.names,
+          problems: left.problems,
           reference: path.relative(kit, expectedPath).split(path.sep).join("/"),
         });
       }
@@ -284,13 +407,17 @@ async function main() {
       if (result.expectedSize !== result.actualSize) {
         detail += `, size ${result.actualSize}, expected ${result.expectedSize}`;
       }
-      if (result.exceptions.length) detail += `, regions left out: ${result.exceptions.join(", ")}`;
+      if (result.exceptions.length) detail += `, left out: ${result.exceptions.join(", ")}`;
     }
     console.log(`${label} ${result.file.padEnd(48)} ${detail}`);
+    for (const problem of result.problems ?? []) console.log(`         ${problem}`);
   }
   const failed = results.filter((result) => result.status === "fail" || result.status === "missing");
   await mkdir(diffDir, { recursive: true });
-  await writeFile(path.join(diffDir, "report.json"), `${JSON.stringify({ maxDiff, tolerance, results }, null, 2)}\n`);
+  await writeFile(
+    path.join(diffDir, "report.json"),
+    `${JSON.stringify({ maxDiff, tolerance, boxTolerance, results }, null, 2)}\n`,
+  );
   console.log(
     failed.length
       ? `\n${failed.length} of ${results.length} shots do not match. Diff images are in ${path.relative(process.cwd(), diffDir) || "."}.`

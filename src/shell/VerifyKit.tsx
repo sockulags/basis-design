@@ -125,6 +125,13 @@ function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> })
           exactly: {summary.unstable.join(", ")}. Look for clocks, random values or animations in those screens.
         </p>
       )}
+      {summary.remote.length > 0 && (
+        <p className={styles.kitWarning}>
+          {plural(summary.remote.length, "shot")} {summary.remote.length === 1 ? "loads" : "load"} images from other
+          sites, which can change or vanish before the implementation is compared: {summary.remote.join(", ")}. Use
+          placeholders in <code>views/assets/</code> marked <code>data-basis-media</code>.
+        </p>
+      )}
       {summary.problems.length > 0 && (
         <p className={styles.kitWarning}>Specimens that could not be loaded: {summary.problems.join("; ")}.</p>
       )}

@@ -126,6 +126,8 @@ export interface VerifyKitSummary {
   unstable: string[];
   /** Shots of screens that threw while rendering. */
   failed: string[];
+  /** Shots of screens that load images or media from other sites. */
+  remote: string[];
   /** Specimen files that could not be loaded. */
   problems: string[];
 }

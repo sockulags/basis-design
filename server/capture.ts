@@ -1,5 +1,13 @@
-import { chromium, type Browser, type BrowserContextOptions, type LaunchOptions, type Page } from "playwright-core";
+import {
+  chromium,
+  type Browser,
+  type BrowserContextOptions,
+  type LaunchOptions,
+  type Page,
+  type Request,
+} from "playwright-core";
 import { READY_ATTRIBUTE, shotFile, type CaptureShot, type CaptureView } from "../shared/capture.ts";
+import { boxesExpression, MEDIA_SELECTOR, type Boxes } from "./verify-kit/compare.mjs";
 
 /*
  * Taking the verification kit's screenshots: a headless browser opens each screen of each view on the capture
@@ -56,6 +64,10 @@ export interface Shot extends CaptureShot {
   stable: boolean;
   /** Set when the screen threw while rendering. */
   failed: boolean;
+  /** The boxes of the elements marked as media (`MEDIA_SELECTOR`), which the kit's comparison leaves out. */
+  boxes: Boxes;
+  /** Images and media the screen loads from other sites (`remoteMedia`). */
+  remote: string[];
 }
 
 export interface CaptureResult {
@@ -77,6 +89,21 @@ export const CAPTURE_CONTEXT: BrowserContextOptions = {
   viewport: { width: 1440, height: 900 },
 };
 
+/**
+ * Whether a request the page makes is for an image or media from another site: what a placeholder in the view's
+ * own folder should replace, since such a file can change, vanish or need a login before the implementation is
+ * compared with the design. Fonts and stylesheets are not media.
+ */
+export function isRemoteMedia(resourceType: string, url: string, pageOrigin: string): boolean {
+  if (resourceType !== "image" && resourceType !== "media") return false;
+  try {
+    const target = new URL(url);
+    return (target.protocol === "http:" || target.protocol === "https:") && target.origin !== pageOrigin;
+  } catch {
+    return false;
+  }
+}
+
 /** Opens a capture page URL and waits until it has settled (see `markReady` in src/capture/main.tsx). */
 export async function openCapturePage(page: Page, url: string, timeout = 60_000): Promise<void> {
   await page.goto(url);
@@ -86,6 +113,7 @@ export async function openCapturePage(page: Page, url: string, timeout = 60_000)
 /**
  * Opens one shot's page at the shot's size and photographs it; `failed` when what it renders threw. A full-page
  * shot of a page taller than `maxHeight` shows only its top `maxHeight` pixels; `pageHeight` is the whole page's.
+ * `remote` lists the images and media it loaded from other sites.
  */
 export async function takeShot(
   page: Page,
@@ -93,22 +121,32 @@ export async function takeShot(
   shot: CaptureShot,
   timeout?: number,
   maxHeight?: number,
-): Promise<{ png: Buffer; failed: boolean; pageHeight: number }> {
-  await page.setViewportSize({ width: shot.width, height: shot.viewportHeight });
-  await openCapturePage(page, url, timeout);
-  const { failed, height } = await page.evaluate(() => ({
-    failed: document.documentElement.hasAttribute("data-basis-error"),
-    height: document.documentElement.scrollHeight,
-  }));
-  const pageHeight = shot.fullPage ? Math.max(height, shot.viewportHeight) : shot.viewportHeight;
-  const cut = shot.fullPage && maxHeight !== undefined && pageHeight > maxHeight;
-  const png = await page.screenshot({
-    fullPage: shot.fullPage,
-    ...(cut ? { clip: { x: 0, y: 0, width: shot.width, height: maxHeight } } : {}),
-    animations: "disabled",
-    caret: "hide",
-  });
-  return { png, failed, pageHeight };
+): Promise<{ png: Buffer; failed: boolean; pageHeight: number; remote: string[] }> {
+  const origin = new URL(url).origin;
+  const remote = new Set<string>();
+  const onRequest = (request: Request) => {
+    if (isRemoteMedia(request.resourceType(), request.url(), origin)) remote.add(request.url());
+  };
+  page.on("request", onRequest);
+  try {
+    await page.setViewportSize({ width: shot.width, height: shot.viewportHeight });
+    await openCapturePage(page, url, timeout);
+    const { failed, height } = await page.evaluate(() => ({
+      failed: document.documentElement.hasAttribute("data-basis-error"),
+      height: document.documentElement.scrollHeight,
+    }));
+    const pageHeight = shot.fullPage ? Math.max(height, shot.viewportHeight) : shot.viewportHeight;
+    const cut = shot.fullPage && maxHeight !== undefined && pageHeight > maxHeight;
+    const png = await page.screenshot({
+      fullPage: shot.fullPage,
+      ...(cut ? { clip: { x: 0, y: 0, width: shot.width, height: maxHeight } } : {}),
+      animations: "disabled",
+      caret: "hide",
+    });
+    return { png, failed, pageHeight, remote: [...remote].sort() };
+  } finally {
+    page.off("request", onRequest);
+  }
 }
 
 /**
@@ -134,6 +172,7 @@ export async function captureViews(
         for (const shot of screen.shots) {
           const url = `${pageUrl}?view=${encodeURIComponent(view.id)}&screen=${encodeURIComponent(screen.id)}&theme=${shot.theme}`;
           const first = await takeShot(page, url, shot);
+          const boxes = (await page.evaluate(boxesExpression([MEDIA_SELECTOR]))) as Boxes;
           const second = await takeShot(page, url, shot);
           shots.push({
             ...shot,
@@ -144,6 +183,8 @@ export async function captureViews(
             imageHeight: pngHeight(first.png),
             stable: first.png.equals(second.png),
             failed: first.failed,
+            boxes,
+            remote: first.remote,
           });
           onProgress?.(shots.length, total);
         }

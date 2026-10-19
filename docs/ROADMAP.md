@@ -58,7 +58,8 @@ in its design system, creating a project from a repo, repo context in every turn
 in reviews, and the verification kit. The decision log below has the details.
 
 Still open from round 1, for Lucas: **what deviation is acceptable** when something cannot be reproduced exactly
-(fonts across machines, real photos). Decide after trying the kit on a real feature at work.
+(fonts across machines). Decide after trying the kit on a real feature at work. Real photos are handled since
+2026-10-19: they may differ inside boxes that must match exactly (see the log).
 
 ## Round 2 steps
 
@@ -80,7 +81,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       `ready` and the chrome reset them, and let the fix loop wait for a report from after the reload. The agent's
       screenshots keep showing its work mid-turn. Done when: a real turn that creates a new view in several writes
       ends without stale errors, and the gallery shows the view without a manual reload.
-- [ ] **Images in the kit.** Exceptions can name elements by `selector` (the kit works out their boxes per shot on
+- [x] **Images in the kit.** Exceptions can name elements by `selector` (the kit works out their boxes per shot on
       both sides and still checks the boxes' size), views use local placeholder images marked `data-basis-media`
       (the brief says so), and a check reports remote image URLs in views. Done when: a view with a photo passes
       the kit with a selector exception, and a remote image is reported.
@@ -223,6 +224,43 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Images in the kit. A photo can never match pixel for pixel, so the kit compares where it is rather
+  than what it shows. An exception may name elements by `selector` (one for both sides, or `{ design, app }` when
+  the two need different ones), and elements marked `data-basis-media` are left out of every shot without an
+  exception; `capture.mjs` measures the matched elements after each shot (`getBoundingClientRect` plus scroll,
+  widened outward to whole pixels, empty boxes skipped) and writes them to `<shot>.boxes.json`, and Basis writes
+  the same for `screens/` with the marker only, so a kit compared against its own screenshots still knows the
+  boxes. `compare.mjs` leaves out every matched box on both sides and fails the shot when the counts differ or any
+  box moved or changed size: exactly by default, since a box that is off by a pixel moves something around it
+  too and the kit's target is 0%; `--box-tolerance <px>` is there for whoever decides otherwise, like
+  `--tolerance` for colours. A missing selector on one side (an exception added after capturing) fails with "run
+  capture.mjs again" rather than passing. The implementation marks its own images with the same attribute: one
+  inert attribute was simpler than a second selector list for the media rule, and the `{ design, app }` form
+  covers anything else. `region` exceptions work as before, and a kit from before has no `media` entry in its
+  manifest, so nothing is left out by the marker there. Placeholders live in `views/assets/`, imported by the view
+  (`import photo from "./assets/x.svg"`): Vite serves them in the preview and builds them into `design/assets/`
+  (or inlines small ones), so the kit carries them with no copying of its own; `.basis/env.d.ts` declares image
+  modules so the type check passes, and `reach.ts` counts images as files without imports so a changed
+  placeholder reaches its views. The brief asks for SVG placeholders the agent writes, in a fixed box, marked and
+  never from another site; the guidelines' Screens and flows section asks for fixed image boxes and alt text.
+  Remote images are found in the capture pass, not in the source like fixed colours: a `request` listener in
+  `takeShot` lists image and media requests to another origin, which catches URLs in data files, `srcset` and CSS
+  that a source scan would have to guess at, and leaves fonts alone. The stable-views check reports them as
+  problems (a section of their own, at most three URLs per screen), and the kit build lists them in the Export
+  tab and in the manifest's `remoteMedia`. The static servers now know `.jpg`, `.jpeg`, `.webp`, `.avif`, `.gif`
+  and `.woff`. Verified with unit tests (exclusions, mismatches, tolerance, missing and invalid selectors, the
+  box script in a VM, `isRemoteMedia`, the remote finding, an image in reach) and end to end on a throwaway
+  instance: a Shop view with a placeholder SVG marked as media built into a kit written to a fixture folder (the
+  SVG landed in `design/assets/`, each shot had its boxes file, and the Export tab named the one shot of a planted
+  view that loads `https://images.example.com/summer.jpg`); a fixture app serving the same screen with another
+  photo (23% of the pixels differ) passed `compare.mjs` at both widths, with the marker and again with an
+  exception `"selector": "img"`, and failed when the photo's box was 4:3 instead of 3:2 ("element 1 of
+  "[data-basis-media]" is 327x246 at 24,114, in the design 327x219 at 24,114", the box blue in the diff). Two real
+  Claude turns: asked for a product page with a large photo, Claude wrote `views/assets/running-shoe.svg` and an
+  `img` marked `data-basis-media` with `aspect-ratio` and `object-fit: cover` (it had read the planted Shop view,
+  which does the same); asked only to rename the heading of the planted remote-photo view, it renamed it, the fix
+  loop reported the remote URL, and the fix-up replaced it with a local SVG of the same size, marked.
 
 - 2026-10-19: The preview waits for the turn. Each agent run holds the preview from the start to the end of `runTurn`,
   so a fix-up turn holds again and the alternatives' takes each hold for their own turn; one hold over a whole prompt

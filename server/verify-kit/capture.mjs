@@ -11,12 +11,16 @@
  * Needs Playwright in the project (`npm i -D playwright` and `npx playwright install chromium`). Capture both
  * sides with the same machine and browser: fonts and antialiasing differ between systems, so only images taken
  * the same way can match pixel for pixel. Compare them with compare.mjs.
+ *
+ * Beside each image it writes `<shot>.boxes.json`: the boxes of the elements marked data-basis-media and of those
+ * the selectors in exceptions.json match, which compare.mjs leaves out and checks for place and size.
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { boxesExpression, boxesFile, selectorsFor } from "./compare.mjs";
 
 const kit = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -49,6 +53,10 @@ const TYPES = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".gif": "image/gif",
   ".woff2": "font/woff2",
   ".woff": "font/woff",
 };
@@ -118,6 +126,12 @@ async function main() {
     }
     targets = JSON.parse(await readFile(targetsFile, "utf8"));
   }
+  const exceptionsFile = path.join(kit, "exceptions.json");
+  const exceptions = existsSync(exceptionsFile)
+    ? (JSON.parse(await readFile(exceptionsFile, "utf8")).exceptions ?? [])
+    : [];
+  const selectors = selectorsFor(exceptions, mode, manifest.media?.selector ?? null);
+  const invalid = new Set();
 
   const chromium = await playwright();
   const browser = await chromium.launch({ headless: true, args: render.args, channel: option("--channel") });
@@ -169,16 +183,19 @@ async function main() {
               await page.addStyleTag({ content: render.neutralCss });
               await settle(page);
             }
-            return page.screenshot({ fullPage: shot.fullPage, animations: "disabled", caret: "hide" });
+            const png = await page.screenshot({ fullPage: shot.fullPage, animations: "disabled", caret: "hide" });
+            return { png, boxes: selectors.length ? await page.evaluate(boxesExpression(selectors)) : {} };
           };
           const first = await take();
           const second = await take();
           const name = shot.file.replace(/^screens\//, "");
           const file = path.join(out, name);
           await mkdir(path.dirname(file), { recursive: true });
-          await writeFile(file, first);
+          await writeFile(file, first.png);
+          await writeFile(boxesFile(file), `${JSON.stringify(first.boxes, null, 2)}\n`);
+          for (const [selector, boxes] of Object.entries(first.boxes)) if (boxes === null) invalid.add(selector);
           taken++;
-          const stable = first.equals(second);
+          const stable = first.png.equals(second.png);
           if (!stable) unstable.push(name);
           console.log(`${stable ? "ok      " : "UNSTABLE"} ${name}`);
         }
@@ -198,6 +215,7 @@ async function main() {
         "Look for clocks, random values, animations or content that loads late.",
     );
   }
+  if (invalid.size) console.log(`Not valid selectors in exceptions.json: ${[...invalid].join(", ")}.`);
 }
 
 main().catch((error) => {

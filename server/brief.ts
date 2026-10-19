@@ -169,9 +169,17 @@ The rules that always apply:
   shows). When a product repo is linked, use the product's own data where you can find it (fixtures, seeds,
   example responses, its wording), so the implementation can show exactly the same records. Otherwise make it
   up in the product's language. Keep data in the view file or a \`views/*-data.ts\` file.
+- Images (product photos, avatars, illustrations, maps) are placeholders of your own in \`views/assets/\`: a simple
+  SVG you write (a soft fill with a plain glyph or shape, no text). Import it (\`import photo from
+  "./assets/product.svg"\`), give the element a fixed box (width and height, or \`aspect-ratio\` with
+  \`object-fit: cover\`) and mark it \`data-basis-media\`: \`<img src={photo} alt="..." data-basis-media />\`. Never
+  link images from other sites (\`https://...\`); Basis reports them. The verification kit leaves elements marked
+  \`data-basis-media\` out of the comparison but checks their place and size, so the product's real images pass
+  as long as their boxes match.
 - Screens must render the same every time: no \`Date.now()\`, \`new Date()\` without a fixed date, random
   values, or animations and loading states that never settle. After a turn that changes a view, Basis captures
-  each of its screens twice, the second time with the clock a day later, and reports the ones that differ.
+  each of its screens twice, the second time with the clock a day later, and reports the ones that differ and
+  the ones that load images from other sites.
 - A flow block may say how its screens are captured: \`capture: { widths: [375, 768, 1440], height: "full",
   themes: ["light"] }\` (those are the defaults). \`height\` is \`"full"\` for the whole page or a number for
   exactly one viewport; add \`"dark"\` to \`themes\` when the product has a dark theme. Set widths to the

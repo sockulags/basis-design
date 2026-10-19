@@ -94,6 +94,18 @@ describe("reachedSpecimens", () => {
     assert.ok(reached?.includes("patterns/Odd.specimen.tsx"));
   });
 
+  test("a changed image reaches the views that import it", async () => {
+    await mkdir(path.join(dir, "views/assets"), { recursive: true });
+    await writeFile(path.join(dir, "views/assets/photo.png"), Buffer.from([137, 80, 78, 71, 0, 255]));
+    await writeFile(
+      path.join(dir, "views/Shop.specimen.tsx"),
+      'import photo from "./assets/photo.png";\nexport default photo;',
+    );
+    assert.deepEqual(await reachedSpecimens(dir, ["views/assets/photo.png"], DEFAULT_DESIGN, DEFAULT_DESIGN), [
+      "views/Shop.specimen.tsx",
+    ]);
+  });
+
   test("a global token reaches what uses it through other tokens", async () => {
     const after = design((d) => (d.radius.md = "2px"));
     const reached = await reachedSpecimens(dir, [], DEFAULT_DESIGN, after);

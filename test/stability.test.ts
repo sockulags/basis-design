@@ -18,13 +18,20 @@ function png(width: number, height: number, rgb: [number, number, number], marke
 }
 
 const shot = captureShots({ widths: [375] })[0]!;
-const repeated = (first: Buffer, second: Buffer, error: string | null = null, screen = "list"): RepeatedShot => ({
+const repeated = (
+  first: Buffer,
+  second: Buffer,
+  error: string | null = null,
+  screen = "list",
+  remote: string[] = [],
+): RepeatedShot => ({
   view: { id: "team", title: "Team", file: "views/Team.specimen.tsx" },
   screen: { id: screen, label: screen === "list" ? "Members" : "Invite" },
   shot,
   first,
   second,
   error,
+  remote,
 });
 
 test("the same pixels count as the same image, also when the files differ", () => {
@@ -62,6 +69,27 @@ test("findings name the screen, view, file, width and theme, and nothing that ch
   });
   const dark = { ...repeated(stable, png(4, 3, [9, 9, 9])), shot: { ...shot, theme: "dark" as const } };
   assert.match(screenFindings([dark])[0]!.text, /at 375px in dark;/);
+});
+
+test("a screen that loads images from other sites is a finding of its own, naming a few of them", () => {
+  const stable = png(2, 2, [0, 0, 0]);
+  const urls = ["https://a.test/1.jpg", "https://a.test/2.jpg", "https://b.test/3.png", "https://b.test/4.png"];
+  const findings = screenFindings([
+    repeated(stable, stable, null, "list", urls.slice(0, 1)),
+    repeated(stable, png(2, 2, [1, 1, 1]), null, "invite", urls),
+  ]);
+  assert.deepEqual(
+    findings.map((finding) => finding.kind),
+    ["remote", "unstable", "remote"],
+  );
+  assert.equal(
+    findings[0]!.text,
+    'Screen "Members" (list) of view "Team" (views/Team.specimen.tsx) loads images from other sites: https://a.test/1.jpg',
+  );
+  assert.match(
+    findings[2]!.text,
+    /: https:\/\/a\.test\/1\.jpg, https:\/\/a\.test\/2\.jpg, https:\/\/b\.test\/3\.png and 1 more$/,
+  );
 });
 
 test("a failed screen the preview already reports is left out", () => {

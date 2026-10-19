@@ -7,7 +7,9 @@ import { compareImages, decodePng } from "./verify-kit/compare.mjs";
  * Whether views render the same every time. The verification kit holds an implementation to its screens pixel for
  * pixel, so a screen that shows the clock, random values or an animation that does not settle can never pass it.
  * After a turn that changed files in views/, the fix loop photographs every screen of the views those files reach
- * twice, the second time with the clock moved on, and reports the screens whose images differ as problems.
+ * twice, the second time with the clock moved on, and reports the screens whose images differ as problems. It also
+ * reports the screens that load images from other sites, which can change or vanish before an implementation is
+ * compared, so views use placeholders of their own.
  */
 
 /** A file in views/, whose changes the check looks at. */
@@ -20,9 +22,12 @@ export interface ScreenFinding {
   file: string;
   /** The view's title, which the preview's render errors name it by. */
   view: string;
-  kind: "unstable" | "failed";
+  kind: "unstable" | "failed" | "remote";
   text: string;
 }
+
+/** How many remote URLs a finding names; more are counted. */
+const REMOTE_NAMED = 3;
 
 /** True when two screenshots have the same size and the same pixels; the kit's own comparison decides. */
 export function sameImage(first: Buffer, second: Buffer): boolean {
@@ -37,7 +42,7 @@ export function sameImage(first: Buffer, second: Buffer): boolean {
  */
 export function screenFindings(shots: RepeatedShot[]): ScreenFinding[] {
   const findings: ScreenFinding[] = [];
-  for (const { view, screen, shot, first, second, error } of shots) {
+  for (const { view, screen, shot, first, second, error, remote } of shots) {
     const where = `Screen "${screen.label}" (${screen.id}) of view "${view.title}" (${view.file})`;
     const at = `at ${shot.width}px${shot.theme === "dark" ? " in dark" : ""}`;
     if (error !== null) {
@@ -53,6 +58,16 @@ export function screenFindings(shots: RepeatedShot[]): ScreenFinding[] {
         view: view.title,
         kind: "unstable",
         text: `${where} renders differently each time ${at}; look for clocks, random values or animations that do not settle.`,
+      });
+    }
+    if (remote.length) {
+      const named = remote.slice(0, REMOTE_NAMED).join(", ");
+      const more = remote.length > REMOTE_NAMED ? ` and ${remote.length - REMOTE_NAMED} more` : "";
+      findings.push({
+        file: view.file,
+        view: view.title,
+        kind: "remote",
+        text: `${where} loads images from other sites: ${named}${more}`,
       });
     }
   }

@@ -1,7 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import vm from "node:vm";
 import { captureShots, shotFile, viewportHeightFor } from "../shared/capture.ts";
-import { compareImages, decodePng, encodePng, exceptionsFor } from "../server/verify-kit/compare.mjs";
+import { isRemoteMedia } from "../server/capture.ts";
+import {
+  boxesExpression,
+  boxesFile,
+  compareImages,
+  decodePng,
+  encodePng,
+  exceptionsFor,
+  selectorFor,
+  selectorsFor,
+  shotExclusions,
+} from "../server/verify-kit/compare.mjs";
 
 function image(width: number, height: number, color: [number, number, number]) {
   const data = Buffer.alloc(width * height * 4);
@@ -90,4 +102,116 @@ test("exceptions apply to the view, screens, widths and themes they name", () =>
   assert.deepEqual(names({ view: "orders", screen: "list", width: 375, theme: "light" }), ["all", "list-narrow"]);
   assert.deepEqual(names({ view: "orders", screen: "list", width: 768, theme: "dark" }), ["all", "dark"]);
   assert.deepEqual(names({ view: "people", screen: "list", width: 375, theme: "light" }), ["other"]);
+});
+
+test("selector exceptions leave out matching boxes and fail when the boxes differ", () => {
+  const box = { x: 16, y: 40, width: 120, height: 80 };
+  const exception = { name: "chart", view: "orders", selector: "canvas" };
+  const clean = shotExclusions([exception], {
+    expectedBoxes: { "[data-basis-media]": [], canvas: [box] },
+    actualBoxes: { "[data-basis-media]": [], canvas: [box] },
+  });
+  assert.deepEqual(clean, { regions: [box, box], names: ["chart"], problems: [] });
+  // A box that moved or changed size fails, beyond the tolerance.
+  const moved = { ...box, height: 81 };
+  const options = (actual: typeof box) => ({
+    expectedBoxes: { "[data-basis-media]": [], canvas: [box] },
+    actualBoxes: { "[data-basis-media]": [], canvas: [actual] },
+  });
+  assert.deepEqual(shotExclusions([exception], options(moved)).problems, [
+    'exception "chart": element 1 of "canvas" is 120x81 at 16,40, in the design 120x80 at 16,40',
+  ]);
+  assert.deepEqual(shotExclusions([exception], { ...options(moved), boxTolerance: 1 }).problems, []);
+  // A missing element fails, and its box is still left out of the pixels.
+  const missing = shotExclusions([exception], {
+    expectedBoxes: { "[data-basis-media]": [], canvas: [box] },
+    actualBoxes: { "[data-basis-media]": [], canvas: [] },
+  });
+  assert.deepEqual(missing.regions, [box]);
+  assert.match(
+    missing.problems[0]!,
+    /1 element matches "canvas" in the design, 0 elements match "canvas" in the implementation/,
+  );
+});
+
+test("the media marker applies to every shot, and capture problems are named", () => {
+  const photo = { x: 0, y: 0, width: 300, height: 200 };
+  const marked = { "[data-basis-media]": [photo] };
+  assert.deepEqual(shotExclusions([], { expectedBoxes: marked, actualBoxes: marked }).names, ["media"]);
+  // An implementation that does not mark its image fails.
+  assert.match(
+    shotExclusions([], { expectedBoxes: marked, actualBoxes: { "[data-basis-media]": [] } }).problems[0]!,
+    /^exception "media": 1 element matches/,
+  );
+  // A kit without the marker leaves nothing out by it.
+  assert.deepEqual(shotExclusions([], { media: null, expectedBoxes: marked }), {
+    regions: [],
+    names: [],
+    problems: [],
+  });
+  const exception = { name: "map", view: "orders", selector: { design: "[data-map]", app: "#map" } };
+  assert.deepEqual(
+    shotExclusions([exception], { media: null, expectedBoxes: { "[data-map]": [photo] }, actualBoxes: undefined })
+      .problems,
+    ['exception "map": the implementation was captured without measuring "#map"; run capture.mjs app again'],
+  );
+  assert.deepEqual(
+    shotExclusions([exception], { media: null, expectedBoxes: { "[data-map]": null }, actualBoxes: {} }).problems,
+    ['exception "map": "[data-map]" is not a valid selector'],
+  );
+  // Region exceptions keep working beside selectors.
+  const region = { x: 1, y: 2, width: 3, height: 4 };
+  assert.deepEqual(shotExclusions([{ name: "corner", view: "orders", region }], { media: null }).regions, [region]);
+});
+
+test("each side measures the media marker and its own selectors", () => {
+  const exceptions = [
+    { selector: "canvas" },
+    { selector: { design: "[data-map]", app: "#map" } },
+    { region: { x: 0, y: 0, width: 1, height: 1 } },
+  ];
+  assert.deepEqual(selectorsFor(exceptions, "design"), ["[data-basis-media]", "canvas", "[data-map]"]);
+  assert.deepEqual(selectorsFor(exceptions, "app", null), ["canvas", "#map"]);
+  assert.equal(selectorFor({ selector: "img" }, "app"), "img");
+  assert.equal(boxesFile("screens/orders/list@375.png"), "screens/orders/list@375.boxes.json");
+});
+
+test("boxes are measured in the page's pixels, widened to whole pixels, without empty or invalid ones", () => {
+  const rect = (left: number, top: number, width: number, height: number) => ({
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+  });
+  const elements: Record<string, { getBoundingClientRect: () => ReturnType<typeof rect> }[]> = {
+    img: [
+      { getBoundingClientRect: () => rect(10.5, 20.25, 100, 50) },
+      { getBoundingClientRect: () => rect(0, 0, 0, 0) },
+    ],
+  };
+  const document = {
+    querySelectorAll: (selector: string) => {
+      if (selector === "[") throw new Error("not valid");
+      return elements[selector] ?? [];
+    },
+  };
+  const context = vm.createContext({ document, scrollX: 0, scrollY: 100 });
+  // Through JSON, as Playwright returns it, since the context's objects have prototypes of their own.
+  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext(boxesExpression(["img", "video", "["]), context))), {
+    img: [{ x: 10, y: 120, width: 101, height: 51 }],
+    video: [],
+    "[": null,
+  });
+});
+
+test("only images and media from another site count as remote", () => {
+  const page = "http://127.0.0.1:5321";
+  assert.equal(isRemoteMedia("image", "https://images.example.com/photo.jpg", page), true);
+  assert.equal(isRemoteMedia("media", "http://cdn.example.com/clip.mp4", page), true);
+  assert.equal(isRemoteMedia("image", "http://127.0.0.1:5321/@fs/ws/views/assets/photo.svg", page), false);
+  assert.equal(isRemoteMedia("image", "data:image/svg+xml,%3Csvg%3E", page), false);
+  assert.equal(isRemoteMedia("font", "https://fonts.gstatic.com/s/inter.woff2", page), false);
+  assert.equal(isRemoteMedia("stylesheet", "https://fonts.googleapis.com/css2?family=Inter", page), false);
 });

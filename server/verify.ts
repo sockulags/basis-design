@@ -9,6 +9,7 @@ import { READY_ATTRIBUTE, shotFile } from "../shared/capture.ts";
 import type { Design } from "../shared/design.ts";
 import type { VerifyKitSummary } from "../shared/protocol.ts";
 import { CAPTURE_ARGS, captureViews, launchCaptureBrowser } from "./capture.ts";
+import { boxesFile, MEDIA_SELECTOR } from "./verify-kit/compare.mjs";
 
 /*
  * The verification kit: what an agent implementing a feature needs to prove the implementation looks like the
@@ -53,7 +54,13 @@ const TYPES: Record<string, string> = {
   ".json": "application/json",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".gif": "image/gif",
   ".woff2": "font/woff2",
+  ".woff": "font/woff",
 };
 
 /** Builds the capture page with the workspace's components into `outDir`, as index.html beside design.json. */
@@ -171,6 +178,10 @@ export async function buildVerificationKit({
         neutralCss: NEUTRAL_CSS,
         base: await readFile(path.join(repoRoot, "src", "capture", "capture.css"), "utf8"),
       },
+      media: {
+        selector: MEDIA_SELECTOR,
+        note: "Elements marked data-basis-media hold placeholder images. compare.mjs leaves them out of every shot as long as both sides have them at the same places and sizes; mark the implementation's own images the same way.",
+      },
       design: {
         entry: "design/index.html",
         query: "?view={view}&screen={screen}&theme={theme}",
@@ -191,6 +202,7 @@ export async function buildVerificationKit({
               imageHeight: shot?.imageHeight,
               stable: shot?.stable,
               failed: shot?.failed,
+              remoteMedia: shot?.remote.length ? shot.remote : undefined,
             };
           }),
         })),
@@ -213,6 +225,12 @@ export async function buildVerificationKit({
           widths: [375],
           region: { x: 16, y: 16, width: 40, height: 40 },
         },
+        {
+          name: "example-chart",
+          reason: "The live chart draws the product's real numbers.",
+          view: views[0]?.id ?? "<view id>",
+          selector: "canvas",
+        },
       ],
     };
     const text = (file: string, content: string): KitFile => ({ path: file, data: strToU8(content) });
@@ -224,7 +242,10 @@ export async function buildVerificationKit({
       text("targets.example.json", `${JSON.stringify(targets, null, 2)}\n`),
       text("exceptions.example.json", `${JSON.stringify(exceptions, null, 2)}\n`),
       ...(await filesIn(designDir, "design")),
-      ...shots.map((shot) => ({ path: shot.file, data: new Uint8Array(shot.png) })),
+      ...shots.flatMap((shot) => [
+        { path: shot.file, data: new Uint8Array(shot.png) },
+        text(boxesFile(shot.file), `${JSON.stringify(shot.boxes, null, 2)}\n`),
+      ]),
     ];
     const summary: VerifyKitSummary = {
       browser: `${name} ${version}`,
@@ -233,6 +254,7 @@ export async function buildVerificationKit({
       shots: shots.length,
       unstable: shots.filter((shot) => !shot.stable).map((shot) => shot.file),
       failed: shots.filter((shot) => shot.failed).map((shot) => shot.file),
+      remote: shots.filter((shot) => shot.remote.length).map((shot) => shot.file),
       problems,
     };
     return { files, summary };
@@ -296,10 +318,12 @@ every one of them.
 - \`design/\`: the design as a static site. Serve the folder and open
   \`index.html?view=<view>&screen=<screen>&theme=light\` to see one screen alone, at the size of the window.
   The screens are clickable where the design moves between them.
-- \`screens/\`: what Basis captured, named \`<view>/<screen>@<width>[x<height>][-dark].png\`.
+- \`screens/\`: what Basis captured, named \`<view>/<screen>@<width>[x<height>][-dark].png\`, each with a
+  \`.boxes.json\` beside it: where the elements marked \`data-basis-media\` are in the image.
 - \`basis-verify.json\`: every view, screen and shot (width, viewport height, full page or not, theme), and the
   settings the shots were taken with: device scale 1, reduced motion, light color scheme, the Chromium flags in
-  \`render.args\`, and the CSS every captured page gets (\`render.neutralCss\`).
+  \`render.args\`, and the CSS every captured page gets (\`render.neutralCss\`). A shot that loads images from
+  another site lists them in \`remoteMedia\`.
 - \`capture.mjs\`: takes the same shots of the design or of the implementation, on this machine.
 - \`compare.mjs\`: compares the two sets and writes diff images.
 
@@ -339,9 +363,10 @@ npx playwright install chromium
    node basis-verify/compare.mjs
    \`\`\`
 
-   Each shot prints PASS, FAIL (with the share of differing pixels), MISSING or EXCEPTED. Failures get a diff
-   image in \`diff/\`: matching pixels faded, differing pixels red, excepted regions blue. \`diff/report.json\` has
-   the same results for tools. The command exits with 1 when any shot fails or is missing.
+   Each shot prints PASS, FAIL (with the share of differing pixels, and what is wrong with the elements left
+   out), MISSING or EXCEPTED. Failures get a diff image in \`diff/\`: matching pixels faded, differing pixels red,
+   left-out regions and elements blue. \`diff/report.json\` has the same results for tools. The command exits
+   with 1 when any shot fails or is missing.
 
 A screen is the whole page as the product shows it. The page's size matters too: a full-page shot that is
 taller or shorter than the design fails even when the top matches.
@@ -355,6 +380,16 @@ taller or shorter than the design fails even when the top matches.
 - Anything that changes between two loads (clocks, random values, animations, content that arrives late)
   makes a shot unstable: \`capture.mjs\` says so, and such a shot can never match.
 
+## Images
+
+Photos, avatars and illustrations cannot match pixel for pixel: the design shows placeholders, the product its
+own images. The design marks each such element with \`data-basis-media\`. Mark the element in the
+implementation that takes its place the same way (\`<img data-basis-media src={product.photo} ...>\`).
+\`compare.mjs\` then leaves those elements out of every shot, but checks that both sides have as many of them,
+each at the same place and with the same size, to the pixel (\`--box-tolerance <px>\` allows more). A missing,
+moved or resized image still fails the shot. \`capture.mjs\` writes where they are into a \`.boxes.json\` beside
+each image.
+
 ## Exceptions
 
 When part of a screen cannot match for a reason you can name, add it to \`exceptions.json\` (start from
@@ -364,20 +399,24 @@ When part of a screen cannot match for a reason you can name, add it to \`except
 {
   "exceptions": [
     {
-      "name": "avatar-photo",
-      "reason": "Real profile photos replace the design's initials.",
+      "name": "usage-chart",
+      "reason": "The live chart draws the product's real numbers.",
       "view": "team-members",
       "screen": "list",
       "widths": [375],
       "themes": ["light"],
-      "region": { "x": 16, "y": 16, "width": 40, "height": 40 }
+      "selector": "canvas"
     }
   ]
 }
 \`\`\`
 
 \`screen\`, \`widths\` and \`themes\` narrow where it applies; without them it applies to every screen, width or
-theme of the view. \`region\` is in the image's pixels; without it the whole shot is excepted. Keep exceptions
+theme of the view. \`selector\` leaves out the elements it matches, checked as images are (same number, place
+and size on both sides); when the two sides need different selectors, give
+\`{ "design": "...", "app": "..." }\`. \`capture.mjs\` measures the selectors in \`exceptions.json\` when it
+captures, so capture both sides again after adding one. \`region\` (\`{ "x", "y", "width", "height" }\`, in the
+image's pixels) leaves out a fixed part of the image. With neither, the whole shot is excepted. Keep exceptions
 few and specific: every one is a part of the design nobody checks.
 `;
 }

@@ -131,7 +131,13 @@ test("the verification kit captures every screen of the views and runs as a stat
   for (const shot of shots) {
     expect(files[`basis-verify/${shot.file}`]?.byteLength).toBeGreaterThan(0);
     expect(shot.stable).toBe(true);
+    // Where the media placeholders are, for compare.mjs; the starter view has none.
+    const boxes = JSON.parse(
+      new TextDecoder().decode(files[`basis-verify/${shot.file.replace(/\.png$/, ".boxes.json")}`]),
+    );
+    expect(boxes).toEqual({ "[data-basis-media]": [] });
   }
+  expect(manifest.media.selector).toBe("[data-basis-media]");
   for (const file of ["design/index.html", "design/design.json", "capture.mjs", "compare.mjs", "README.md"]) {
     expect(files[`basis-verify/${file}`], file).toBeDefined();
   }

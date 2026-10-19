@@ -143,6 +143,8 @@ export interface RepeatedShot {
   second: Buffer;
   /** What the screen threw while rendering, or null when it rendered. */
   error: string | null;
+  /** Images and media the screen loads from other sites (`isRemoteMedia` in server/capture.ts). */
+  remote: string[];
 }
 
 /** How far `Screenshots.repeat` moves the clock for the second image: a day, an hour, a minute, a second and a bit. */
@@ -307,7 +309,7 @@ export class Screenshots {
    * Photographs every screen of the views whose specimen file is among `files` twice, at the first shot its flow
    * asks for: once as usual, and once with the page's clock moved on by `CLOCK_SHIFT_MS`, so a screen that shows
    * the time or the date comes out different whatever it rounds to. For the check that views render the same
-   * every time (server/stability.ts).
+   * every time (server/stability.ts), which also reports the images the first one loaded from other sites.
    */
   repeat(files: string[]): Promise<RepeatedShot[]> {
     return this.browser.use(async ({ context }) => {
@@ -341,6 +343,7 @@ export class Screenshots {
               first: first.png,
               second: second.png,
               error: first.failed ? (error ?? "it threw while rendering") : null,
+              remote: first.remote,
             });
           }
         }

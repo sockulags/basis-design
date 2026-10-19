@@ -221,6 +221,8 @@ These apply to views and to patterns that make up a screen.
 - List and detail: a side panel or split view on wide screens, push navigation on narrow ones. Keep the same content
   and features at every size; change the layout, not the substance.
 - Design all the states a screen meets: first use, populated, loading, error, no results, success.
+- Images sit in fixed boxes (width and height, or an aspect ratio with `object-fit: cover`), so the layout does not
+  move as they load and any picture fits; every image that carries meaning has alt text, decorative ones `alt=""`.
 - Every interactive element leads somewhere in the flow or is visibly out of scope; nothing invented leads nowhere.
 - Progressive disclosure for rare options: at most two levels, behind a clearly named control.
 

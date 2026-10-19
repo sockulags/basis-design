@@ -156,9 +156,16 @@ export async function writeGeneratedFiles(dir: string): Promise<void> {
     path.join(basisDir, "guidelines.md"),
     await readFile(path.join(repoRoot, "server", "guidelines.md"), "utf8"),
   );
+  // Imported images (a view's placeholders in views/assets/) are URLs, as Vite serves and builds them.
+  const images = ["svg", "png", "jpg", "jpeg", "webp", "avif", "gif"].map(
+    (extension) => `declare module "*.${extension}" {\n  const url: string;\n  export default url;\n}\n`,
+  );
   await writeFile(
     path.join(basisDir, "env.d.ts"),
-    'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',
+    [
+      'declare module "*.module.css" {\n  const classes: Record<string, string>;\n  export default classes;\n}\n',
+      ...images,
+    ].join(""),
   );
   await writeFile(
     path.join(basisDir, "check.ts"),

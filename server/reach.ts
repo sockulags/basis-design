@@ -19,6 +19,8 @@ import { SOURCE_DIRS } from "./paths.ts";
 const INHERITED = ["--font-sans", "--color-text", "--color-bg", "--text-base", "--leading-normal"];
 
 const SOURCE = /\.(tsx?|css)$/;
+/** Images a source file may import (a view's placeholders in views/assets/): reached like code, never read. */
+const ASSET = /\.(svg|png|jpe?g|webp|avif|gif)$/i;
 
 /**
  * The specimen files (`components/Button.specimen.tsx`) a change can reach, or
@@ -100,9 +102,10 @@ async function readSources(dir: string): Promise<Map<string, string>> {
       continue;
     }
     for (const name of names) {
-      if (!SOURCE.test(name)) continue;
+      const asset = ASSET.test(name);
+      if (!SOURCE.test(name) && !asset) continue;
       const file = `${folder}/${name.split(path.sep).join("/")}`;
-      sources.set(file, await readFile(path.join(dir, folder, name), "utf8").catch(() => ""));
+      sources.set(file, asset ? "" : await readFile(path.join(dir, folder, name), "utf8").catch(() => ""));
     }
   }
   return sources;

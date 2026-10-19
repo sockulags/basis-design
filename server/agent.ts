@@ -606,6 +606,12 @@ ${message}`
         `These view screens render differently each time Basis captures them (twice, the second time with the clock a day later), so no implementation can ever match them pixel for pixel. Make each one render the same every time: fixed dates and data, no random values, nothing that keeps moving:\n${list(unstable)}`,
       );
     }
+    const remote = screens.filter((screen) => screen.kind === "remote").map((screen) => screen.text);
+    if (remote.length) {
+      sections.push(
+        `These view screens load images from other sites, which can change, vanish or need a login before the implementation is compared with the design. Replace each with a placeholder in views/assets/ (a simple SVG you write), imported into the view and on an element marked data-basis-media, as "Views: whole screens" in AGENTS.md says:\n${list(remote)}`,
+      );
+    }
     // Only what this turn introduced: findings that were there before are the user's to ask about, and
     // repeating them would send the agent after them on every turn.
     const introduced = checks.filter((check) => !this.checksBefore.has(check));
