@@ -41,6 +41,16 @@ component source, patterns and the gallery specimens.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
     Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
+  - `server/hold.ts` holds the preview while an agent turn runs (`PreviewHold`, one per open project, held from the
+    start to the end of each `runTurn`, fix-ups included). Its Vite plugin's `hotUpdate` hook (order `post`, after
+    the specimen glob adds its importer for a new file) returns no modules, after invalidating them as Vite's own
+    update would, so a page loaded fresh (the agent's screenshots, the stability check) still sees the files as they
+    are; the workspace's `design` and `review` messages to the chrome wait too, the latest of each. The chrome shows
+    "Changes show when the agent is done" while something waits (`preview-waiting`). When the turn ends,
+    `basis:release` (Vite's HMR channel) makes only the gallery (`preview.html`, not its copy in the other theme and
+    never `capture.html`) reload once, back to where it was scrolled (`reloadInPlace` in `src/preview/main.tsx`).
+    Each such reload is a new generation, served to every gallery document in a `basis-preview` meta tag
+    (`shared/hold.ts`); the gallery sends it with `ready`, and the chrome with every `preview-errors` report.
 - `server/agent.ts`: the ACP client (`@agentclientprotocol/sdk`).
   - It starts `claude-agent-acp` or `codex-acp` through npx at pinned versions (`CLAUDE_ACP`, `CODEX_ACP`), with
     `--prefer-offline` so a fetched adapter also starts offline. Claude's adapter is fetched with
@@ -94,7 +104,11 @@ component source, patterns and the gallery specimens.
     before, so `AgentHost` remembers those ids. The chat shows such a call as "Screenshot of <target>".
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,
     render errors reported by the preview, views that do not render the same twice; see Checks) and sends them
-    back to the agent, at most twice. Every open tab
+    back to the agent, at most twice. It first waits for a report from the gallery reloaded after the turn (its
+    generation, up to 10 s; `previewSettled`) and then for its checks; without one, the preview's errors and
+    findings are left out, since they are from before the turn. A fresh gallery document reports its errors (often
+    none) and its checks right after `ready`, counts as checking until it has first rendered, and the chrome drops
+    the previous document's lists on `ready`. Every open tab
     reports its preview's errors with its visibility; `server/previews.ts` picks the tab the user looks at (or
     looked at last), so a stale or second tab cannot send the agent after problems that are not there.
   - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
@@ -235,8 +249,9 @@ Accessibility (`src/preview/a11y.ts`, which also runs the layout check below) ru
 offscreen impact copies), 600 ms
 after anything that changes them, and keeps serious and critical WCAG A/AA violations, one per demo and rule so
 the text stays stable for the comparison. Duplicate-id rules are off, since the gallery repeats demos. While a
-check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the usual
-settle time) before it decides what the turn introduced. The user sees one theme, so the preview keeps a copy of
+check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the reloaded
+gallery reported) before it decides what the turn introduced; the copy in the other theme counts as running from
+when it is embedded until it first reports. The user sees one theme, so the preview keeps a copy of
 itself in the other one (`ThemeChecker` in `src/preview/main.tsx`): a same-origin frame at full size, transparent,
 inert and behind the page, opened with `?theme-check`. It renders the same view without impact copies and posts
 only its own axe findings, which join the preview's. Every finding names its theme, taken from the nearest
@@ -367,6 +382,11 @@ TypeScript server through tsx). Publishing is the maintainer's call.
   problems survive that.
 - **Fast Refresh** does not retry failed error boundaries on its own; sections reset on `vite:afterUpdate`. A
   module that exports anything but components (Review.tsx once exported a helper) reloads the whole preview.
+- **A module that failed its first load takes no more updates:** Vite's client drops updates for a module it never
+  ran, and a new file that failed to parse never had its imports read. That is why a turn holds the preview and
+  reloads it at the end rather than letting it hot-update through half-written files. Vite also broadcasts every
+  transform error to every page, so while held the gallery ignores `vite:error` and hides Vite's overlay
+  (`data-basis-held`), and reloads at the release if it ignored one.
 - **Specimen glob keys** keep the alias form only while the workspace is inside the repo; outside it, Vite
   turns them into relative paths. The page comes from the second-to-last path segment (the folder), matched
   against `PAGES` in `shared/frame.ts`, the single list of pages and source folders.

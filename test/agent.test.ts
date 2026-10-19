@@ -76,3 +76,38 @@ describe("a linked product repo", () => {
     assert.equal(chosen(await pending), "cancelled");
   });
 });
+
+describe("after a turn, the fix loop", () => {
+  /** The host's wait for the preview, with the generation the last turn's reload carries. */
+  function waiting(reloaded: number | null) {
+    const agent = new AgentHost(new Workspace(path.join(root, "fix")), "claude", undefined, [], root);
+    const inner = agent as unknown as { reloaded: number | null; previewSettled(): Promise<boolean> };
+    inner.reloaded = reloaded;
+    return { agent, settled: () => inner.previewSettled() };
+  }
+
+  test("waits for the gallery reloaded after the turn, and then for its checks", async () => {
+    const { agent, settled } = waiting(3);
+    agent.setPreviewErrors(["Buttons section: from before the turn"], [], false, 2);
+    let done = false;
+    const result = settled().then((fresh) => ((done = true), fresh));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(done, false, "a report from before the reload is not the turn's");
+    agent.setPreviewErrors([], [], true, 3);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(done, false, "the reloaded gallery is still checking");
+    agent.setPreviewErrors([], [], false, 3);
+    assert.equal(await result, true);
+  });
+
+  test("takes the report as it is when the turn changed nothing the preview shows", async () => {
+    const { agent, settled } = waiting(null);
+    agent.setPreviewErrors([], [], false, 2);
+    assert.equal(await settled(), true);
+  });
+
+  test("has no report to go on when no tab shows the preview", async () => {
+    const { settled } = waiting(1);
+    assert.equal(await settled(), false);
+  });
+});

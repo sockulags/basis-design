@@ -2,7 +2,18 @@ import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentTyp
 import { createRoot } from "react-dom/client";
 import type { Annotation } from "../../shared/annotations.ts";
 import type { FromPreview, PreviewView, ToPreview } from "../../shared/frame.ts";
-import { clearProblems, describe, hotUpdated, onFindings, onProblems, setProblem } from "./errors.ts";
+import { HOLD_EVENT, HOLD_META, readHoldMeta, RELEASE_EVENT, type ReleasePayload } from "../../shared/hold.ts";
+import {
+  clearProblems,
+  currentFindings,
+  currentProblems,
+  describe,
+  hotUpdated,
+  onFindings,
+  onProblems,
+  setChecking,
+  setProblem,
+} from "./errors.ts";
 import { onOwnFindings, setOtherThemeFindings } from "./a11y.ts";
 import { PickLayer, PickMarkers, type Pick } from "./picker/PickLayer.tsx";
 import { requestReveal, stillRendering } from "./progressive.ts";
@@ -43,10 +54,84 @@ window.addEventListener("click", (event) => {
   if (event.target instanceof Element && event.target.closest("a[href]")) event.preventDefault();
 });
 
+/** What the preview server served this document with: its generation, and whether a turn holds the preview. */
+const served = readHoldMeta(document.querySelector<HTMLMetaElement>(`meta[name="${HOLD_META}"]`)?.content);
+/**
+ * While an agent turn runs, the preview server holds the gallery's updates (server/hold.ts), so it shows the
+ * workspace as it was until the turn ends. Errors Vite reports meanwhile come from other pages loading the turn's
+ * half-done files (the agent's screenshots), not from what the gallery shows; Vite's overlay for them stays hidden.
+ */
+let held = false;
+/** An error was left out while held: the gallery reloads at the release even if nothing it shows changed. */
+let missed = false;
+function setHeld(value: boolean): void {
+  held = value;
+  document.documentElement.toggleAttribute("data-basis-held", value);
+}
+setHeld(served.held);
+
+/** Until the gallery first renders, the fix loop must not take its empty lists for a clean result. */
+const LOADING = "Loading the gallery";
+if (!themeCheck) setChecking(LOADING, true);
+
+const PLACE = "basis:place";
+
+/** Reloads the gallery to show what a turn changed, keeping where it was scrolled to. */
+function reloadInPlace(): void {
+  // The section at the top of the viewport and how far into it, since sections above may change height.
+  const top = [...document.querySelectorAll<HTMLElement>("section[id]")].findLast(
+    (section) => section.getBoundingClientRect().top <= 0,
+  );
+  const place = { y: window.scrollY, id: top?.id, offset: top ? -top.getBoundingClientRect().top : 0 };
+  try {
+    sessionStorage.setItem(PLACE, JSON.stringify(place));
+  } catch {
+    // Only a convenience: the gallery then starts at the top.
+  }
+  // The gallery renders progressively, so the browser's own restoring would land short; restorePlace does it.
+  history.scrollRestoration = "manual";
+  location.reload();
+}
+
+/** Scrolls back to where reloadInPlace left, once the gallery has rendered. */
+function restorePlace(): void {
+  const place = takePlace();
+  if (!place) return;
+  const id = typeof place.id === "string" ? place.id : "";
+  // Sections further down may not be rendered yet; render everything up to this one first.
+  if (id) requestReveal(id);
+  const section = id ? document.getElementById(id) : null;
+  const y = section
+    ? section.getBoundingClientRect().top + window.scrollY + Number(place.offset ?? 0)
+    : Number(place.y ?? 0);
+  window.scrollTo(0, Number.isFinite(y) ? y : 0);
+}
+
+function takePlace(): { y?: unknown; id?: unknown; offset?: unknown } | null {
+  try {
+    const place = JSON.parse(sessionStorage.getItem(PLACE) ?? "null") as Record<string, unknown> | null;
+    sessionStorage.removeItem(PLACE);
+    return place && typeof place === "object" ? place : null;
+  } catch {
+    return null;
+  }
+}
+
 window.addEventListener("error", (event) => setProblem("Uncaught error", describe(event.error ?? event.message)));
 window.addEventListener("unhandledrejection", (event) => setProblem("Unhandled rejection", describe(event.reason)));
 if (import.meta.hot) {
+  import.meta.hot.on(HOLD_EVENT, () => setHeld(true));
+  import.meta.hot.on(RELEASE_EVENT, (payload: ReleasePayload) => {
+    // One reload shows the turn's result: no module that failed mid-turn and no error from before stays behind. The
+    // copy in the other theme is reloaded with the gallery that embeds it.
+    if ((payload.reload || missed) && !themeCheck) return reloadInPlace();
+    setHeld(false);
+  });
   import.meta.hot.on("vite:error", (payload: { err?: { message?: string; id?: string } }) => {
+    if (held) {
+      missed = true;
+      return;
+    }
     // Past versions a review shows are history, not the agent's to fix (their panes do not report either).
     if (`${payload.err?.id ?? ""} ${payload.err?.message ?? ""}`.includes("/.basis/snapshots/")) return;
     const where = payload.err?.id ? ` in ${payload.err.id.split("/components/").pop()}` : "";
@@ -110,6 +195,8 @@ function ThemeChecker({ view }: { view: PreviewView }) {
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
+    // The copy's checks count as running until it first reports, so the fix loop waits for it after a reload.
+    setOtherThemeFindings([], true);
     const listen = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== location.origin) return;
       const message = event.data as { type?: unknown; checks?: unknown; running?: unknown } | null;
@@ -171,6 +258,7 @@ function usePreviewModule(): ComponentType<Parameters<PreviewType>[0]> | null {
       },
       (error: unknown) => {
         setProblem("Gallery failed to load", describe(error));
+        setChecking(LOADING, false);
         // A failed module stays failed in this document; reload once the next edit lands.
         import.meta.hot?.on("vite:afterUpdate", () => location.reload());
       },
@@ -226,7 +314,10 @@ function PreviewApp() {
       }
     };
     window.addEventListener("message", onMessage);
-    post({ type: "ready" });
+    post({ type: "ready", generation: served.generation });
+    // A fresh document reports what it shows from the start, so nothing an earlier one reported lingers.
+    post({ type: "errors", errors: currentProblems() });
+    if (!themeCheck) post({ type: "checks", ...currentFindings() });
     const stop = onProblems((errors) => post({ type: "errors", errors }));
     const stopChecks = (themeCheck ? onOwnFindings : onFindings)((checks, running) =>
       post({ type: "checks", checks, running }),
@@ -249,6 +340,15 @@ function PreviewApp() {
   }, [view]);
 
   useScrollSpy(view && Preview ? `${view.page}|${view.review ? "review" : ""}` : null);
+
+  // Rendered for the first time: the checks it scheduled take over from loading (the gallery's effects run first),
+  // and a gallery reloaded after a turn goes back to where it was.
+  const shown = Boolean(view && Preview);
+  useEffect(() => {
+    if (!shown) return;
+    setChecking(LOADING, false);
+    if (!themeCheck) setTimeout(restorePlace, 0);
+  }, [shown]);
 
   const toggle = useCallback((annotation: Annotation, element: HTMLElement) => {
     setPicks((current) =>

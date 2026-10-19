@@ -72,7 +72,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       (`IFileOpenDialog` with `FOS_PICKFOLDERS`) in both Windows PowerShell and pwsh. Done when: a real Claude turn
       in a project inside a fixture repo reads the repo with shell commands and searches without a prompt, and
       writes there are still refused.
-- [ ] **The preview waits for the turn.** Mid-turn states (a half-written file, an import of a file not written
+- [x] **The preview waits for the turn.** Mid-turn states (a half-written file, an import of a file not written
       yet) leave errors that outlive the turn: the preview never reports an empty list after a reload, so the old
       list stays in the chrome and the server; a new specimen whose first load failed stops taking HMR updates; and
       the fix loop reads the report after a fixed 1500 ms. Hold the preview's code updates while a turn runs (a
@@ -223,6 +223,43 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: The preview waits for the turn. Each agent run holds the preview from the start to the end of `runTurn`,
+  so a fix-up turn holds again and the alternatives' takes each hold for their own turn; one hold over a whole prompt
+  was ruled out, since the fix loop has to see each run's result in the gallery to report what it left broken. The
+  hold is `PreviewHold` (`server/hold.ts`): a `hotUpdate` hook in the preview's Vite, ordered `post` so it also sees
+  the importer the specimen glob adds for a new file, returns no modules. Vite clears a changed file's transforms
+  before that hook, but the glob's importer for a new file only in the update it no longer sends (a fresh page
+  would not see the new specimen), so the hook invalidates the update's modules itself, as Vite would; the
+  agent's screenshots and the stability check, which load `capture.html` fresh, see the files as they are. Tokens
+  and the review wait as well, the latest `design` and `review` message each: the gallery shows one state, the one
+  before the turn, and a half-written `design-system.json` no longer flashes as a problem; live token feedback
+  mid-turn is what that costs, and the agent writes tokens in one go anyway. A tab opened mid-turn gets the live
+  state in its hello, which matches the code it loads fresh. When the turn ends and anything it holds changed,
+  `basis:release` reloads the gallery once (only `preview.html` listens; its copy in the other theme goes with it,
+  and capture pages never reload mid-capture), back to the section at the top and the offset into it, since a
+  progressively rendered page defeats the browser's own scroll restoring; picks and a flow's screen start over.
+  A reload rather than replaying the held updates, because a new specimen whose first load fails at the end of a
+  turn would again stop taking the fix-up's updates. Every gallery document is served with its generation in a meta
+  tag (`transformIndexHtml`), one more per reload, and says it with `ready`; it reports its errors (often none) and
+  checks right after `ready`, and counts as checking until it first renders, and the copy in the other theme counts
+  as running until it first reports. The chrome drops the old document's lists on `ready` and sends the generation
+  with every report, and the fix loop waits for a report of the generation the release named (up to 10 s), then for
+  the checks, instead of a fixed 1500 ms; it now waits when tsc found errors too, since a report from before the
+  reload is stale, and when no report comes it leaves the preview's errors and findings out rather than send old
+  ones. "Also changed", axe and the layout check needed nothing: they run in the reloaded document. Vite broadcasts
+  every transform error to every page, so a capture page loading a half-done file would have put a compile error
+  and the overlay into the held gallery; while held the gallery ignores `vite:error`, hides the overlay, and
+  reloads at the release if it ignored one. The chrome shows "Changes show when the agent is done" on the preview
+  while something waits. Verified with unit tests (the hold, the invalidation, the meta tag, the reports'
+  generation, the fix loop's wait), an e2e test whose stand-in agent writes a view importing a file it writes
+  1.5 s later (the note shows, the gallery has no trace of the view mid-turn, and after the turn it shows the
+  view with no problems listed), and real Claude turns on a throwaway instance: asked for a "Release notes" view
+  written specimen first and data file second, Claude wrote the two files and photographed both screens mid-turn
+  (the screenshots showed its work), while the gallery stayed on the starter view with the note at the bottom;
+  when the turn ended the sidebar listed the view, it rendered with its data, and no problem was listed, without a
+  reload by hand. A second turn renaming a column reloaded the gallery onto the new column, still scrolled to the
+  view.
 
 - 2026-10-19: Reading the product repo without prompts. Claude Code gets the linked repo as a working directory
   through `_meta.claudeCode.options.additionalDirectories` (`sessionMeta` in `server/agent.ts`), not ACP's own

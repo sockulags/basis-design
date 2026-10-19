@@ -36,6 +36,8 @@ export interface BridgeState {
   baselines: Record<string, Baseline>;
   /** Port of the sandboxed preview origin, from the server. */
   previewPort: number | null;
+  /** The running turn changed what the preview shows, which it shows once the turn ends. */
+  previewWaiting: boolean;
   exportManifest: { folder: string; files: { path: string; bytes: number }[] } | null;
   exportResult: ExportWriteResult | null;
   /** The verification kit being built (its current step), or null. */
@@ -57,6 +59,7 @@ const initial: BridgeState = {
   review: null,
   baselines: {},
   previewPort: null,
+  previewWaiting: false,
   exportManifest: null,
   exportResult: null,
   verifyProgress: null,
@@ -84,6 +87,7 @@ function reduce(state: BridgeState, action: Action): BridgeState {
         agent: action.agent,
         chat: action.chat,
         review: action.review,
+        previewWaiting: action.previewWaiting,
         // The server may have restarted and removed its copies of past versions; ask for them again.
         baselines: {},
       };
@@ -101,6 +105,8 @@ function reduce(state: BridgeState, action: Action): BridgeState {
       return { ...state, projectError: { message: action.message } };
     case "design":
       return { ...state, design: action.design };
+    case "preview-waiting":
+      return { ...state, previewWaiting: action.waiting };
     case "history":
       return { ...state, history: action.history };
     case "agent":

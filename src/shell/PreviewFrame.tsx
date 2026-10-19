@@ -14,6 +14,8 @@ interface PreviewFrameProps {
   view: PreviewView;
   picking: boolean;
   inspecting: boolean;
+  /** The running turn holds changes back from the preview until it ends (server/hold.ts). */
+  waiting: boolean;
   /** Every message from the preview, already validated: "ready" when a fresh document loads, then the rest. */
   onMessage: (message: FromPreview) => void;
 }
@@ -24,7 +26,7 @@ interface PreviewFrameProps {
  * untrusted data; it can suggest text for the composer but never act.
  */
 export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(function PreviewFrame(
-  { port, view, picking, inspecting, onMessage },
+  { port, view, picking, inspecting, waiting, onMessage },
   ref,
 ) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -96,6 +98,11 @@ export const PreviewFrame = forwardRef<PreviewFrameHandle, PreviewFrameProps>(fu
         title="Design system preview"
         sandbox="allow-scripts allow-same-origin"
       />
+      {waiting && (
+        <p className={styles.waiting} role="status">
+          Changes show when the agent is done
+        </p>
+      )}
     </div>
   );
 });

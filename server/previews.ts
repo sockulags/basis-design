@@ -9,14 +9,25 @@ export class PreviewReports<Connection> {
   private reports = new Map<Connection, Report>();
   private clock = 0;
 
-  /** Records what a tab's preview shows now (render errors and check findings), and whether the tab is visible. */
-  report(connection: Connection, errors: string[], visible: boolean, checks: string[] = [], checking = false): void {
+  /**
+   * Records what a tab's preview shows now (render errors and check findings), whether the tab is visible, and the
+   * generation of its preview document (see server/hold.ts).
+   */
+  report(
+    connection: Connection,
+    errors: string[],
+    visible: boolean,
+    checks: string[] = [],
+    checking = false,
+    generation = 0,
+  ): void {
     const previous = this.reports.get(connection);
     const tick = ++this.clock;
     this.reports.set(connection, {
       errors,
       checks,
       checking,
+      generation,
       visible,
       // Becoming visible makes a tab the current one; staying visible keeps the moment it became so.
       visibleSince: visible ? (previous?.visible ? previous.visibleSince : tick) : 0,
@@ -44,6 +55,11 @@ export class PreviewReports<Connection> {
     return this.best()?.checking ?? false;
   }
 
+  /** The generation of that tab's preview document, or null when no tab reports. */
+  get generation(): number | null {
+    return this.best()?.generation ?? null;
+  }
+
   private best(): Report | undefined {
     let best: Report | undefined;
     for (const report of this.reports.values()) if (!best || rank(report, best) > 0) best = report;
@@ -55,6 +71,7 @@ interface Report {
   errors: string[];
   checks: string[];
   checking: boolean;
+  generation: number;
   visible: boolean;
   /** When the tab last became visible (a counter, 0 while hidden). */
   visibleSince: number;

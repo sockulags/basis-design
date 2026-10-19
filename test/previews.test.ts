@@ -44,3 +44,11 @@ test("a closed tab no longer counts", () => {
   reports.forget("open");
   assert.deepEqual(reports.current, []);
 });
+
+test("the current tab's preview generation goes with its report, and there is none without a tab", () => {
+  const reports = new PreviewReports<string>();
+  assert.equal(reports.generation, null);
+  reports.report("hidden", [], false, [], false, 4);
+  reports.report("shown", [], true, [], true, 2);
+  assert.equal(reports.generation, 2);
+});

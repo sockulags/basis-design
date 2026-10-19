@@ -1,11 +1,21 @@
 // A stand-in ACP agent for the end-to-end tests, started through BASIS_AGENT_SCRIPT. It changes a token through the
 // client's own file methods, so history, checks and reviews run for real. What it does depends on a marker in the
-// prompt: E2E-REVIEW also opens a review of the Buttons specimen. Every turn moves motion.duration.fast by 10ms.
+// prompt: E2E-REVIEW also opens a review of the Buttons specimen, and E2E-VIEW writes a new view in two steps, the
+// first importing a file the second writes. Every turn moves motion.duration.fast by 10ms.
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 
 const sessions = new Map();
+
+const LATER_VIEW = `import { defineSpecimen } from "../components/specimen.ts";
+import { GREETING } from "./later-data.ts";
+
+export default defineSpecimen({
+  title: "Later view",
+  blocks: [{ kind: "flow", screens: [{ id: "hello", label: "Hello", render: () => <p>{GREETING}</p> }] }],
+});
+`;
 
 async function turn(params, client) {
   const cwd = sessions.get(params.sessionId);
@@ -24,6 +34,18 @@ async function turn(params, client) {
     path: file,
     content: `${JSON.stringify(design, null, 2)}\n`,
   });
+  if (text.includes("E2E-VIEW")) {
+    const write = (name, content) =>
+      client.request(acp.methods.client.fs.writeTextFile, {
+        sessionId: params.sessionId,
+        path: path.join(cwd, "views", name),
+        content,
+      });
+    await write("Later.specimen.tsx", LATER_VIEW);
+    // Long enough for the preview server to see the half-done view on its own.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await write("later-data.ts", `export const GREETING = "Written last";\n`);
+  }
   if (text.includes("E2E-REVIEW")) {
     await client.request(acp.methods.client.fs.writeTextFile, {
       sessionId: params.sessionId,

@@ -5,6 +5,7 @@ import { createServer as createVite, type Connect, type ViteDevServer } from "vi
 import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
+import { PreviewHold } from "./hold.ts";
 import { rebasePlugin } from "./rebase.ts";
 import { Screenshots } from "./screenshots.ts";
 import { ViewStability } from "./stability.ts";
@@ -68,6 +69,8 @@ export class OpenProject {
     private readonly previewVite: ViteDevServer,
     /** Screenshots of specimens and view screens from this project's preview (server/screenshots.ts). */
     readonly screenshots: Screenshots,
+    /** Holds the preview's changes while a turn runs (server/hold.ts). */
+    readonly hold: PreviewHold,
   ) {}
 
   static async open(entry: ProjectEntry, options: ProjectOptions): Promise<OpenProject> {
@@ -76,12 +79,14 @@ export class OpenProject {
     await workspace.init();
     const screenshots = new Screenshots(`http://${options.host}:${options.previewPort}/capture.html`);
     const views = new ViewStability(entry.dir, screenshots, () => workspace.state.design);
-    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home, views);
+    const hold = new PreviewHold(broadcast);
+    const agent = new AgentHost(workspace, options.agent, entry.repo, options.mcpServers, options.home, views, hold);
     await agent.restore();
 
-    workspace.on("design", (design) => broadcast({ type: "design", design }));
+    // Tokens and the review reach the chrome's preview when the turn ends, with the code (see PreviewHold).
+    workspace.on("design", (design) => hold.send({ type: "design", design }));
     workspace.on("history", (history) => broadcast({ type: "history", history }));
-    workspace.on("review", (review) => broadcast({ type: "review", review }));
+    workspace.on("review", (review) => hold.send({ type: "review", review }));
     agent.on("agent", (state) => broadcast({ type: "agent", agent: state }));
     agent.on("chat", (item) => broadcast({ type: "chat-upsert", item }));
     agent.on("chat-reset", () => broadcast({ type: "chat-reset" }));
@@ -98,7 +103,7 @@ export class OpenProject {
       appType: "mpa",
       cacheDir: "node_modules/.vite/preview",
       optimizeDeps: { entries: ["preview.html", "capture.html"] },
-      plugins: [rebasePlugin(root, entry.dir)],
+      plugins: [rebasePlugin(root, entry.dir), hold.plugin()],
       resolve: {
         alias: {
           "@ds": path.join(entry.dir, "components", "index.ts"),
@@ -137,7 +142,7 @@ export class OpenProject {
     });
 
     void agent.start();
-    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, screenshots);
+    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, screenshots, hold);
   }
 
   get entry(): ProjectEntry {

@@ -136,8 +136,9 @@ export function sessionMeta(repo: string | undefined) {
  */
 const ASKING_MODES: Record<AgentId, string> = { claude: "default", codex: "read-only" };
 const MAX_AUTO_FIXES = 2;
-const PREVIEW_SETTLE_MS = 1500;
-/** How long the fix loop waits at most for the preview's checks to finish after it settled. */
+/** How long the fix loop waits at most for the gallery reloaded after a turn to report. */
+const PREVIEW_RELOAD_MS = 10_000;
+/** How long the fix loop waits at most for the preview's checks to finish after it reported. */
 const CHECKS_WAIT_MS = 8000;
 
 type Events = { agent: [AgentState]; chat: [ChatItem]; "chat-remove": [string]; "chat-reset": [] };
@@ -170,6 +171,10 @@ export class AgentHost extends EventEmitter<Events> {
   private checks: string[] = [];
   private checksBefore = new Set<string>();
   private checking = false;
+  /** The generation of the reporting tab's preview document, or null when no tab reports (see server/hold.ts). */
+  private previewGeneration: number | null = null;
+  /** The generation the gallery reloaded after the last turn reports, or null when the turn changed nothing it shows. */
+  private reloaded: number | null = null;
   private seq = 0;
   /** Prompts sent while a turn was running, oldest first. */
   private queued: { id: string; text: string; attachments: Attachments; alternatives: number }[] = [];
@@ -193,6 +198,8 @@ export class AgentHost extends EventEmitter<Events> {
     private readonly home: string,
     /** Checks that the views a turn changed render the same every time (server/stability.ts). */
     private readonly views?: { check(files: string[]): Promise<ScreenFinding[]> },
+    /** Holds the preview's changes while a turn runs, and reloads the gallery when it ends (server/hold.ts). */
+    private readonly preview?: { hold(): void; release(): number | null },
   ) {
     super();
     this.state = { id: agentId, status: "stopped" };
@@ -420,6 +427,8 @@ export class AgentHost extends EventEmitter<Events> {
     if (!connection || !sessionId) return false;
     await this.syncRepo(connection, sessionId);
     await this.workspace.beginTurn(turn.label);
+    // Each turn, the fix-ups included, holds the preview on its own: the fix loop needs to see each one's result.
+    this.preview?.hold();
     this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
     const message = turn.text || "See the attached context.";
     const body = this.needsPreamble
@@ -456,6 +465,7 @@ ${message}`
     }
     // Stay busy while the turn is checked and recorded as one undo step.
     await this.workspace.endTurn();
+    this.reloaded = this.preview?.release() ?? null;
     return completed && this.connection === connection;
   }
 
@@ -522,7 +532,12 @@ ${message}`
    * Render errors and check findings of the current tab's preview (chosen by PreviewReports); they feed the
    * auto-fix loop.
    */
-  setPreviewErrors(errors: unknown[], checks: unknown[] = [], checking = false): void {
+  setPreviewErrors(
+    errors: unknown[],
+    checks: unknown[] = [],
+    checking = false,
+    generation: number | null = null,
+  ): void {
     const strings = (items: unknown[], limit: number, length: number) =>
       items
         .filter((item): item is string => typeof item === "string")
@@ -531,6 +546,28 @@ ${message}`
     this.previewErrors = strings(errors, 10, 600);
     this.checks = strings(checks, 60, 400);
     this.checking = checking;
+    this.previewGeneration = generation;
+  }
+
+  /**
+   * Waits until the preview shows what the last turn left and has checked it: the first report from the gallery
+   * reloaded after the turn (when the turn changed what it shows), then its checks. False when no tab reports, or
+   * the reloaded gallery did not report in time; what the preview reported is then from before the turn.
+   */
+  private async previewSettled(): Promise<boolean> {
+    const target = this.reloaded;
+    const behind = () => target !== null && this.previewGeneration !== null && this.previewGeneration < target;
+    for (let waited = 0; behind(); waited += 100) {
+      if (waited >= PREVIEW_RELOAD_MS) {
+        console.warn("[basis] the preview did not report after the turn, so its errors and checks are left out");
+        return false;
+      }
+      await sleep(100);
+    }
+    if (this.previewGeneration === null) return false;
+    // The checks run once the gallery has rendered; wait for them, so what the turn introduced is known.
+    for (let waited = 0; this.checking && waited < CHECKS_WAIT_MS; waited += 200) await sleep(200);
+    return true;
   }
 
   /** Everything the last turn left broken, phrased for the agent, or null when all is well. */
@@ -539,12 +576,10 @@ ${message}`
     // Only after a turn that changed views/, and for the views found wrong before; it runs while the preview settles.
     const viewFiles = new Set([...this.workspace.turnFiles, ...this.flaggedViews].filter(isViewFile));
     const viewCheck = viewFiles.size && this.views ? this.views.check([...viewFiles]) : Promise.resolve([]);
-    // Give the preview a moment to hot-reload the new code and report what failed to render.
-    if (!errors && !typeErrors) {
-      await sleep(PREVIEW_SETTLE_MS);
-      // Checks run once the preview settles; wait for them, so what the turn introduced is known.
-      for (let waited = 0; this.checking && waited < CHECKS_WAIT_MS; waited += 200) await sleep(200);
-    }
+    // Also with type errors: the report from before the gallery reloaded is stale, and what fails to render helps.
+    const fresh = await this.previewSettled();
+    const previewErrors = fresh ? this.previewErrors : [];
+    const checks = fresh ? this.checks : [];
     const sections: string[] = [];
     if (reviewErrors)
       sections.push(`review.json is not valid, so no review was opened or updated:\n${list(reviewErrors)}`);
@@ -557,10 +592,10 @@ ${message}`
         `The source does not type-check, or no longer satisfies the contracts (.basis/contracts.ts and components/contracts.ts):\n${list(typeErrors)}`,
       );
     }
-    const screens = unreported(await viewCheck, this.previewErrors);
+    const screens = unreported(await viewCheck, previewErrors);
     this.flaggedViews = screens.map((screen) => screen.file);
     const failedScreens = screens.filter((screen) => screen.kind === "failed").map((screen) => screen.text);
-    const rendering = [...this.previewErrors, ...failedScreens];
+    const rendering = [...previewErrors, ...failedScreens];
     if (rendering.length) sections.push(`The preview fails to render:\n${list(rendering)}`);
     const unstable = screens.filter((screen) => screen.kind === "unstable").map((screen) => screen.text);
     if (unstable.length) {
@@ -570,7 +605,7 @@ ${message}`
     }
     // Only what this turn introduced: findings that were there before are the user's to ask about, and
     // repeating them would send the agent after them on every turn.
-    const introduced = this.checks.filter((check) => !this.checksBefore.has(check));
+    const introduced = checks.filter((check) => !this.checksBefore.has(check));
     const layout = introduced.filter((check) => check.startsWith(`${LAYOUT_CHECK}: `));
     const accessibility = introduced.filter((check) => !layout.includes(check));
     if (accessibility.length) {
@@ -877,7 +912,7 @@ ${message}`
 
   private fail(detail: string): void {
     this.cancelPermissions();
-    void this.workspace.endTurn();
+    void this.workspace.endTurn().then(() => this.preview?.release());
     this.setState({ ...this.state, status: "error", detail });
   }
 

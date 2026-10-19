@@ -6,8 +6,13 @@
 const problems = new Map<string, string>();
 const listeners = new Set<(errors: string[]) => void>();
 
+/** The problems shown now, as they are reported; a fresh document reports them at once, even when there are none. */
+export function currentProblems(): string[] {
+  return [...problems.entries()].map(([key, message]) => `${key}: ${message}`);
+}
+
 function notify(): void {
-  const list = [...problems.entries()].map(([key, message]) => `${key}: ${message}`);
+  const list = currentProblems();
   for (const listener of listeners) listener(list);
 }
 
@@ -40,9 +45,15 @@ const findings = new Map<string, string[]>();
 const checking = new Set<string>();
 const findingListeners = new Set<(checks: string[], running: boolean) => void>();
 
+/** Every finding now, led by its check's name, and whether a check is still to come. */
+export function currentFindings(): { checks: string[]; running: boolean } {
+  const checks = [...findings.entries()].flatMap(([key, items]) => items.map((item) => `${key}: ${item}`));
+  return { checks, running: checking.size > 0 };
+}
+
 function notifyFindings(): void {
-  const all = [...findings.entries()].flatMap(([key, items]) => items.map((item) => `${key}: ${item}`));
-  for (const listener of findingListeners) listener(all, checking.size > 0);
+  const { checks, running } = currentFindings();
+  for (const listener of findingListeners) listener(checks, running);
 }
 
 export function setFindings(check: string, list: string[]): void {

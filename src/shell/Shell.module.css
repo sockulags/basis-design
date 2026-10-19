@@ -276,6 +276,36 @@
   color: var(--app-subtle);
 }
 
+/* Over the preview while the agent's turn holds its changes back (PreviewFrame). */
+.waiting {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-ink-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  color: var(--app-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  translate: -50% 0;
+}
+
+.waiting::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-signal);
+  animation: blink 900ms ease-in-out infinite;
+}
+
 /* History menu */
 
 .menuRoot {

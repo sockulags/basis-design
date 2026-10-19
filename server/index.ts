@@ -268,6 +268,7 @@ function hello(ws: WebSocket): void {
     agent: current.agent.agent,
     chat: current.agent.chat,
     review: current.workspace.review,
+    previewWaiting: current.hold.waiting,
   });
 }
 
@@ -319,7 +320,12 @@ sockets.on("connection", (ws: WebSocket) => {
   });
   ws.on("close", () => {
     previewReports.forget(ws);
-    current.agent.setPreviewErrors(previewReports.current, previewReports.checks, previewReports.checking);
+    current.agent.setPreviewErrors(
+      previewReports.current,
+      previewReports.checks,
+      previewReports.checking,
+      previewReports.generation,
+    );
   });
 });
 
@@ -410,8 +416,14 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
         message.visible === true,
         Array.isArray(message.checks) ? message.checks : [],
         message.checking === true,
+        Number.isSafeInteger(message.generation) ? Number(message.generation) : 0,
       );
-      agent.setPreviewErrors(previewReports.current, previewReports.checks, previewReports.checking);
+      agent.setPreviewErrors(
+        previewReports.current,
+        previewReports.checks,
+        previewReports.checking,
+        previewReports.generation,
+      );
       return;
     case "export-manifest": {
       const files = await starterKit();

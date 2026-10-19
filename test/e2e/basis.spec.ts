@@ -45,6 +45,24 @@ test("discarding a review puts everything back", async ({ page, basis }) => {
   await expect.poll(() => basis.token("motion.duration.fast")).toBe(fast);
 });
 
+test("a turn that writes a new view in steps shows it once it ends, with no errors from the middle", async ({
+  page,
+  basis,
+}) => {
+  await open(page, basis);
+  await page.getByRole("button", { name: "Views", exact: true }).click();
+  await expect(gallery(page).getByRole("heading", { name: "Team members", exact: true })).toBeVisible();
+  await page.getByPlaceholder(/Describe a change/).fill("E2E-VIEW a view that needs its data");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  // Mid-turn the gallery waits, and says so.
+  await expect(page.getByRole("status").filter({ hasText: "Changes show when the agent is done" })).toBeVisible();
+  await expect(gallery(page).getByRole("heading", { name: "Later view", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(gallery(page).getByText("Written last")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Changes show when the agent is done" })).toHaveCount(0);
+  await expect(page.getByText(/problems? in the workspace/)).toHaveCount(0);
+});
+
 test("the starter kit downloads with tokens and components", async ({ page, basis }) => {
   const response = await page.request.get(`${basis.url}/export/starter-kit.zip`);
   expect(response.ok()).toBe(true);

@@ -46,6 +46,8 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [previewChecks, setPreviewChecks] = useState<string[]>([]);
   const [checking, setChecking] = useState(false);
+  /** The preview document's generation (see shared/hold.ts), so the fix loop can tell a report from after a reload. */
+  const [previewGeneration, setPreviewGeneration] = useState(0);
   const [sections, setSections] = useState<NavSection[]>([]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<PreviewFrameHandle>(null);
@@ -122,11 +124,12 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
         checks: previewChecks,
         checking,
         visible: !document.hidden,
+        generation: previewGeneration,
       });
     report();
     document.addEventListener("visibilitychange", report);
     return () => document.removeEventListener("visibilitychange", report);
-  }, [previewErrors, previewChecks, checking, state.connected, send]);
+  }, [previewErrors, previewChecks, checking, previewGeneration, state.connected, send]);
 
   // Esc ends pick mode even when focus is outside the preview.
   useEffect(() => {
@@ -157,8 +160,13 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
     (message: FromPreview) => {
       switch (message.type) {
         case "ready":
-          // A fresh document (first load or a full reload after an edit) starts without picks.
-          return setAnnotations([]);
+          // A fresh document (first load, or the reload after a turn) starts without picks, and without the errors
+          // and findings of the one before; it reports its own next, and has not checked anything yet.
+          setAnnotations([]);
+          setPreviewErrors([]);
+          setPreviewChecks([]);
+          setChecking(true);
+          return setPreviewGeneration(message.generation);
         case "active-section":
           return setActiveSection(message.id);
         case "ask":
@@ -311,6 +319,7 @@ export function Workbench({ state, send }: { state: BridgeState; send: (message:
               view={view}
               picking={picking}
               inspecting={Boolean(inspectEntry)}
+              waiting={state.previewWaiting}
               onMessage={onPreviewMessage}
             />
           ) : (

@@ -102,7 +102,8 @@ export type ToPreview =
   | { type: "blink-key"; down: boolean };
 
 export type FromPreview =
-  | { type: "ready" }
+  /** A fresh preview document; `generation` is the one the preview server served it in (see shared/hold.ts). */
+  | { type: "ready"; generation: number }
   | { type: "active-section"; id: string }
   | { type: "ask"; prefix: string }
   /** Sections outside the review's targets that look different from the review's starting point. */
@@ -148,8 +149,10 @@ export function parseFromPreview(data: unknown): FromPreview | null {
   if (!data || typeof data !== "object") return null;
   const raw = data as Record<string, unknown>;
   switch (raw.type) {
-    case "ready":
-      return { type: "ready" };
+    case "ready": {
+      const generation = Number.isSafeInteger(raw.generation) ? Math.max(0, raw.generation as number) : 0;
+      return { type: "ready", generation };
+    }
     case "active-section": {
       const id = text(raw.id, 80);
       return id ? { type: "active-section", id } : null;

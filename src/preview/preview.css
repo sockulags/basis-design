@@ -15,6 +15,11 @@
   box-sizing: border-box;
 }
 
+/* While a turn holds the preview (main.tsx), Vite's overlay would show errors from other pages loading its files. */
+html[data-basis-held] vite-error-overlay {
+  display: none;
+}
+
 html,
 body {
   margin: 0;

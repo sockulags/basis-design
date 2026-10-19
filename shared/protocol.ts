@@ -193,6 +193,8 @@ export type ServerMessage =
       agent: AgentState;
       chat: ChatItem[];
       review: ReviewState | null;
+      /** Whether the running turn holds changes back from the preview (see "preview-waiting"). */
+      previewWaiting: boolean;
     }
   | { type: "projects"; projects: ProjectEntry[] }
   /** A project is being opened; a hello for it follows. */
@@ -202,6 +204,8 @@ export type ServerMessage =
   | { type: "review"; review: ReviewState | null }
   | { type: "baseline"; baseline: Baseline }
   | { type: "design"; design: DesignState }
+  /** The running turn changed what the preview shows, which it shows once the turn ends (server/hold.ts); false then. */
+  | { type: "preview-waiting"; waiting: boolean }
   | { type: "history"; history: HistoryEntry[] }
   | { type: "agent"; agent: AgentState }
   | { type: "chat-upsert"; item: ChatItem }
@@ -239,9 +243,17 @@ export type ClientMessage =
   /**
    * Render errors this tab's preview currently shows (empty when it renders cleanly), the findings of its
    * automatic checks, and whether the tab is visible: with several tabs open, the fix loop listens to the one
-   * the user looks at.
+   * the user looks at. `generation` is the preview document's (see shared/hold.ts), so the fix loop can wait for a
+   * report from the gallery reloaded after a turn.
    */
-  | { type: "preview-errors"; errors: string[]; visible: boolean; checks?: string[]; checking?: boolean }
+  | {
+      type: "preview-errors";
+      errors: string[];
+      visible: boolean;
+      checks?: string[];
+      checking?: boolean;
+      generation?: number;
+    }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean }
   /** Builds the verification kit: into `<project>/basis-verify/` with `project`, else as a zip to download. */
