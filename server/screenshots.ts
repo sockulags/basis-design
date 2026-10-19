@@ -355,6 +355,21 @@ export class Screenshots {
     });
   }
 
+  /**
+   * Runs `work` with a page of its own in the kept browser (the gallery for a project in the background,
+   * server/background.ts), and closes the page when it is done; the browser stays open meanwhile.
+   */
+  withPage<R>(work: (page: Page) => Promise<R>): Promise<R> {
+    return this.browser.use(async ({ context }) => {
+      const page = await context.newPage();
+      try {
+        return await work(page);
+      } finally {
+        await page.close().catch(() => undefined);
+      }
+    });
+  }
+
   /** Closes the browser now, say when the project closes; a later call starts another. */
   close(): Promise<void> {
     return this.browser.close();

@@ -15,6 +15,7 @@ import {
   type Tagged,
 } from "../shared/protocol.ts";
 import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH, toolsUrl } from "./agent-tools.ts";
+import { BACKGROUND_PATH, HOST_PAGE } from "./background.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
@@ -136,6 +137,12 @@ chromeServer.on("request", (req, res) => {
   }
   if (req.method === "GET" && req.url === "/export/verification-kit.zip") {
     sendVerificationZip(res);
+    return;
+  }
+  // The host page of a project's gallery in the background (server/background.ts).
+  if (req.method === "GET" && req.url?.split("?")[0] === BACKGROUND_PATH) {
+    res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": "no-store" });
+    res.end(HOST_PAGE);
     return;
   }
   if (req.url?.startsWith("/api/")) {

@@ -6,6 +6,7 @@ import { createServer as createVite, type Connect, type ViteDevServer } from "vi
 import { SOURCE_FOLDERS } from "../shared/frame.ts";
 import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts";
 import { AgentHost } from "./agent.ts";
+import { BackgroundPreview, pageForFiles } from "./background.ts";
 import { PreviewHold } from "./hold.ts";
 import { PreviewReports } from "./previews.ts";
 import { rebasePlugin } from "./rebase.ts";
@@ -78,10 +79,26 @@ export class OpenProject {
     readonly screenshots: Screenshots,
     /** Holds the preview's changes while a turn runs (server/hold.ts). */
     readonly hold: PreviewHold,
-  ) {}
+    /** The chrome's origin, which the gallery in the background takes as its parent. */
+    chromeOrigin: string,
+  ) {
+    this.background = new BackgroundPreview(
+      screenshots,
+      previewPort,
+      chromeOrigin,
+      // The page the turn changed most, as the gallery reloaded after it shows it; the user's own page is unknown here.
+      () => ({ design: workspace.state.design, theme: "light", page: pageForFiles(workspace.turnFiles), review: null }),
+      (report) =>
+        report
+          ? this.report(this.background, report.errors, false, report.checks, report.checking, report.generation)
+          : this.forget(this.background),
+    );
+  }
 
   /** Render problems per tab showing this project; the fix loop gets the current tab's (see PreviewReports). */
   private readonly reports = new PreviewReports<unknown>();
+  /** The gallery that reports for the project while no tab shows it and its agent works (server/background.ts). */
+  private readonly background: BackgroundPreview;
 
   static async open(entry: ProjectEntry, options: ProjectOptions): Promise<OpenProject> {
     const workspace = new Workspace(entry.dir);
@@ -173,7 +190,18 @@ export class OpenProject {
     });
 
     void agent.start();
-    return new OpenProject(entry, workspace, agent, root, previewServer, previewVite, previewPort, screenshots, hold);
+    return new OpenProject(
+      entry,
+      workspace,
+      agent,
+      root,
+      previewServer,
+      previewVite,
+      previewPort,
+      screenshots,
+      hold,
+      options.chromeOrigins[0]!,
+    );
   }
 
   get entry(): ProjectEntry {
@@ -209,6 +237,15 @@ export class OpenProject {
     this.passReports();
   }
 
+  /**
+   * Whether a tab shows the project now; told on every change of its state (OpenProjects.update). While none does
+   * and its agent works, the gallery runs in the background, so the fix loop still hears of render errors and checks.
+   */
+  setShown(shown: boolean): void {
+    if (!shown && this.busy) this.background.start();
+    else this.background.stop();
+  }
+
   private passReports(): void {
     const { current, checks, checking, generation } = this.reports;
     this.agent.setPreviewErrors(current, checks, checking, generation);
@@ -232,6 +269,7 @@ export class OpenProject {
     this.workspace.removeAllListeners();
     this.agent.removeAllListeners();
     await this.agent.stop();
+    this.background.stop();
     await this.screenshots.close();
     await this.workspace.close();
     await this.previewVite.close();

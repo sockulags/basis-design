@@ -95,7 +95,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       screenshot tool names its project, and server messages carry the project. Idle projects close after a while.
       Done when: two projects run turns at the same time and each ends with its own history entry and no crossed
       messages. (Split: the headless page is the next step.)
-- [ ] **Preview checks for projects in the background.** While no tab shows a project whose agent works, a headless
+- [x] **Preview checks for projects in the background.** While no tab shows a project whose agent works, a headless
       page (in the project's screenshot browser) hosts its gallery the way the chrome does and reports its render
       errors and checks, so the fix loop's wait for the reloaded gallery and its checks works there too; it closes
       when a tab shows the project again or the agent is done. Done when: a turn in a project in the background
@@ -231,6 +231,34 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Preview checks for projects in the background. `server/background.ts` runs a project's gallery in a
+  page of its screenshot browser (`Screenshots.withPage`, so the browser stays open while it runs and the one
+  browser per project serves screenshots, the stable-views check and this) while no tab shows the project and its
+  agent works; `OpenProjects.update` tells each project whether a tab shows it (`setShown`), so it starts when the
+  user switches away mid-turn and stops when they come back or the agent is done. The page plays the chrome:
+  it embeds `preview.html` with the chrome's origin as parent, which the preview's CSP and its parent check
+  already accept, sends the view on every `ready` and passes on errors and checks, reset with each document as
+  the chrome resets them, so the reload at the end of a turn and the fix loop's wait for its generation work
+  unchanged. Decision: the host page is served by the chrome server (`/background.html?port=`), not made up in
+  the browser with `page.route`, which was tried first: Chromium's local network access checks treat a routed
+  page as public and refused its frame from localhost (`ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`). The page
+  holds nothing secret, cannot reach the bridge, and opened in a tab shows a gallery that reports nowhere. The view
+  is the light theme without the review, on the page with most of the files the turn changed (`pageForFiles`,
+  the design system page for token-only turns), since the user's own page is a chrome preference the server does
+  not know; the gallery's copy in the other theme checks dark and 375px as in a tab. Until the page first reports
+  it counts as a gallery still loading (generation -1, checking), so a fix loop that starts right after a switch
+  waits for it rather than taking an empty report. A browser that cannot start is tried once per busy spell and
+  said once on the console; the fix loop then leaves the preview out, as before. Verified with unit tests
+  (`test/background.test.ts`: the page choice, the report parsing, reports from start to stop and none from a
+  stopped page, no retry of a failed browser, `setShown` from `OpenProjects`), an e2e test (a turn in a project
+  the tab left writes a specimen that throws and one with an unnamed button; its fix-up report names the render
+  error and the accessibility finding, and the fix-up turn leaves nothing to report), and with a real Claude turn
+  in a project in the background on a throwaway instance (driven over the bridge, the tab on another project): the
+  agent wrote a throwing Probe specimen and an unnamed button as asked, Basis' report named "Probe section: probe
+  failure" and button-name in light and dark, and the agent fixed the throw and left the button, saying so, in a
+  second commit nine seconds later. With the routed page, the stand-in agent's turn had ended with "the preview did
+  not report after the turn", which is how the refused frame showed.
 
 - 2026-10-19: Several projects at once, split in two: this step keeps projects open and apart, and "Preview checks
   for projects in the background" adds the headless page, which is a piece of its own (a host page that renders the

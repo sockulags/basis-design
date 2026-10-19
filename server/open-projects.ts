@@ -14,6 +14,8 @@ export interface Openable {
   readonly busy: boolean;
   /** The agent waits for the user to answer a permission request. */
   readonly waiting: boolean;
+  /** Told on every update whether a viewer shows the project (OpenProject runs its gallery in the background). */
+  setShown?(shown: boolean): void;
   close(): Promise<void>;
 }
 
@@ -121,6 +123,7 @@ export class OpenProjects<P extends Openable, Viewer> {
     const project = this.projects.get(id);
     if (project) {
       const seen = this.viewers(id).length > 0;
+      project.setShown?.(seen);
       if (this.busy.has(id) && !project.busy && !seen) this.done.add(id);
       if (project.busy) this.busy.add(id);
       else this.busy.delete(id);

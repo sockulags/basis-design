@@ -50,6 +50,33 @@ test("two projects run turns at the same time, each into its own chat and histor
   await expect(projectButton(page)).not.toContainText("finished in the background");
 });
 
+test("a project in the background gets its render errors and checks from a headless gallery", async ({
+  page,
+  basis,
+}) => {
+  await open(page, basis);
+  await projectButton(page).click();
+  await page.getByRole("button", { name: "New project…" }).click();
+  await page.getByLabel("Name").fill("Broken");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page.locator('[class*="projectName"]')).toHaveText("Broken");
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+  await send(page, "E2E-SLOW E2E-BROKEN break a specimen");
+  await expect(page.getByText("Working", { exact: true })).toBeVisible();
+  // Switched away before the turn ends: no tab shows Broken when its fix loop looks at the gallery.
+  await switchTo(page, "Basis");
+  await expect(projectButton(page)).toContainText("Broken finished in the background", { timeout: 60_000 });
+
+  await switchTo(page, "Broken");
+  const report = page.getByText("Your last change left problems");
+  await expect(report).toBeVisible();
+  await expect(report).toContainText("The preview fails to render");
+  await expect(report).toContainText("E2E broken block");
+  await expect(report).toContainText("accessibility checks");
+  // The fix-up turn repaired both, so no second report followed.
+  await expect(page.getByText("Your last change left problems")).toHaveCount(1);
+});
+
 test("a project waiting for an approval in the background shows outside the menu", async ({ page, basis }) => {
   await open(page, basis);
   await projectButton(page).click();

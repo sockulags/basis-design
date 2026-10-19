@@ -126,7 +126,14 @@ component source, patterns and the gallery specimens.
     the previous document's lists on `ready`. Every open tab
     reports its preview's errors with its visibility, to the project it shows (`OpenProject.report`, which takes
     reports only from tabs that show it); `server/previews.ts` picks the tab the user looks at (or looked at last),
-    so a stale or second tab cannot send the agent after problems that are not there.
+    so a stale or second tab cannot send the agent after problems that are not there. While no tab shows a project
+    whose agent works, `server/background.ts` (`BackgroundPreview`, started and stopped by
+    `OpenProject.setShown`) plays the chrome in a page of the project's screenshot browser: the chrome server's
+    `/background.html?port=<preview port>` embeds the gallery as the chrome does (a page Playwright makes up with
+    `page.route` counts as public, and Chromium's local network checks then refuse it frames from localhost), gets
+    the view from Basis on every `ready` (light, no review, the page with most of the turn's files,
+    `pageForFiles`) and reports what the gallery reports as a hidden tab would. Until its first report it counts
+    as a gallery still loading (generation -1, checking), so the fix loop waits for it.
   - Prompts sent while a turn runs are queued. The conversation is saved to `.basis/chat.json`
     (`server/chatlog.ts`) and the agent session is resumed after a restart where the agent supports
     `session/resume` (Claude Code does).
@@ -515,9 +522,6 @@ The next step is Lucas' call. Left for later: syncing tokens and components forw
 comparison of the whole gallery between two history entries, the icon, and publishing.
 
 ## Known limits
-
-- **Projects in the background** get no preview checks yet: with no tab showing the project, the fix loop leaves
-  out render errors and check findings (it still has type errors, design problems and the stable-views check).
 
 - **Inspecting a past version** (history menu) shows that version's tokens with today's component code. The
   banner says so, and Restore brings back both. Reviews run a past version's real code from
