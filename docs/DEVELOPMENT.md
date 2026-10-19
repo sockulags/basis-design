@@ -282,7 +282,12 @@ place (view, screen, theme) is kept in the frame's `sessionStorage` for the next
 screen ends it there (`fullscreenchange`); outside it, the preview's or the chrome's Esc, or the bar's Exit, send
 `fullscreen-exit`. On exit every copy of the view's flow in the gallery moves to the screen reached
 (`FullScreen.left` in `specimens.tsx`) and the gallery scrolls to the view. The bar is Basis' and lives in a shadow
-root with its own stylesheet (`FullScreenBar.css`), so the design's CSS and Basis' cannot meet.
+root with its own stylesheet (`FullScreenBar.css`), so the design's CSS and Basis' cannot meet. A view's screen is
+the whole page, its padding and shell included: the gallery's frame around it (`.flowScreen`) adds no padding, so
+the gallery, full screen and the kit's capture page show the same page. The starter view puts each screen in a
+`Page` of its own (AppShell `contained` in a grid at least as tall as the window, so the page grows and scrolls as a
+whole, and content at most 1200px wide with side padding in `cqi` of the shell); its layout is inline, since a
+template update only replaces files a workspace already has.
 
 ### Reviews
 

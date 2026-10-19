@@ -1,20 +1,62 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Avatar, Badge, Button, Field, Select, TextInput } from "../components/index.ts";
 import { defineSpecimen, type ScreenProps } from "../components/specimen.ts";
-import { DataTable, EmptyState, FormActions, FormLayout, FormSection, PageHeader } from "../patterns/index.ts";
-import { initials, MEMBERS, type Member } from "../patterns/specimen-data.ts";
+import {
+  AppShell,
+  DataTable,
+  EmptyState,
+  FormActions,
+  FormLayout,
+  FormSection,
+  Navbar,
+  PageHeader,
+  SidebarNav,
+} from "../patterns/index.ts";
+import { initials, MEMBERS, NAV_LINKS, SIDEBAR_SECTIONS, type Member } from "../patterns/specimen-data.ts";
 
 /*
  * A view: whole screens of one flow, built only from components and patterns.
  * Each screen gets `go(screenId, data)` to move through the flow; the gallery
- * shows one screen at a time with a strip to jump between them.
+ * shows one screen at a time with a strip to jump between them. A screen is
+ * the whole page, shell and page padding included: nothing around it adds any.
  */
+
+/**
+ * The page every screen of this flow sits in: the product's shell, at least as tall as the window and growing
+ * with the screen, so the whole page scrolls. The content keeps a readable width on a wide screen, and its side
+ * padding follows the shell's width (`cqi`: the shell is a size container).
+ */
+function Page({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ display: "grid", minHeight: "100vh" }}>
+      <AppShell
+        contained
+        navbar={
+          <Navbar brand="Northwind" links={NAV_LINKS} active="team" user={{ initials: "AL", name: "Ada Lovelace" }} />
+        }
+        sidebar={<SidebarNav sections={SIDEBAR_SECTIONS} active="team" />}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: "var(--space-6)",
+            maxWidth: 1200,
+            margin: "0 auto",
+            padding: "var(--space-8) clamp(var(--space-4), 4cqi, var(--space-10)) var(--space-12)",
+          }}
+        >
+          {children}
+        </div>
+      </AppShell>
+    </div>
+  );
+}
 
 const STATUS_COLOR = { Active: "success", Invited: "info", Suspended: "danger" } as const;
 
 function MemberList({ go }: ScreenProps) {
   return (
-    <div style={{ display: "grid", gap: "var(--space-6)" }}>
+    <Page>
       <PageHeader
         title="Members"
         description="Everyone with access to this workspace."
@@ -44,14 +86,14 @@ function MemberList({ go }: ScreenProps) {
           { key: "lastActive", header: "Last active", cell: (member) => member.lastActive },
         ]}
       />
-    </div>
+    </Page>
   );
 }
 
 function MemberDetail({ go, data }: ScreenProps) {
   const member = (data as Member | undefined) ?? MEMBERS[0]!;
   return (
-    <div style={{ display: "grid", gap: "var(--space-6)" }}>
+    <Page>
       <PageHeader
         title={member.name}
         description={member.email}
@@ -82,7 +124,7 @@ function MemberDetail({ go, data }: ScreenProps) {
           </Button>
         </FormActions>
       </FormLayout>
-    </div>
+    </Page>
   );
 }
 
@@ -91,16 +133,18 @@ function InviteMember({ go }: ScreenProps) {
   const [sent, setSent] = useState(false);
   if (sent) {
     return (
-      <EmptyState
-        icon="users"
-        title="Invitation sent"
-        description={`${email} gets an email with a link to join.`}
-        actions={<Button onClick={() => go("list")}>Back to members</Button>}
-      />
+      <Page>
+        <EmptyState
+          icon="users"
+          title="Invitation sent"
+          description={`${email} gets an email with a link to join.`}
+          actions={<Button onClick={() => go("list")}>Back to members</Button>}
+        />
+      </Page>
     );
   }
   return (
-    <div style={{ display: "grid", gap: "var(--space-6)" }}>
+    <Page>
       <PageHeader title="Invite a member" breadcrumbs={[{ label: "Members" }, { label: "Invite" }]} />
       <FormLayout
         onSubmit={(event) => {
@@ -124,7 +168,7 @@ function InviteMember({ go }: ScreenProps) {
           <Button type="submit">Send invitation</Button>
         </FormActions>
       </FormLayout>
-    </div>
+    </Page>
   );
 }
 

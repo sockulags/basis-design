@@ -280,6 +280,25 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
   along the way: a click at the top edge with no pointer movement before it (as the pane sends them) only brings the
   bar out, and while a view is in full screen the gallery underneath is laid out at the full width, so checks that
   run then (after a turn that ends in full screen) measure Fit frames at that width.
+  Follow-up the same day: in full screen the starter view ran edge to edge (no page padding, no shell), which the
+  gallery had hidden by padding every view's frame (`.flowScreen`), while the brief already said a screen is the
+  whole page. The gallery's frame now adds no padding (it keeps its border and radius and clips to them), so the
+  gallery, full screen and the kit show the same page, and the brief says outright that nothing around a screen
+  adds any. The starter view wraps each screen in a `Page`: the AppShell with the Navbar and SidebarNav, `contained`
+  inside a grid with `min-height: 100vh`, so the shell is at least the window's height and grows with the screen
+  (the page scrolls as a whole, so the kit's full-page shots still show everything; a shell of `100vh` with its main
+  scrolling would cut them at the window), and content at most 1200px wide, centred, with side padding
+  `clamp(var(--space-4), 4cqi, var(--space-10))` from the shell's width. Decision: the layout is inline in the view
+  file rather than a stylesheet beside it, since template updates only replace files a workspace already has, so a
+  new file would never reach untouched workspaces. `TEMPLATE_VERSION` is 3 with a `CHANGES.md` section, so
+  workspaces whose agent changed the starter view are offered the update, and the history lists the old view so
+  untouched ones update by themselves. Verified: the starter has no findings on any page (both themes, 375px
+  included; all checks, not only layout), the kit's e2e test captures every screen stable, the notes test now lists
+  the shell's patterns and data, and on a throwaway instance the gallery at Fit, Show at Mobile in both themes and a
+  review's live pane show the page, and full screen shows it at 3440px (content centred at 1200px beside the
+  sidebar) and at 375px (sidebar as its rail, the navbar's menu, the table as cards). Not changed: Show at frames
+  pad their copy by `--space-4`, so a view at Mobile gets about 340px rather than 375px; that is the frames' own, for every
+  block.
 
 - 2026-10-19: Threads in a project, in one round. A thread is a chat with its own agent session, and every thread of
   a project lives in the project's one agent process (`Thread` in `server/agent.ts`): ACP lets a process hold

@@ -142,7 +142,8 @@
   min-width: 0;
 }
 
-/* A view's flow: the strip of screens, then the current screen at full width. */
+/* A view's flow: the strip of screens, then the current screen at full width. The screen is the whole page, its
+   own padding included, so the frame adds none: the gallery shows what full screen and the kit's capture show. */
 .flow {
   display: grid;
   gap: var(--space-3);
@@ -185,7 +186,7 @@
 
 .flowScreen {
   min-height: 420px;
-  padding: var(--space-6);
+  overflow: hidden;
   border: var(--border-thin) solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-bg);

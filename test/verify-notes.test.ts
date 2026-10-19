@@ -99,15 +99,23 @@ test("the starter view: its screens' flow, the components and patterns it import
     "TextInput components/Field.tsx",
   ]);
   assert.deepEqual(names(view.patterns), [
+    "AppShell patterns/AppShell.tsx",
     "DataTable patterns/DataTable.tsx",
     "EmptyState patterns/EmptyState.tsx",
     "FormActions patterns/FormSection.tsx",
     "FormLayout patterns/FormSection.tsx",
     "FormSection patterns/FormSection.tsx",
+    "Navbar patterns/Navbar.tsx",
     "PageHeader patterns/PageHeader.tsx",
+    "SidebarNav patterns/SidebarNav.tsx",
   ]);
   // Type-only imports (Member) and the gallery's own helpers (defineSpecimen) are not listed.
-  assert.deepEqual(names(view.data), ["initials patterns/specimen-data.ts", "MEMBERS patterns/specimen-data.ts"]);
+  assert.deepEqual(names(view.data), [
+    "initials patterns/specimen-data.ts",
+    "MEMBERS patterns/specimen-data.ts",
+    "NAV_LINKS patterns/specimen-data.ts",
+    "SIDEBAR_SECTIONS patterns/specimen-data.ts",
+  ]);
   assert.deepEqual(view.images, []);
   // What it reaches through the barrels, by the names it imports: not every component.
   assert.ok(view.files.includes(STARTER));

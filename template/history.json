@@ -127,5 +127,8 @@
   ],
   "patterns/specimen-data.ts": [
     "4e355b5dc7eeaed260e6092f88cf85194a9377bce6accce5e9db6e97e22761e3"
+  ],
+  "views/TeamMembers.specimen.tsx": [
+    "a262a53e7a9945ea672fb497b6b180366447d731d3996396be4b71ddc3347253"
   ]
 }

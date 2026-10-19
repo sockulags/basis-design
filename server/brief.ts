@@ -163,8 +163,10 @@ The rules that always apply:
   or add a pattern. A view's own code is layout and wiring; a small layout style inline or in a
   \`.module.css\` next to it is fine.
 - A screen is the whole page as the product shows it at that size: its shell, navigation and page padding
-  included, filling the window. The verification kit photographs each screen alone at fixed widths, and the
-  implementation of the feature must match those images pixel for pixel.
+  included, filling the window. Nothing around it adds any: the gallery, full screen and the verification kit
+  all show the screen edge to edge, so a screen without its own padding touches the window's edges. The kit
+  photographs each screen alone at fixed widths, and the implementation of the feature must match those images
+  pixel for pixel.
 - Fill views with realistic data, consistent across the screens (the row you open is the one the detail
   shows). When a product repo is linked, use the product's own data where you can find it (fixtures, seeds,
   example responses, its wording), so the implementation can show exactly the same records. Otherwise make it

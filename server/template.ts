@@ -20,7 +20,7 @@ export const TEMPLATE_HISTORY_FILE = "template/history.json";
  * The version of the starter template. Raise it, with a section in template/CHANGES.md, when the template changes
  * in a way worth bringing into workspaces whose agent has changed their components.
  */
-export const TEMPLATE_VERSION = 2;
+export const TEMPLATE_VERSION = 3;
 
 /** Where a workspace records the template version it has caught up with. */
 const VERSION_FILE = path.join(".basis", "template.json");

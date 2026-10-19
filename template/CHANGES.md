@@ -36,3 +36,13 @@ design system's own look.
   `DataTable.module.css`.
 - The tooltip specimen gives the static tooltip room on its left (`paddingInlineStart`), so the open tooltip no
   longer runs past the gallery's edge.
+
+## 3
+
+- A view's screen is the whole page: the gallery's frame around a view no longer adds padding, so the gallery,
+  full screen and the verification kit all show a screen edge to edge. The starter view (`views/TeamMembers.specimen.tsx`)
+  puts each screen in a `Page` of its own: the AppShell (`contained`, inside a grid at least as tall as the window,
+  so the page grows with the screen and scrolls as a whole) with the Navbar and SidebarNav, and the content at most
+  1200px wide, centred, with side padding that follows the shell's width (`clamp(var(--space-4), 4cqi,
+  var(--space-10))`). Any view whose screens have no page padding or shell of their own now touches the window's
+  edges; give them a page like this one.
