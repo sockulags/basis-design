@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
 import { DEFAULT_DESIGN } from "../shared/design.ts";
-import { Projects } from "../server/projects.ts";
+import { enclosingRepo, Projects } from "../server/projects.ts";
 
 const folders: string[] = [];
 afterEach(async () => {
@@ -40,6 +40,37 @@ describe("product repos", () => {
     await again.load();
     assert.equal(again.find(id)?.repo, repo);
     assert.equal((await again.setRepo(id, null)).repo, undefined);
+  });
+
+  test("a folder opened inside a git repo links that repo, and stays unlinked once unlinked", async () => {
+    const home = await folder();
+    const product = path.join(home, "product");
+    await mkdir(path.join(product, ".git"), { recursive: true });
+    const projects = new Projects(home);
+    await projects.load();
+    const dir = path.join(product, "design", "basis");
+    const entry = await projects.open(dir);
+    assert.equal(entry.repo, product);
+    assert.equal(projects.find(entry.id)?.repo, product);
+    await projects.setRepo(entry.id, null);
+    assert.equal((await projects.open(dir)).repo, undefined, "opening it again keeps the user's choice");
+    // A workspace has a repo of its own; only the folders above it count.
+    const alone = await workspace(path.join(home, "alone"), "Alone");
+    await mkdir(path.join(alone, ".git"));
+    assert.equal((await projects.open(alone)).repo, undefined);
+  });
+
+  test("the enclosing repo is looked for below the home folder only", async () => {
+    const root = await folder();
+    await mkdir(path.join(root, ".git"));
+    const user = path.join(root, "user");
+    assert.equal(enclosingRepo(path.join(user, "Designs", "app"), user), undefined);
+    await mkdir(path.join(user, "Code", "app", ".git"), { recursive: true });
+    const design = path.join(user, "Code", "app", "design");
+    assert.equal(enclosingRepo(path.join(design, "basis"), user), path.join(user, "Code", "app"));
+    // Outside the home folder (another drive, say), every folder above counts.
+    await mkdir(path.join(root, "work", "app", ".git"), { recursive: true });
+    assert.equal(enclosingRepo(path.join(root, "work", "app", "basis"), user), path.join(root, "work", "app"));
   });
 
   test("refuses a missing folder, a relative path and the workspace itself", async () => {

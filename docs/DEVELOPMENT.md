@@ -27,9 +27,16 @@ component source, patterns and the gallery specimens.
     open project: its workspace, its agent and its **preview** server. Switching closes one `OpenProject` and opens
     the next; the bridge sends a fresh `hello`, and the chrome remounts its `Workbench` for the new project. A
     project entry may name a product `repo`; linking one updates the open project in place (`OpenProject.update`),
-    and `AgentHost` auto-approves reads and searches inside it and tells the agent about it every turn. Bringing in
-    its design system is a guided turn (`importInstruction`), and what the agent learns goes to `product.md` in
-    the workspace, which it may write like the design file. Each turn points the agent at `product.md` when it
+    and `AgentHost` auto-approves reads and searches inside it, refuses edits there without asking, and tells the
+    agent about it every turn. Claude Code gets the repo as a working directory (`sessionMeta`, through
+    `_meta.claudeCode.options.additionalDirectories`; ACP's own `additionalDirectories` would make it writable for
+    Codex), so its read-only shell commands there (`ls`, `find`, `grep`) run without asking; a changed link reaches
+    the session before the next turn (`syncRepo`: `session/resume` with other directories makes the adapter rebuild
+    the session from its transcript, so the conversation goes on). Opening a folder that lies inside a git repo
+    links that repo (`enclosingRepo` in `server/projects.ts`, looked for above the folder and below the home
+    folder), once, when the folder is added; existing entries are left alone. Bringing in its design system is a
+    guided turn (`importInstruction`), and what the agent learns goes to `product.md` in the workspace, which it
+    may write like the design file. Each turn points the agent at `product.md` when it
     exists (`repoContext` in `server/agent.ts`), so it reads that before the repo.
   - **Preview** on `PORT + 1` (5321) serves `preview.html` in a sandboxed iframe. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
@@ -154,9 +161,11 @@ component source, patterns and the gallery specimens.
     `targets.json`) with the manifest's settings, the second decodes the PNGs itself and compares them pixel for
     pixel, leaving out named exceptions from `exceptions.json`.
 - `server/folders.ts`: choosing folders without typing paths. `pickFolder` opens the system's folder dialog
-  (PowerShell's FolderBrowserDialog on Windows, with a hidden topmost owner so it opens in front; `osascript` on
-  macOS; zenity or kdialog on Linux, and a message to type the path when neither exists). `suggestRepos` finds
-  git repos up to two levels into the usual code folders under the home folder, the most recently used first.
+  (on Windows the Explorer-style `IFileOpenDialog` with `FOS_PICKFOLDERS`, through a small C# interop compiled by
+  PowerShell's Add-Type, since FolderBrowserDialog is the old tree picker in Windows PowerShell 5.1, with a hidden
+  topmost owner so it opens in front; `osascript` on macOS; zenity or kdialog on Linux, and a message to type the
+  path when neither exists). `suggestRepos` finds git repos up to two levels into the usual code folders under
+  the home folder, the most recently used first.
   The chrome reaches both through `POST /api/pick-folder` and `POST /api/repos`, which answer only POSTs from its
   own origin, so another page can neither open dialogs nor read the list. `FolderField` and `BrowseButton`
   (`src/shell/FolderField.tsx`) use them in the project dialogs and the export.
@@ -458,6 +467,10 @@ comparison of the whole gallery between two history entries, the icon, and publi
 - **The stable-views check** runs only after a turn that changed `views/`, so a component or pattern that starts
   reading the clock is found when a view next changes, or when the verification kit is built. It follows imports
   as `reach.ts` does, which needs the file extension (`./team-data.ts`, as the template writes them).
+- **Git in the linked repo:** Claude Code asks before a git command that names another folder (`git -C <repo>`,
+  `cd <repo> && git ls-files`), even in its working directories; that is its own check, and the request reaches
+  Basis as a plain shell command. Basis leaves it to the user; the brief steers the agent to `ls`, `find`, `grep`
+  and its own tools.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

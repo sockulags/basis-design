@@ -113,6 +113,21 @@ const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
 const SESSION_META = {
   claudeCode: { options: { settingSources: [], strictMcpConfig: true, allowDangerouslySkipPermissions: false } },
 };
+
+/** The brief, appended to the agent's own system prompt where the agent supports that. */
+const SYSTEM_PROMPT = { mode: "append" as const, content: [{ type: "text" as const, text: AGENT_BRIEF }] };
+
+/**
+ * SESSION_META with the linked repo as one of Claude Code's working directories, where its read and search tools and
+ * its read-only shell commands (`ls`, `find`, `grep`) run without asking, as they do in the workspace; git commands
+ * that name the folder still ask (Claude Code's own check), and edits ask, which Basis refuses. Not ACP's own
+ * `additionalDirectories`: Codex makes those writable.
+ */
+export function sessionMeta(repo: string | undefined) {
+  if (!repo) return SESSION_META;
+  return { claudeCode: { options: { ...SESSION_META.claudeCode.options, additionalDirectories: [repo] } } };
+}
+
 /**
  * Per agent, the session mode in which it asks before every edit, so edits go through onPermission and Basis'
  * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked,
@@ -164,6 +179,8 @@ export class AgentHost extends EventEmitter<Events> {
   private loginHint = "";
   /** View files whose screens the last check found wrong, checked again after the next fix-up turn. */
   private flaggedViews: string[] = [];
+  /** The linked repo the open session was given as a working directory; a changed link reopens it (syncRepo). */
+  private sessionRepo?: string;
 
   constructor(
     private readonly workspace: Workspace,
@@ -194,6 +211,7 @@ export class AgentHost extends EventEmitter<Events> {
     });
   }
 
+  /** Links or unlinks the product repo; the session gets it as a working directory from the next turn (syncRepo). */
   setRepo(repo: string | undefined): void {
     this.repo = repo;
   }
@@ -400,6 +418,7 @@ export class AgentHost extends EventEmitter<Events> {
     const connection = this.connection;
     const sessionId = this.sessionId;
     if (!connection || !sessionId) return false;
+    await this.syncRepo(connection, sessionId);
     await this.workspace.beginTurn(turn.label);
     this.checksBefore = new Set([...this.checks, ...this.workspace.state.colorFindings]);
     const message = turn.text || "See the attached context.";
@@ -597,8 +616,7 @@ ${message}`
   private async openSession(resume = false): Promise<void> {
     const connection = this.connection;
     if (!connection) throw new Error("Agent is not connected");
-    const base = { cwd: this.workspace.dir, mcpServers: this.mcpServers, _meta: SESSION_META };
-    const systemPrompt = { mode: "append" as const, content: [{ type: "text" as const, text: AGENT_BRIEF }] };
+    const base = this.sessionBase();
     const saved = resume ? this.resumable : undefined;
     this.resumable = undefined;
     if (saved && saved.agent === this.state.id && this.supportsResume) {
@@ -606,7 +624,7 @@ ${message}`
         const resumed = await connection.agent.request(acp.methods.agent.session.resume, {
           ...base,
           sessionId: saved.sessionId,
-          ...(this.supportsSystemPrompt ? { systemPrompt } : {}),
+          ...(this.supportsSystemPrompt ? { systemPrompt: SYSTEM_PROMPT } : {}),
         });
         await this.askingMode(connection, saved.sessionId, (resumed as acp.ResumeSessionResponse | undefined)?.modes);
         this.sessionId = saved.sessionId;
@@ -626,7 +644,10 @@ ${message}`
     let response: acp.NewSessionResponse | undefined;
     if (this.supportsSystemPrompt) {
       try {
-        response = await connection.agent.request(acp.methods.agent.session.new, { ...base, systemPrompt });
+        response = await connection.agent.request(acp.methods.agent.session.new, {
+          ...base,
+          systemPrompt: SYSTEM_PROMPT,
+        });
       } catch {
         // Fall back to the preamble below; some agents advertise only "override".
       }
@@ -637,6 +658,34 @@ ${message}`
     await this.askingMode(connection, session.sessionId, session.modes);
     this.sessionId = session.sessionId;
     this.scheduleSave();
+  }
+
+  /** What every session is opened with; `sessionRepo` remembers the repo it names. */
+  private sessionBase() {
+    this.sessionRepo = this.repo;
+    return { cwd: this.workspace.dir, mcpServers: this.mcpServers, _meta: sessionMeta(this.repo) };
+  }
+
+  /**
+   * Gives the open session the repo linked now, before a turn. Claude Code reads its working directories only when
+   * its session starts; resuming the live session with different ones makes the adapter rebuild it from its
+   * transcript, so the conversation goes on. Other agents are not given the repo this way (sessionMeta).
+   */
+  private async syncRepo(connection: acp.ClientConnection, sessionId: string): Promise<void> {
+    if (this.repo === this.sessionRepo) return;
+    const base = this.sessionBase();
+    if (this.state.id !== "claude" || !this.supportsResume) return;
+    try {
+      const resumed = await connection.agent.request(acp.methods.agent.session.resume, {
+        ...base,
+        sessionId,
+        ...(this.supportsSystemPrompt ? { systemPrompt: SYSTEM_PROMPT } : {}),
+      });
+      await this.askingMode(connection, sessionId, (resumed as acp.ResumeSessionResponse | undefined)?.modes);
+    } catch (error) {
+      // The session goes on as it was: reads in the repo still work, its shell commands ask.
+      console.warn("[basis] could not give the agent the linked repo:", describeError(error));
+    }
   }
 
   /**
@@ -737,6 +786,15 @@ ${message}`
     const ownTool = basisTool(call) ?? this.basisCalls.get(`tool-${call.toolCallId}`);
     if ((autoAllow || ownTool || this.isCodexRead(call)) && allowOnce)
       return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
+    // The linked repo is read-only, though Claude Code has it as a working directory: edits there are refused unasked.
+    const inProduct = paths.find((p) => this.inRepo(p) && relativeInside(this.workspace.dir, p) === null);
+    if (call.kind === "edit" && inProduct) {
+      this.notice(`Basis refused an edit in the linked product repo (${inProduct}); the agent only reads it.`, "info");
+      const reject = options.find((option) => option.kind === "reject_once");
+      return reject
+        ? { outcome: { outcome: "selected", optionId: reject.optionId } }
+        : { outcome: { outcome: "cancelled" } };
+    }
 
     const id = this.nextId("permission");
     const title = call.title ?? "The agent wants to run a tool";
@@ -755,7 +813,8 @@ ${message}`
    * A command Codex asks to run that only reads the workspace or the linked repo, as Claude Code's reads do there.
    * Codex reports every command, reads included, as `execute`; the approval request carries the command line and
    * its folder (`server/commands.ts` decides from those), and the paths Codex itself saw in it as locations, which
-   * must be readable too. Claude Code's own shell commands still ask.
+   * must be readable too. Claude Code decides about its own read-only shell commands in its working directories
+   * (sessionMeta); the rest of its commands ask.
    */
   private isCodexRead(call: acp.RequestPermissionRequest["toolCall"]): boolean {
     if (this.state.id !== "codex" || call.kind !== "execute") return false;

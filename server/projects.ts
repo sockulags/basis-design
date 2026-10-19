@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { DEFAULT_DESIGN, parseDesignText } from "../shared/design.ts";
 import type { ProjectEntry } from "../shared/protocol.ts";
@@ -117,6 +118,8 @@ export class Projects {
    * Adds an existing folder. It must be a Basis workspace, or empty, or not
    * exist yet (then Basis sets it up). Anything else is refused: Basis would
    * otherwise start a git history in someone's project and commit their files.
+   * A folder inside a git repo links that repo when it is added; the link is
+   * the project's like any other, so Unlink keeps it unlinked.
    */
   async open(folder: string): Promise<ProjectEntry> {
     const dir = path.resolve(folder.trim());
@@ -133,7 +136,10 @@ export class Projects {
       }
     }
     await mkdir(dir, { recursive: true });
-    return this.add(await designName(dir), dir);
+    const entry = await this.add(await designName(dir), dir);
+    // A folder inside a product repo designs for that product, so the repo is linked as if the user had linked it.
+    const repo = enclosingRepo(dir);
+    return repo ? this.setRepo(entry.id, repo) : entry;
   }
 
   /**
@@ -199,6 +205,18 @@ export async function checkRepo(folder: string): Promise<string> {
   const repo = path.resolve(trimmed);
   if (!existsSync(repo) || !(await stat(repo)).isDirectory()) throw new Error("That folder does not exist.");
   return repo;
+}
+
+/**
+ * The git repo a folder lies in, or undefined. The search starts above the folder, since a workspace is a repo of
+ * its own. It stops below the home folder: a repo there or above holds someone's settings, not a product.
+ */
+export function enclosingRepo(dir: string, home = os.homedir()): string | undefined {
+  for (let parent = path.dirname(dir); parent !== path.dirname(parent); parent = path.dirname(parent)) {
+    if (samePath(parent, home) || isInside(parent, home)) return undefined;
+    if (existsSync(path.join(parent, ".git"))) return parent;
+  }
+  return undefined;
 }
 
 /** True when `target` lies inside `dir` (not `dir` itself). */

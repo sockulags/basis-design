@@ -239,8 +239,10 @@ this folder:
 
 A project may design for a real product whose repo is linked in Basis; when it is, every message names it.
 
-- The repo is read-only. Read and search it with your read and search tools (shell commands there need the
-  user's approval); never write to it. Basis refuses writes outside this folder.
+- The repo is read-only. Read and search it with your read and search tools, or with plain shell commands that
+  only read (\`ls\`, \`find\`, \`grep\`, \`cat\`). Loops, variables and git commands that name its folder (\`git -C\`,
+  \`cd … && git\`) stop to ask the user every time, so list its files with \`ls\`, \`find\` or your search tools
+  instead. Never write to it: Basis refuses writes outside this folder.
 - \`product.md\` is what you know about the product: what it is, where its tokens and components live, its
   component inventory with the Basis counterparts, and its terms and conventions. Read it before looking in the
   repo, and keep it current when you learn something new, so later turns need not survey the repo again.

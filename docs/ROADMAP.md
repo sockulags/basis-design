@@ -64,7 +64,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ### From Lucas' testing
 
-- [ ] **Reading the product repo without prompts.** Claude Code is only given the workspace as `cwd`
+- [x] **Reading the product repo without prompts.** Claude Code is only given the workspace as `cwd`
       (`openSession` in `server/agent.ts`), so its shell commands in the linked repo (`cd … && git ls-files`, `ls`,
       `find`, `grep`) and searches without a path always ask. Pass the linked repo as `additionalDirectories`, and
       rebuild the session when the link changes. A project whose folder sits inside a git repo links that repo by
@@ -223,6 +223,41 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: Reading the product repo without prompts. Claude Code gets the linked repo as a working directory
+  through `_meta.claudeCode.options.additionalDirectories` (`sessionMeta` in `server/agent.ts`), not ACP's own
+  `additionalDirectories`: both reach the same SDK option in claude-agent-acp 0.92.0, but codex-acp 2.2.2 merges
+  ACP's field into its sandbox's writable roots and loads skills from those folders, and Codex ignores the
+  `claudeCode` key. A changed link reaches the session before the next turn (`syncRepo`), never in the middle of
+  one: `session/resume` of the live session with other directories changes the adapter's session fingerprint, so
+  it rebuilds the session from its transcript and keeps its mode; a turn afterwards still counted the earlier
+  messages and their steps. Measured with a fixture repo in real Claude turns (Claude Code 2.1.296 on Windows):
+  before linking, `ls` and `cd … && git ls-files` in the repo both asked; after linking in the same session,
+  `ls`, `ls -R | grep`, `find`, `grep -rn`, `cat` and `head`, Grep without a path, Glob with an absolute pattern and
+  Read all ran without reaching the user, after unlinking `ls` asked again, and relinking ended that. Claude Code
+  itself still asks for git that names another folder (`git -C <repo> ls-files`, `cd <repo> && git ls-files`) and
+  for loops and variables, even in its working directories; Basis leaves those to the user rather than reading
+  Claude Code's shell lines as it reads Codex's, since Claude Code's shell keeps its own folder between calls and
+  Basis cannot know it. The brief now names plain `ls`, `find`, `grep` and `cat` as fine and says the others ask;
+  with that, a fresh session asked to survey the repo "with your shell and your search tools" ran `cd … && find`,
+  Read and Grep there with no prompt at all. Writes: Claude Code writes with its own tools (the adapter never
+  goes through the client's `fs/write_text_file`), so with the repo as a working directory an edit there still
+  asks in default mode, and Basis now refuses an edit-kind request inside the repo and outside the workspace
+  without asking the user, with a notice in the chat; Write and Edit into the repo came back refused and the repo
+  stayed unchanged. A shell write (`echo > file`) asks as every non-read command does. A project whose folder lies
+  inside a git repo links it: `Projects.open` looks above the folder (a workspace is a repo of its own) for a
+  `.git` and stops below the home folder, where a repo holds someone's settings. It happens once, when Open folder
+  adds the folder, and is stored on the entry like a link the user made, so Unlink sticks and existing entries are
+  left alone (Basis' own `workspace/` inside Basis' repo is not linked to it). No bring-in turn starts by itself:
+  opening a folder is not a request to restyle the design, and the project menu offers Bring in its design for the
+  linked repo as for any other; the Open folder dialog says the repo gets linked. The Windows folder dialog is now
+  the Explorer-style `IFileOpenDialog` with `FOS_PICKFOLDERS`, through a small C# interop compiled by Add-Type in
+  C# old enough for Windows PowerShell 5.1, keeping the hidden topmost owner, the title and the start folder.
+  Verified by opening it from a script in both `powershell` and `pwsh` (the window has the address bar and
+  breadcrumb of the Explorer-style dialog, not the tree picker's lone tree), choosing the start folder with OK,
+  which printed its path, and cancelling, which printed nothing, and once through Browse… in the Open folder
+  dialog of a throwaway instance. Unit tests cover `sessionMeta`, the refusal and what still asks, and
+  `enclosingRepo`.
 
 - 2026-10-19: Stable views when they are built. `server/stability.ts` runs in the fix loop after a turn whose
   changed files include one in `views/`; any other turn takes no screenshots, so the loop is as fast as before for

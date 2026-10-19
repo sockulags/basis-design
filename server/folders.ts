@@ -29,17 +29,83 @@ export async function pickFolder(title: string, start?: string): Promise<string 
   throw new Error("This system has no folder dialog Basis can open (install zenity or kdialog), so type the path.");
 }
 
-// A hidden, topmost owner window keeps the dialog in front of the browser.
+/*
+ * The Explorer-style folder dialog (IFileOpenDialog with FOS_PICKFOLDERS). FolderBrowserDialog is the old tree
+ * picker in Windows PowerShell 5.1, so the dialog is reached through a little COM interop compiled by Add-Type, in
+ * C# old enough for 5.1's compiler. Only the methods up to GetResult are declared; the rest of the interface
+ * follows them. A hidden, topmost owner window keeps the dialog in front of the browser.
+ */
 const WINDOWS_DIALOG = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class BasisFolderDialog {
+  [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
+  private class FileOpenDialog {}
+
+  [ComImport, Guid("42F85136-DB7E-439C-85F1-E4075D135FC8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  private interface IFileDialog {
+    [PreserveSig] int Show(IntPtr owner);
+    void SetFileTypes(uint count, IntPtr specs);
+    void SetFileTypeIndex(uint index);
+    void GetFileTypeIndex(out uint index);
+    void Advise(IntPtr events, out uint cookie);
+    void Unadvise(uint cookie);
+    void SetOptions(uint options);
+    void GetOptions(out uint options);
+    void SetDefaultFolder(IShellItem item);
+    void SetFolder(IShellItem item);
+    void GetFolder(out IShellItem item);
+    void GetCurrentSelection(out IShellItem item);
+    void SetFileName([MarshalAs(UnmanagedType.LPWStr)] string name);
+    void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string name);
+    void SetTitle([MarshalAs(UnmanagedType.LPWStr)] string title);
+    void SetOkButtonLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+    void SetFileNameLabel([MarshalAs(UnmanagedType.LPWStr)] string label);
+    void GetResult(out IShellItem item);
+  }
+
+  [ComImport, Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  private interface IShellItem {
+    void BindToHandler(IntPtr context, ref Guid handler, ref Guid riid, out IntPtr result);
+    void GetParent(out IShellItem parent);
+    void GetDisplayName(uint form, [MarshalAs(UnmanagedType.LPWStr)] out string name);
+  }
+
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+  private static extern void SHCreateItemFromParsingName(string path, IntPtr context, ref Guid riid, out IShellItem item);
+
+  private const uint PICK_FOLDERS = 0x20, FORCE_FILESYSTEM = 0x40, NO_CHANGE_DIR = 0x8, PATH_MUST_EXIST = 0x800;
+  private const uint FILESYSTEM_PATH = 0x80058000;
+
+  public static string Pick(IntPtr owner, string title, string start) {
+    IFileDialog dialog = (IFileDialog)new FileOpenDialog();
+    uint options;
+    dialog.GetOptions(out options);
+    dialog.SetOptions(options | PICK_FOLDERS | FORCE_FILESYSTEM | NO_CHANGE_DIR | PATH_MUST_EXIST);
+    dialog.SetTitle(title);
+    try {
+      Guid shellItem = typeof(IShellItem).GUID;
+      IShellItem folder;
+      SHCreateItemFromParsingName(start, IntPtr.Zero, ref shellItem, out folder);
+      dialog.SetFolder(folder);
+    } catch (Exception) {}
+    if (dialog.Show(owner) != 0) return null;
+    IShellItem result;
+    dialog.GetResult(out result);
+    string chosen;
+    result.GetDisplayName(FILESYSTEM_PATH, out chosen);
+    return chosen;
+  }
+}
+'@
 $owner = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; ShowInTaskbar = $false; Opacity = 0 }
 $owner.Show()
-$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-$dialog.Description = $env:BASIS_TITLE
-$dialog.SelectedPath = $env:BASIS_START
-try { $dialog.UseDescriptionForTitle = $true } catch {}
-if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($dialog.SelectedPath) }
+$chosen = [BasisFolderDialog]::Pick($owner.Handle, $env:BASIS_TITLE, $env:BASIS_START)
+if ($chosen) { [Console]::Out.Write($chosen) }
 $owner.Close()
 `;
 
