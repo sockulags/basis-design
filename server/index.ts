@@ -207,7 +207,7 @@ function sendVerificationZip(res: http.ServerResponse): void {
 }
 
 /** Builds the verification kit for the open project, reporting progress to every tab. */
-async function verificationKit(project: string | undefined, socket: WebSocket): Promise<void> {
+async function verificationKit(project: string | undefined, skill: boolean, socket: WebSocket): Promise<void> {
   if (verifying) {
     send(socket, { type: "verify-result", result: { ok: false, error: "A verification kit is already being built." } });
     return;
@@ -227,10 +227,12 @@ async function verificationKit(project: string | undefined, socket: WebSocket): 
       broadcast({ type: "verify-result", result: { ok: true, summary } });
       return;
     }
-    const written = await writeVerificationKit(files, project);
+    const written = await writeVerificationKit(files, project, { skill });
     broadcast({
       type: "verify-result",
-      result: written.ok ? { ok: true, summary, dir: written.dir } : { ok: false, error: written.error },
+      result: written.ok
+        ? { ok: true, summary, dir: written.dir, skill: written.skill }
+        : { ok: false, error: written.error },
     });
   } catch (error) {
     broadcast({ type: "verify-result", result: { ok: false, error: (error as Error).message } });
@@ -444,7 +446,11 @@ async function handle(message: ClientMessage, socket: WebSocket): Promise<void> 
       return;
     }
     case "verify-kit":
-      await verificationKit(typeof message.project === "string" ? message.project : undefined, socket);
+      await verificationKit(
+        typeof message.project === "string" ? message.project : undefined,
+        message.skill === true,
+        socket,
+      );
       return;
     case "project-switch": {
       const entry = projects.find(String(message.id ?? ""));

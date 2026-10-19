@@ -4,11 +4,11 @@
  * Basis exports; it needs Node 22 and nothing else.
  *
  *   node basis-verify/compare.mjs [--expected <dir>] [--actual <dir>] [--diff <dir>] [--max-diff <percent>]
- *                                 [--tolerance <0-255>] [--box-tolerance <px>]
+ *                                 [--tolerance <0-255>] [--box-tolerance <px>] [--only <view>[/<screen>]]
  *
  * Expected images come from expected/ (the design captured on this machine by `capture.mjs design`), or from
  * screens/ (captured by Basis) when expected/ has none. Actual images come from actual/ (`capture.mjs app`).
- * Every shot in basis-verify.json is compared; named exceptions in exceptions.json leave regions, elements (by
+ * Every shot in basis-verify.json is compared (with --only, those of one view or screen); named exceptions in exceptions.json leave regions, elements (by
  * selector) or whole shots out. Elements marked data-basis-media (the design's placeholder images) are left out
  * of every shot. An element left out still has to be there, at the same place and size on both sides, within
  * --box-tolerance pixels (default 0). The command exits with 1 when any shot differs by more than --max-diff
@@ -335,6 +335,7 @@ async function main() {
   const maxDiff = Number(option(args, "--max-diff", "0"));
   const tolerance = Number(option(args, "--tolerance", "0"));
   const boxTolerance = Number(option(args, "--box-tolerance", "0"));
+  const only = option(args, "--only");
   const manifest = JSON.parse(await readFile(path.join(kit, "basis-verify.json"), "utf8"));
   const exceptionsFile = path.join(kit, "exceptions.json");
   const exceptions = existsSync(exceptionsFile)
@@ -350,6 +351,7 @@ async function main() {
   const results = [];
   for (const view of manifest.views) {
     for (const screen of view.screens) {
+      if (only && only !== view.id && only !== `${view.id}/${screen.id}`) continue;
       for (const shot of screen.shots) {
         const file = shot.file;
         const name = file.replace(/^screens\//, "");

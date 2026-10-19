@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { kitPrompt } from "../../shared/kit-prompt.ts";
 import type { ClientMessage, VerifyKitResult } from "../../shared/protocol.ts";
 import { BrowseButton } from "./FolderField.tsx";
 import { readPref, writePref } from "./prefs.ts";
@@ -15,6 +16,8 @@ export interface VerifyKitProps {
 
 /** The product folder the kit was last written to, per project. */
 const targetPref = (workspace: string) => `verify-target:${workspace}`;
+/** Whether writing the kit also installs its skill in the product's .claude/skills/, per project. */
+const skillPref = (workspace: string) => `verify-skill:${workspace}`;
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -27,6 +30,7 @@ function plural(count: number, one: string, many = `${one}s`): string {
  */
 export function VerifyKit({ workspace, repo, progress, result: latest, send }: VerifyKitProps) {
   const [target, setTarget] = useState(() => readPref(targetPref(workspace)) ?? repo ?? "");
+  const [skill, setSkill] = useState(() => readPref(skillPref(workspace)) === "true");
   const [browseError, setBrowseError] = useState<string | null>(null);
   // Only show results of kits built while this dialog is open.
   const [stale] = useState(latest);
@@ -35,7 +39,7 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
 
   const build = (project?: string) => {
     if (project !== undefined) writePref(targetPref(workspace), project);
-    send({ type: "verify-kit", project });
+    send({ type: "verify-kit", project, skill: project !== undefined && skill });
   };
 
   return (
@@ -76,6 +80,20 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
           The kit goes into <code>basis-verify/</code> there. Writing it again replaces what Basis generated and keeps
           the project's targets, exceptions and captures.
         </span>
+        <label className={styles.projectCheck}>
+          <input
+            type="checkbox"
+            checked={skill}
+            onChange={(event) => {
+              setSkill(event.target.checked);
+              writePref(skillPref(workspace), String(event.target.checked));
+            }}
+          />
+          <span>
+            Also install the kit's skill for Claude Code as <code>.claude/skills/basis-verify/SKILL.md</code> (a file
+            there that Basis did not write is left alone)
+          </span>
+        </label>
         {browseError && <p className={styles.kitError}>{browseError}</p>}
       </form>
       {progress && (
@@ -91,7 +109,7 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
 }
 
 function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> }) {
-  const { summary, dir } = result;
+  const { summary, dir, skill } = result;
   if (summary.views === 0) {
     return (
       <p className={styles.kitWarning}>
@@ -109,11 +127,28 @@ function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> })
             Wrote the kit to <code>{dir}</code>.
           </>
         ) : (
-          <a href="/export/verification-kit.zip" download>
-            Download the .zip
-          </a>
+          <>
+            <a href="/export/verification-kit.zip" download>
+              Download the .zip
+            </a>{" "}
+            and unpack it at the root of the product's repo.
+          </>
         )}
       </p>
+      {skill && (
+        <p className={skill.written ? styles.kitNote : styles.kitWarning}>
+          {skill.written ? (
+            <>
+              Installed the skill as <code>{skill.file}</code>.
+            </>
+          ) : (
+            <>
+              Left <code>{skill.file}</code> alone: Basis did not write it. Delete it to have Basis install its own.
+            </>
+          )}
+        </p>
+      )}
+      <CopyPrompt views={summary.viewList} zip={!dir} />
       {summary.failed.length > 0 && (
         <p className={styles.kitWarning}>
           {plural(summary.failed.length, "shot")} of screens that failed to render: {summary.failed.join(", ")}.
@@ -136,5 +171,59 @@ function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> })
         <p className={styles.kitWarning}>Specimens that could not be loaded: {summary.problems.join("; ")}.</p>
       )}
     </>
+  );
+}
+
+/** The prompt for the agent that builds the design in the product, for one view or all, ready to copy. */
+function CopyPrompt({ views, zip }: { views: { id: string; title: string }[]; zip: boolean }) {
+  const [view, setView] = useState("");
+  const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+  const text = useRef<HTMLPreElement>(null);
+  // With one view there is nothing to choose: the prompt names it.
+  const prompt = kitPrompt({ views, view: views.length === 1 ? views[0]!.id : view || undefined, zip });
+
+  const copy = () => {
+    // Say so at once; the clipboard answers in a moment, and only a refusal changes the label again.
+    setCopied("yes");
+    navigator.clipboard.writeText(prompt).catch(() => {
+      setCopied("failed");
+      if (text.current) getSelection()?.selectAllChildren(text.current);
+    });
+  };
+
+  return (
+    <div className={styles.kitPrompt}>
+      <div className={styles.kitPromptRow}>
+        <span>Prompt for the agent that builds it</span>
+        {views.length > 1 && (
+          <select
+            aria-label="View to build"
+            value={view}
+            onChange={(event) => {
+              setView(event.target.value);
+              setCopied(null);
+            }}
+          >
+            <option value="">All views</option>
+            {views.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+        )}
+        <button type="button" className={styles.chromeButton} onClick={copy}>
+          {copied === "yes" ? "Copied" : "Copy prompt"}
+        </button>
+      </div>
+      <pre ref={text} aria-label="Prompt for the agent">
+        {prompt}
+      </pre>
+      {copied === "failed" && (
+        <p className={styles.kitError}>
+          The browser did not allow copying. The text is selected; copy it from the keyboard.
+        </p>
+      )}
+    </div>
   );
 }

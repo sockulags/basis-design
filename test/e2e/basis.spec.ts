@@ -141,6 +141,21 @@ test("the verification kit captures every screen of the views and runs as a stat
   for (const file of ["design/index.html", "design/design.json", "capture.mjs", "compare.mjs", "README.md"]) {
     expect(files[`basis-verify/${file}`], file).toBeDefined();
   }
+  // For the agent that builds it: the prompt, the skill, notes per view and the views' source.
+  const text = (file: string) => new TextDecoder().decode(files[`basis-verify/${file}`]);
+  expect(manifest.views[0].notes).toBe("views/team-members.md");
+  expect(text("PROMPT.md")).toContain("`basis-verify/views/team-members.md`");
+  expect(text("SKILL.md")).toMatch(/^---\nname: basis-verify\n/);
+  expect(text("views/team-members.md")).toContain('`invite` ("Invite member")');
+  expect(text("source/views/TeamMembers.specimen.tsx")).toContain("defineSpecimen");
+
+  // The prompt to copy names the kit's one view, and copying says so at once.
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await expect(page.getByLabel("Prompt for the agent")).toContainText("basis-verify/PROMPT.md");
+  await expect(page.getByLabel("Prompt for the agent")).toContainText('"Team members" (team-members)');
+  await page.getByRole("button", { name: "Copy prompt" }).click();
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("unpacked from the .zip");
 });
 
 test("the starter template has no layout findings, and a broken specimen shows each kind", async ({ page, basis }) => {

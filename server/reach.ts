@@ -92,7 +92,7 @@ function usesAny(text: string, vars: Set<string>): boolean {
   return false;
 }
 
-async function readSources(dir: string): Promise<Map<string, string>> {
+export async function readSources(dir: string): Promise<Map<string, string>> {
   const sources = new Map<string, string>();
   for (const folder of SOURCE_DIRS) {
     let names: string[];
@@ -143,7 +143,7 @@ export function importerGraph(sources: Map<string, string>): Map<string, string[
  * they list them. Types never change what renders, so type-only imports and
  * `type X` names are left out.
  */
-function imports(text: string): { target: string; names: string[] | null }[] {
+export function imports(text: string): { target: string; names: string[] | null }[] {
   const found: { target: string; names: string[] | null }[] = [];
   for (const match of text.matchAll(/(?:import|export)\s+(type\s+)?([^;]*?)\s*from\s*["'](\.[^"']+)["']/g)) {
     if (match[1]) continue;
@@ -164,7 +164,7 @@ function imports(text: string): { target: string; names: string[] | null }[] {
 }
 
 /** The files a barrel (a module of only `export * from` lines) re-exports, or null for any other module. */
-function barrel(text: string | undefined, file: string): string[] | null {
+export function barrel(text: string | undefined, file: string): string[] | null {
   if (text === undefined) return null;
   const code = text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   const lines = code.split("\n").filter((line) => line.trim());
@@ -174,7 +174,7 @@ function barrel(text: string | undefined, file: string): string[] | null {
 }
 
 /** Names a module exports by declaration or in an export list. */
-function exportedNames(text: string): Set<string> {
+export function exportedNames(text: string): Set<string> {
   const names = new Set<string>();
   for (const match of text.matchAll(
     /export\s+(?:default\s+)?(?:async\s+)?(?:function\*?|const|let|var|class|type|interface|enum)\s+([A-Za-z_$][\w$]*)/g,

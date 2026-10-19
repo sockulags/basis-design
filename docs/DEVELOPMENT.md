@@ -171,7 +171,21 @@ component source, patterns and the gallery specimens.
     loads), a `.boxes.json` beside each shot, a README for the implementing agent, and the two scripts from
     `server/verify-kit/`. Images a view imports are built into `design/assets/` like any Vite asset. The chrome asks for it over the bridge (`verify-kit`), gets
     `verify-progress` and `verify-result` back, and downloads a zip from `GET /export/verification-kit.zip`; or
-    the kit is written into `<product>/basis-verify/`, replacing only what Basis generates.
+    the kit is written into `<product>/basis-verify/`, replacing only what Basis generates (`GENERATED`), and with
+    `skill` its SKILL.md also into `<product>/.claude/skills/basis-verify/`, over a file there only when it has
+    `SKILL_MARKER`.
+  - For the agent that builds the views in the product: `server/verify-notes.ts` reads each view's source
+    without an agent turn (`readView`, over `readSources` and the import helpers of `reach.ts`): where each
+    screen's literal `go("id")` calls lead (`screenFlow`: the screen's render function or inline render and the
+    file's top-level functions it names, each call with the text of the element it sits on), the names it
+    imports from components, patterns and other files (through barrels by name), its images, every file it
+    reaches, and the CSS variables those read, which `tokenRows` turns into the design's tokens and the ones their
+    values refer to. `viewNotes` writes them to `views/<view>.md`, and the reached files are copied to `source/`.
+    `server/verify-prompt.ts` writes `PROMPT.md` (goal, where things are, the views, how to build one) and
+    `SKILL.md` (Claude Code's format) from one text for the loop, the image and exception rules and when to
+    stop, plus the README's paragraph for `AGENTS.md`; all paths start at the product repo's root
+    (`basis-verify/…`, `KIT_FOLDER` in `shared/capture.ts`). The Export tab's Copy prompt is
+    `shared/kit-prompt.ts`, from the views the result lists (`viewList`).
   - `server/verify-kit/capture.mjs` and `compare.mjs` run in the product's repo with its own Playwright and no
     other dependencies: the first captures the design (served from `design/`) or the implementation (URLs from
     `targets.json`) with the manifest's settings, the second decodes the PNGs itself and compares them pixel for
@@ -180,7 +194,7 @@ component source, patterns and the gallery specimens.
     the exceptions' selectors match (`boxesExpression`, a string so no loader's helpers reach the page);
     `compare.mjs` leaves those boxes out on both sides and fails the shot when the two sides do not have as many,
     at the same places and sizes (`shotExclusions`, exact unless `--box-tolerance`). Both scripts share these
-    helpers through `compare.mjs`, the only module the kit's scripts import.
+    helpers through `compare.mjs`, the only module the kit's scripts import. Both take `--only <view>[/<screen>]`.
 - `server/folders.ts`: choosing folders without typing paths. `pickFolder` opens the system's folder dialog
   (on Windows the Explorer-style `IFileOpenDialog` with `FOS_PICKFOLDERS`, through a small C# interop compiled by
   PowerShell's Add-Type, since FolderBrowserDialog is the old tree picker in Windows PowerShell 5.1, with a hidden
@@ -508,5 +522,8 @@ comparison of the whole gallery between two history entries, the icon, and publi
   placeholders, which are text; a user's own binary image would need snapshots written as buffers.
 - **Images used from CSS** (`url(./assets/x.svg)` in a `.module.css`) work in the preview and the kit, but
   `reach.ts` does not follow `url()`, so changing only such an image does not reach its view.
+- **The kit's notes read source, not the running view.** A `go()` with a computed screen id, a screen rendered by a
+  function from another file, or `go` passed under another name is not in the flow; the tokens are those of whole
+  files, so a file with several components (`Display.tsx`) brings the tokens of all of them.
 - **Pattern links** default to `href="#"` when no `href` or `onNavigate` is given. The preview's link guard
   makes that harmless in the gallery.

@@ -5,24 +5,26 @@ import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { build } from "vite";
-import { READY_ATTRIBUTE, shotFile } from "../shared/capture.ts";
+import { KIT_FOLDER, READY_ATTRIBUTE, shotFile } from "../shared/capture.ts";
 import type { Design } from "../shared/design.ts";
 import type { VerifyKitSummary } from "../shared/protocol.ts";
 import { CAPTURE_ARGS, captureViews, launchCaptureBrowser } from "./capture.ts";
+import { readSources } from "./reach.ts";
+import { readView, viewNotes } from "./verify-notes.ts";
+import { agentsParagraph, promptFile, SKILL_MARKER, SKILL_PATH, skillFile } from "./verify-prompt.ts";
 import { boxesFile, MEDIA_SELECTOR } from "./verify-kit/compare.mjs";
 
 /*
  * The verification kit: what an agent implementing a feature needs to prove the implementation looks like the
  * design. A static, runnable copy of the design (design/), the screenshots Basis took of every screen of every
  * view (screens/), the settings they were taken with (basis-verify.json), and two scripts that capture the
- * implementation the same way and compare the two pixel for pixel (capture.mjs, compare.mjs).
+ * implementation the same way and compare the two pixel for pixel (capture.mjs, compare.mjs). For the agent that
+ * builds the views in the product: PROMPT.md, SKILL.md, notes per view (views/<view>.md) and the views' source.
  */
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const kitSource = path.join(import.meta.dirname, "verify-kit");
 
-/** The kit's folder inside a project, and the folder inside its zip. */
-export const KIT_FOLDER = "basis-verify";
 export const MANIFEST = "basis-verify.json";
 /** What Basis writes and replaces; everything else in the kit's folder (targets.json, exceptions.json, actual/) is the project's. */
 const GENERATED = [
@@ -32,6 +34,10 @@ const GENERATED = [
   "diff",
   MANIFEST,
   "README.md",
+  "PROMPT.md",
+  "SKILL.md",
+  "views",
+  "source",
   "capture.mjs",
   "compare.mjs",
   "targets.example.json",
@@ -163,6 +169,8 @@ export async function buildVerificationKit({
     }
     const { views, problems, shots } = result;
     const byFile = new Map(shots.map((shot) => [shot.file, shot]));
+    const sources = await readSources(workspaceDir);
+    const read = new Map(views.map((view) => [view.id, readView(sources, view.file)]));
     const generator = `basis-design ${await packageVersion()}`;
     const manifest = {
       format: 1,
@@ -182,6 +190,7 @@ export async function buildVerificationKit({
         selector: MEDIA_SELECTOR,
         note: "Elements marked data-basis-media hold placeholder images. compare.mjs leaves them out of every shot as long as both sides have them at the same places and sizes; mark the implementation's own images the same way.",
       },
+      prompt: "PROMPT.md",
       design: {
         entry: "design/index.html",
         query: "?view={view}&screen={screen}&theme={theme}",
@@ -191,6 +200,7 @@ export async function buildVerificationKit({
       views: views.map((view) => ({
         id: view.id,
         title: view.title,
+        notes: `views/${view.id}.md`,
         screens: view.screens.map((screen) => ({
           id: screen.id,
           label: screen.label,
@@ -234,9 +244,16 @@ export async function buildVerificationKit({
       ],
     };
     const text = (file: string, content: string): KitFile => ({ path: file, data: strToU8(content) });
+    const reached = [...new Set([...read.values()].flatMap((view) => view.files))].sort();
     const files: KitFile[] = [
       text(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`),
       text("README.md", readme(design.name, generator, name, version)),
+      text("PROMPT.md", promptFile(design.name, generator, manifest.views)),
+      text("SKILL.md", skillFile(manifest.views)),
+      ...manifest.views.map((view) => text(view.notes, viewNotes(view, read.get(view.id)!, design, KIT_FOLDER))),
+      ...(await Promise.all(
+        reached.map(async (file) => ({ path: `source/${file}`, data: await readFile(path.join(workspaceDir, file)) })),
+      )),
       text("capture.mjs", await readFile(path.join(kitSource, "capture.mjs"), "utf8")),
       text("compare.mjs", await readFile(path.join(kitSource, "compare.mjs"), "utf8")),
       text("targets.example.json", `${JSON.stringify(targets, null, 2)}\n`),
@@ -250,6 +267,7 @@ export async function buildVerificationKit({
     const summary: VerifyKitSummary = {
       browser: `${name} ${version}`,
       views: views.length,
+      viewList: views.map((view) => ({ id: view.id, title: view.title })),
       screens: views.reduce((sum, view) => sum + view.screens.length, 0),
       shots: shots.length,
       unstable: shots.filter((shot) => !shot.stable).map((shot) => shot.file),
@@ -271,15 +289,24 @@ export function zipVerificationKit(files: KitFile[]): Uint8Array {
   return zipSync(entries);
 }
 
+/** What became of the kit's skill when it was to be installed in the product (`.claude/skills/basis-verify/`). */
+export interface SkillInstall {
+  file: string;
+  /** False when a SKILL.md without Basis' marker was there, which Basis leaves alone. */
+  written: boolean;
+}
+
 /**
  * Writes the kit into `<project>/basis-verify/`. A folder by that name that is not a kit (no manifest) is left
  * alone; in a kit, the files Basis generates are replaced and the project's own (targets.json, exceptions.json,
- * actual/) are kept.
+ * actual/) are kept. With `skill`, the kit's SKILL.md also goes to `<project>/.claude/skills/basis-verify/`,
+ * replacing a file there only when Basis wrote it (it has the marker).
  */
 export async function writeVerificationKit(
   files: KitFile[],
   project: string,
-): Promise<{ ok: true; dir: string } | { ok: false; error: string }> {
+  { skill = false }: { skill?: boolean } = {},
+): Promise<{ ok: true; dir: string; skill?: SkillInstall } | { ok: false; error: string }> {
   const trimmed = project.trim();
   if (!trimmed || !path.isAbsolute(trimmed)) return { ok: false, error: "Enter an absolute folder path." };
   const root = path.resolve(trimmed);
@@ -299,22 +326,48 @@ export async function writeVerificationKit(
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, file.data);
   }
-  return { ok: true, dir };
+  const content = files.find((file) => file.path === "SKILL.md")?.data;
+  if (!skill || !content) return { ok: true, dir };
+  const file = path.join(root, ...SKILL_PATH.split("/"));
+  const ours = !existsSync(file) || (await readFile(file, "utf8")).includes(SKILL_MARKER);
+  if (ours) {
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, content);
+  }
+  return { ok: true, dir, skill: { file, written: ours } };
 }
 
 function readme(name: string, generator: string, browser: string, version: string): string {
   return `# Verification kit: ${name}
 
 Generated by ${generator} with ${browser} ${version}. Basis replaces this folder's generated files
-(\`design/\`, \`screens/\`, \`expected/\`, \`diff/\`, \`basis-verify.json\`, the scripts and the examples) each
-time it writes the kit; \`targets.json\`, \`exceptions.json\` and \`actual/\` are yours and stay.
+(\`design/\`, \`screens/\`, \`expected/\`, \`diff/\`, \`views/\`, \`source/\`, \`basis-verify.json\`, the prompt,
+the skill, the scripts and the examples) each time it writes the kit; \`targets.json\`, \`exceptions.json\` and
+\`actual/\` are yours and stay.
 
 The kit says what each screen of each view must look like, pixel for pixel, at fixed sizes. The target is
 0% difference. Anything allowed to differ is a named exception in \`exceptions.json\`, so a reviewer can read
 every one of them.
 
+## For the agent that builds it
+
+\`PROMPT.md\` is written for the coding agent that builds these views in the product: the goal, where things are,
+each view, and the capture and compare loop with the rules for images, exceptions and when to stop. Tell the
+agent to read it (Basis' Export tab copies such a prompt), with the kit at \`basis-verify/\` in the product repo's
+root, where all its paths start.
+
+\`SKILL.md\` is the loop as a Claude Code skill. Basis can install it as \`${SKILL_PATH}\` when it writes the
+kit into the repo; to do it by hand, copy the file there. For agents that read \`AGENTS.md\`, add this paragraph:
+
+> ${agentsParagraph().split("\n").join("\n> ")}
+
 ## Contents
 
+- \`PROMPT.md\`, \`SKILL.md\`: see above.
+- \`views/<view>.md\`: notes for each view, written from its source: its screens and their shots, where each
+  screen's \`go()\` calls lead, the components, patterns and data it uses, and the tokens it reads, with their
+  values in \`design/design.json\`.
+- \`source/\`: the source of the views and of everything they import, as it is in Basis' workspace.
 - \`design/\`: the design as a static site. Serve the folder and open
   \`index.html?view=<view>&screen=<screen>&theme=light\` to see one screen alone, at the size of the window.
   The screens are clickable where the design moves between them.
@@ -366,7 +419,8 @@ npx playwright install chromium
    Each shot prints PASS, FAIL (with the share of differing pixels, and what is wrong with the elements left
    out), MISSING or EXCEPTED. Failures get a diff image in \`diff/\`: matching pixels faded, differing pixels red,
    left-out regions and elements blue. \`diff/report.json\` has the same results for tools. The command exits
-   with 1 when any shot fails or is missing.
+   with 1 when any shot fails or is missing. Both scripts take \`--only <view>[/<screen>]\` to work on part of
+   the kit.
 
 A screen is the whole page as the product shows it. The page's size matters too: a full-page shot that is
 taller or shorter than the design fails even when the top matches.

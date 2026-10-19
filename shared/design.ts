@@ -460,23 +460,26 @@ export function kebab(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
-/** The theme-independent token groups and the CSS variable prefix of each (`space.4` → `--space-4`). */
-export function globalTokenGroups(design: Design): [prefix: string, tokens: Record<string, string>][] {
+/**
+ * The theme-independent token groups, the CSS variable prefix of each (`space.4` → `--space-4`) and where the
+ * group is in the design file (`typography.size`).
+ */
+export function globalTokenGroups(design: Design): [prefix: string, tokens: Record<string, string>, path: string][] {
   const type = design.typography;
   return [
-    ["font", type.family],
-    ["text", type.size],
-    ["weight", type.weight],
-    ["leading", type.leading],
-    ["tracking", type.tracking],
-    ["space", design.space],
-    ["radius", design.radius],
-    ["border", design.border],
-    ["shadow", design.shadow],
-    ["duration", design.motion.duration],
-    ["ease", design.motion.ease],
-    ["focus", design.focus],
-    ["opacity", design.opacity],
+    ["font", type.family, "typography.family"],
+    ["text", type.size, "typography.size"],
+    ["weight", type.weight, "typography.weight"],
+    ["leading", type.leading, "typography.leading"],
+    ["tracking", type.tracking, "typography.tracking"],
+    ["space", design.space, "space"],
+    ["radius", design.radius, "radius"],
+    ["border", design.border, "border"],
+    ["shadow", design.shadow, "shadow"],
+    ["duration", design.motion.duration, "motion.duration"],
+    ["ease", design.motion.ease, "motion.ease"],
+    ["focus", design.focus, "focus"],
+    ["opacity", design.opacity, "opacity"],
   ];
 }
 

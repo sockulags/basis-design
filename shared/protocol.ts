@@ -120,6 +120,8 @@ export interface VerifyKitSummary {
   /** The browser that took the screenshots, with its version. */
   browser: string;
   views: number;
+  /** The views in the kit, for the prompt the user copies for the implementing agent. */
+  viewList: { id: string; title: string }[];
   screens: number;
   shots: number;
   /** Shots whose two captures differed: those screens do not render the same twice. */
@@ -137,6 +139,8 @@ export type VerifyKitResult =
       ok: true;
       summary: VerifyKitSummary;
       /** Where it was written; absent for a zip, which is then ready to download. */ dir?: string;
+      /** The skill installed in the product repo, when asked for; `written` is false when one not by Basis was kept. */
+      skill?: { file: string; written: boolean };
     }
   | { ok: false; error: string };
 
@@ -258,8 +262,11 @@ export type ClientMessage =
     }
   | { type: "export-manifest" }
   | { type: "export-write"; target: string; overwrite: boolean }
-  /** Builds the verification kit: into `<project>/basis-verify/` with `project`, else as a zip to download. */
-  | { type: "verify-kit"; project?: string }
+  /**
+   * Builds the verification kit: into `<project>/basis-verify/` with `project`, else as a zip to download. With
+   * `skill`, writing into a folder also installs the kit's SKILL.md in its `.claude/skills/basis-verify/`.
+   */
+  | { type: "verify-kit"; project?: string; skill?: boolean }
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */
   /**

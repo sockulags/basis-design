@@ -87,5 +87,8 @@ export interface CaptureList {
   problems: string[];
 }
 
+/** The verification kit's folder in the product repo, and the folder inside its zip. */
+export const KIT_FOLDER = "basis-verify";
+
 /** The attribute the capture page sets on <html> once a screen has settled and can be photographed. */
 export const READY_ATTRIBUTE = "data-basis-ready";

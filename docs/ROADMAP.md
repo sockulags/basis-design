@@ -85,7 +85,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       both sides and still checks the boxes' size), views use local placeholder images marked `data-basis-media`
       (the brief says so), and a check reports remote image URLs in views. Done when: a view with a photo passes
       the kit with a selector exception, and a remote image is reported.
-- [ ] **A prompt for the implementing agent.** Merges "Implementation notes in the kit" and "A skill for the
+- [x] **A prompt for the implementing agent.** Merges "Implementation notes in the kit" and "A skill for the
       implementing agent" below: the kit carries `PROMPT.md` (goal, each view's screens, flow, components and
       tokens, the capture and compare loop, the exception rules, when to stop) and the Export tab gets "Copy prompt",
       which tells the agent to read it. Done when: an agent given only the copied prompt in a fixture repo finds the
@@ -148,13 +148,15 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ### What the service can do
 
-- [ ] **Implementation notes in the kit.** For each view the kit gains `views/<view>.md`: its screens (id, label,
+- [x] **Implementation notes in the kit.** Built as part of "A prompt for the implementing agent" (see the log).
+      For each view the kit gains `views/<view>.md`: its screens (id, label,
       the shots), the flow (which screen's `go()` leads where, from literal calls in the source), the components and
       patterns it imports from the workspace, and the tokens in `design/design.json` it can use. Decision: written
       from the source without an agent turn, so the notes always match the screenshots. The README and the manifest
       point at them. Done when: tests cover the source reading, and the kit built from the starter view has notes
       that are correct.
-- [ ] **A skill for the implementing agent.** The kit carries `SKILL.md` (Claude Code's skill format) with the
+- [x] **A skill for the implementing agent.** Built as part of "A prompt for the implementing agent" (see the log).
+      The kit carries `SKILL.md` (Claude Code's skill format) with the
       capture, compare, read the diffs, fix and repeat loop, and the README gives the same text as a paragraph for
       AGENTS.md. Writing the kit into a folder gets a checkbox that also installs the skill as
       `.claude/skills/basis-verify/SKILL.md` there; Basis overwrites that file only when it carries Basis' generated
@@ -224,6 +226,58 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
       publishes and asks for the tag.
 
 ## Decision log
+
+- 2026-10-19: A prompt for the implementing agent. This step also builds "Implementation notes in the kit" and
+  "A skill for the implementing agent", which are ticked with a pointer here rather than removed, so their
+  original wording stays readable. What Lucas asked for, a prompt "with a link or a tool call", is a file in the
+  kit plus Copy prompt: the kit carries `PROMPT.md` and the Export tab copies a few lines that send the agent
+  there. A live MCP server for implementing agents (asking Basis for a screen's shots, notes or a comparison while
+  Basis runs) is out of scope for now and a possible later step; the kit works without Basis running, in CI or on
+  another machine. Notes live in `views/<view>.md`, one per view, and `PROMPT.md` lists the views with their
+  screens and points at the notes, since the copied prompt names one view and a kit with many views would make one
+  long file. They are written from the source without an agent turn (`server/verify-notes.ts`), as the notes step
+  decided: the screens and their shots from the capture list, the flow from literal `go("id")` calls in each
+  screen's render function (or inline render) and the file's top-level functions it names, with the text of the
+  element that calls it ("Invite member") and whether it passes data; the names it imports from components,
+  patterns and other files, resolved through the barrels by name with `reach.ts`'s helpers (now exported); its
+  images; and the tokens the files it reaches read, with the tokens their values refer to (`--button-radius` brings
+  `--radius-md`). Scales get a table with the path in `design.json` and the value (light / dark for colours);
+  component tokens are named by group only, since a file with several components (`Display.tsx`) brings all their
+  tokens and listing each would mislead. `globalTokenGroups` now also returns each group's path. Added beyond the
+  steps' text: `source/`, a copy of the files each view reaches (21 files for the starter view), since exact text,
+  structure and data are what a pixel match needs and the built JavaScript in `design/` does not show them; and
+  `--only <view>[/<screen>]` for `compare.mjs`, as `capture.mjs` had, so an agent building one screen is not told
+  the rest of the kit is missing. `PROMPT.md` and `SKILL.md` share one text for the loop, the image and exception
+  rules and when to stop (`server/verify-prompt.ts`); `PROMPT.md` adds the goal, where things are, the views and
+  how to build one (a URL per screen, the design's data from seeds or fixtures, never constants in shipped code),
+  and the README gives a paragraph for `AGENTS.md`. Paths start at the repo's root (`basis-verify/…`) for a written
+  kit and a zip alike, since the zip's top folder is `basis-verify/`; the copied prompt for a zip says it was
+  unpacked at the root and to read paths from wherever it is otherwise. Acceptable deviation is still Lucas' open
+  decision, so the prompt says 0% with no `--max-diff` or tolerance unless the person says so, and to stop and
+  report after three rounds without progress, when the rest needs shared code, global styles, the product's
+  tokens or a font, when a screen has no URL or its data cannot be shown, and on unstable shots. The skill is a
+  checkbox next to Write kit (remembered per project, off by default since it writes outside `basis-verify/`); it
+  goes to `.claude/skills/basis-verify/SKILL.md` and replaces a file there only when it has Basis' marker line
+  (after the frontmatter, which must come first), and the Export tab says when it left one alone. Copy prompt shows
+  after a kit is built in the open dialog, with the prompt visible and a view picker when there is more than one;
+  the label turns to Copied at once, and if the browser refuses the clipboard (the desktop app's browser pane
+  does) the text is selected with a note. Verified with unit tests (the flow with helpers and inline renders, the
+  starter view's flow, names, files and variables, a helper file and an image, token rows, the notes, the shared
+  loop and the skill's frontmatter and marker, the copied prompt, installing and keeping the skill, `--only` in
+  `compare.mjs`), the e2e kit test (the new files in the zip, the prompt, Copy prompt), and on a throwaway
+  instance: written into a fixture repo (plain HTML, CSS variables, a Tailwind config) with the skill installed,
+  and as a zip with a second view to check the picker. Then `claude -p` (Claude Code 2.1.296) in the fixture, given
+  only the copied prompt plus "For now, build only the view's first screen", in `acceptEdits` mode with Bash
+  allowed only for the two scripts, `npm run dev` and `ls` (a first try in `dontAsk` mode found the kit but could
+  not write, as `Write(./**)` did not match its Windows paths). It invoked the installed `basis-verify` skill first,
+  read `PROMPT.md`, the notes and the source, captured the design with `--only team-members/list`, looked at the
+  expected images, wrote `/members` with the product's own `.btn` and tokens, the members as a fixture JSON loaded
+  by a script, page-only styles and `targets.json` with a `waitFor`, started the dev server, and ran capture and
+  compare five times. 375 and 768 passed at 0%; 1440 stayed at 8 pixels of antialiasing at the table's rounded
+  corner, so after three rounds without progress it stopped as the prompt says and reported each shot, what it
+  built, that it added no exceptions, an unstable 375 capture it saw twice (Basis built a second kit at the same
+  time, which may explain it), and asked whether to accept the difference or set a tolerance rather than setting
+  one. Writes and scripts outside the fixture were refused. 48 turns, $1.55.
 
 - 2026-10-19: Images in the kit. A photo can never match pixel for pixel, so the kit compares where it is rather
   than what it shows. An exception may name elements by `selector` (one for both sides, or `{ design, app }` when
