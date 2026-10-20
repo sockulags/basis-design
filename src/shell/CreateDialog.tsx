@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { viewKitFolder } from "../../shared/capture.ts";
-import { isComponentName, pageById, type PageId } from "../../shared/frame.ts";
+import { isComponentName, pageById, toComponentName, type PageId } from "../../shared/frame.ts";
 import { issueKey, issueViewId } from "../../shared/issue.ts";
 import type { ClientMessage } from "../../shared/protocol.ts";
 import styles from "./Shell.module.css";
@@ -13,15 +13,6 @@ interface CreateDialogProps {
   /** Called after the request is sent, so the chat can come into view. */
   onCreated: () => void;
   onClose: () => void;
-}
-
-/** "date picker" and "date-picker" both become "DatePicker". */
-function toComponentName(value: string): string {
-  return value
-    .split(/[^A-Za-z0-9]+/)
-    .filter(Boolean)
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join("");
 }
 
 export function CreateDialog({ page, agentReady, send, onCreated, onClose }: CreateDialogProps) {

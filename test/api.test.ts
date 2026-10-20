@@ -1,0 +1,166 @@
+import assert from "node:assert/strict";
+import http from "node:http";
+import { after, before, describe, test } from "node:test";
+import { strToU8, unzipSync, zipSync } from "fflate";
+import type { CaptureList } from "../shared/capture.ts";
+import type { ProjectEntry, VerifyKitSummary } from "../shared/protocol.ts";
+import { handlePipelineApi, viewName, type ApiOptions, type ApiProject } from "../server/api.ts";
+
+const TOKEN = "secret-token";
+const ENTRY: ProjectEntry = { id: "p1", name: "Auth-service", dir: "/ws", repo: "/repo" };
+
+/** A project whose agent records its turns, and whose design has the views given. */
+function fakeProject(views: string[]) {
+  const turns: { text: string; instruction?: string; thread?: string }[] = [];
+  const list: CaptureList = {
+    specimens: [],
+    widths: [375],
+    problems: [],
+    views: views.map((id) => ({
+      id,
+      title: id,
+      file: `views/${id}.specimen.tsx`,
+      screens: [{ id: "main", label: "Main", shots: [] }],
+    })),
+  };
+  const project: ApiProject = {
+    entry: ENTRY,
+    busy: false,
+    waiting: false,
+    agent: {
+      whenReady: async () => true,
+      newThread: () => "t-1",
+      prompt: async (text, { instruction }, { thread }) => void turns.push({ text, instruction, thread }),
+    },
+    screenshots: { list: async () => list },
+  };
+  return { project, turns };
+}
+
+describe("the pipeline API", () => {
+  const { project, turns } = fakeProject(["web-12", "billing"]);
+  const kits: { views?: string[]; folder?: string }[] = [];
+  let building = false;
+  const options: ApiOptions = {
+    token: TOKEN,
+    projects: () => [ENTRY],
+    open: async () => project,
+    buildKit: async (_, request) => {
+      if (building) return null;
+      kits.push(request);
+      const known = (request.views ?? ["web-12", "billing"]).filter((id) => ["web-12", "billing"].includes(id));
+      if (!known.length) throw new Error("None of the chosen views is in the design any more.");
+      const summary = { folder: request.folder ?? "basis-verify", shots: 3 } as VerifyKitSummary;
+      return { files: [{ path: "PROMPT.md", data: strToU8("kit") }], summary };
+    },
+    zip: (files, folder) => zipSync(Object.fromEntries(files.map((file) => [`${folder}/${file.path}`, file.data]))),
+  };
+  let server: http.Server;
+  let base = "";
+  before(async () => {
+    server = http.createServer((req, res) => {
+      void handlePipelineApi(req, res, options).then((handled) => {
+        if (!handled) res.writeHead(418).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  });
+  after(() => server.close());
+
+  const call = (path: string, init: RequestInit = {}, token: string | null = TOKEN) =>
+    fetch(`${base}${path}`, {
+      ...init,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Content-Type": "application/json" },
+    });
+
+  test("answers only with the token, and leaves other paths to the caller", async () => {
+    assert.equal((await call("/v1/projects", {}, null)).status, 401);
+    assert.equal((await call("/v1/projects", {}, "secret-tokem")).status, 401);
+    assert.equal((await call("/v1/projects")).status, 200);
+    assert.equal((await call("/other")).status, 418);
+  });
+
+  test("lists projects, found by id or by name, and their views", async () => {
+    assert.deepEqual(await (await call("/v1/projects")).json(), {
+      projects: [{ id: "p1", name: "Auth-service", repo: "/repo" }],
+    });
+    const views = (await (await call("/v1/projects/auth-service/views")).json()) as { views: { id: string }[] };
+    assert.deepEqual(
+      views.views.map((view) => view.id),
+      ["web-12", "billing"],
+    );
+    assert.equal((await call("/v1/projects/nope/views")).status, 404);
+    const one = (await (await call("/v1/projects/p1/views/web-12")).json()) as { id: string; agent: string };
+    assert.equal(one.agent, "idle");
+    const missing = await call("/v1/projects/p1/views/web-99");
+    assert.equal(missing.status, 404);
+    assert.equal(((await missing.json()) as { agent: string }).agent, "idle");
+  });
+
+  test("starts the New view turn for an issue, named for it", async () => {
+    const response = await call("/v1/projects/p1/views", {
+      method: "POST",
+      body: JSON.stringify({ issue: "WEB-13", title: "Reset password", description: "As a user I can reset it." }),
+    });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), {
+      view: "web-13",
+      name: "ResetPassword",
+      thread: "t-1",
+      kitFolder: "basis-verify/web-13",
+    });
+    const turn = turns.at(-1)!;
+    assert.equal(turn.thread, "t-1");
+    assert.match(turn.text, /^New view: ResetPassword \(WEB-13\)\n\nReset password\n\nAs a user I can reset it\.$/);
+    assert.match(turn.instruction ?? "", /`id: "web-13"`/);
+    const bad = await call("/v1/projects/p1/views", { method: "POST", body: JSON.stringify({ issue: "../x" }) });
+    assert.equal(bad.status, 400);
+    assert.equal((await call("/v1/projects/p1/views", { method: "POST", body: "[1]" })).status, 400);
+  });
+
+  test("builds the kit of an issue's view into its folder, as a zip", async () => {
+    const response = await call("/v1/projects/p1/kit", { method: "POST", body: JSON.stringify({ issue: "WEB-12" }) });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/zip");
+    assert.equal(response.headers.get("x-basis-kit-folder"), "basis-verify/web-12");
+    assert.deepEqual(kits.at(-1), { views: ["web-12"], folder: "basis-verify/web-12" });
+    const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    assert.deepEqual(Object.keys(files), ["basis-verify/web-12/PROMPT.md"]);
+
+    await call("/v1/projects/p1/kit", {
+      method: "POST",
+      body: JSON.stringify({ views: ["billing"], folder: "kits/b" }),
+    });
+    assert.deepEqual(kits.at(-1), { views: ["billing"], folder: "kits/b" });
+    const outside = await call("/v1/projects/p1/kit", { method: "POST", body: JSON.stringify({ folder: "../x" }) });
+    assert.equal(outside.status, 400);
+    const gone = await call("/v1/projects/p1/kit", { method: "POST", body: JSON.stringify({ issue: "WEB-99" }) });
+    assert.equal(gone.status, 404);
+    building = true;
+    const busy = await call("/v1/projects/p1/kit", { method: "POST", body: "{}" });
+    building = false;
+    assert.equal(busy.status, 409);
+  });
+
+  test("is off without a token", async () => {
+    const off = http.createServer((req, res) => void handlePipelineApi(req, res, { ...options, token: undefined }));
+    await new Promise<void>((resolve) => off.listen(0, "127.0.0.1", resolve));
+    try {
+      const response = await fetch(`http://127.0.0.1:${(off.address() as { port: number }).port}/v1/projects`, {
+        headers: { Authorization: "Bearer " },
+      });
+      assert.equal(response.status, 404);
+      assert.match(((await response.json()) as { error: string }).error, /BASIS_API_TOKEN/);
+    } finally {
+      off.close();
+    }
+  });
+});
+
+test("a view for an issue is named from its title, else its key", () => {
+  assert.equal(viewName("WEB-12", "Reset password", ""), "ResetPassword");
+  assert.equal(viewName("WEB-12", "", ""), "WEB12");
+  assert.equal(viewName("42", "", ""), "View42");
+  assert.equal(viewName("WEB-12", "Reset", "SignIn"), "SignIn");
+});

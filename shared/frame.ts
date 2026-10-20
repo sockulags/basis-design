@@ -36,6 +36,15 @@ export function isComponentName(value: string): boolean {
   return /^[A-Z][A-Za-z0-9]{0,47}$/.test(value);
 }
 
+/** "date picker" and "date-picker" both become "DatePicker". */
+export function toComponentName(value: string): string {
+  return value
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word[0]!.toUpperCase() + word.slice(1))
+    .join("");
+}
+
 export function isPageId(value: unknown): value is PageId {
   return PAGES.some((page) => page.id === value);
 }

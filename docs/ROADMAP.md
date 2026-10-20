@@ -252,6 +252,20 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: An API for pipelines (`server/api.ts`). The-factory (a board that runs cards through workflow steps
+  with agents, gates and plugin hooks, in Kubernetes) could use Basis as a step: an enter hook asks Basis for a
+  view for the card's issue, the gate is a person reviewing it in Basis, and an exit hook fetches the kit into the
+  card's branch, after which the implement step's checks can run `compare.mjs`. So the API is the few calls such
+  hooks need: list projects and views, start the New view turn for an issue (`POST …/views`, 202 with the view's
+  id, since the turn takes minutes), a view's status, and the kit as a zip (`POST …/kit`). It sits under `/v1`
+  on the chrome's port, off unless `BASIS_API_TOKEN` is set, and checks the bearer token in constant time.
+  Because a token is required, it answers whatever Host it is reached by, unlike the chrome, whose
+  localhost-only check guards against DNS rebinding of a page that has no secret. A kit request waits for the
+  build and answers the zip, rather than a job to poll: a kit takes seconds per screen, and hooks await it anyway.
+  Kit building is shared with the Export dialog (`buildKit`), one at a time. Unit tests drive the API over HTTP
+  with a stand-in project; a throwaway Basis with the token answered the list, the views and a kit of one view
+  into `basis-verify/web-12/` (9 shots), 401 without the token and 404 for an unknown view.
+
 - 2026-10-20: Views named for their issue. New view takes an optional issue key (Jira's `WEB-12`, GitHub's
   `owner/repo#42`, a pipeline card's key; `issueKey` in `shared/issue.ts`). The guided turn tells the agent to
   give the specimen the key in kebab-case as its id (`issueViewId`: `web-12`, `owner-repo-42`) and a title that

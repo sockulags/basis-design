@@ -18,6 +18,7 @@ import {
   type Tagged,
 } from "../shared/protocol.ts";
 import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH, toolsUrl } from "./agent-tools.ts";
+import { API_PATH, handlePipelineApi, type ApiOptions } from "./api.ts";
 import { BACKGROUND_PATH, HOST_PAGE } from "./background.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
@@ -130,7 +131,20 @@ const chromeVite = await createVite({
   server: { middlewareMode: true, hmr: { server: chromeServer }, forwardConsole: false },
 });
 const chromeGuard = guard((url) => url === "/preview.html" || url === "/capture.html");
+/** The HTTP API for pipelines (server/api.ts): token-protected, so it answers whatever host it is reached by. */
+const apiOptions: ApiOptions = {
+  token: process.env.BASIS_API_TOKEN || undefined,
+  projects: () => projects.list,
+  open: (entry) => open.open(entry),
+  buildKit: (project, request) => buildKit(project as OpenProject, request),
+  zip: zipVerificationKit,
+};
 chromeServer.on("request", (req, res) => {
+  const pathname = req.url?.split("?")[0] ?? "";
+  if (pathname === API_PATH || pathname.startsWith(`${API_PATH}/`)) {
+    void handlePipelineApi(req, res, apiOptions);
+    return;
+  }
   if (!isLocalHost(req, port)) return refuseHost(res);
   if (req.method === "GET" && req.url?.split("?")[0] === "/export/starter-kit.zip") {
     // The tab names its project; without one, the project shown last.
@@ -698,6 +712,7 @@ chromeServer.once("error", (error) => {
 });
 chromeServer.listen(port, host, () => {
   console.log(`Basis is running at http://localhost:${port}`);
+  if (apiOptions.token) console.log(`The API answers at http://localhost:${port}${API_PATH} with BASIS_API_TOKEN.`);
   console.log(`Project: ${projects.active!.name} (${projects.active!.dir})`);
 });
 

@@ -32,6 +32,7 @@ To work on Basis itself, clone the repository and run `npm install` and `npm run
 | `BASIS_AGENT` | `claude` | Agent started on boot (`claude` or `codex`) |
 | `PORT` | `5320` | Port of the Basis app (bound to 127.0.0.1 only) |
 | `BASIS_PREVIEW_PORT` | `PORT + 1` | Port of the sandboxed preview origin of the first open project; others get free ports |
+| `BASIS_API_TOKEN` | | Turns on the API under `/v1` (see [The API](#the-api)); requests must send it as a bearer token |
 
 ## Projects
 
@@ -112,6 +113,25 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
   The kit needs React 18+ and CSS Modules, nothing else. The other tabs export the token formats one at a time.
 - **Verification kit:** proof that a feature was built as its view shows. The **Verification kit** tab photographs every screen of the views you check (all of them until you pick some; the choice is kept per project) at fixed widths (the project's Mobile, Tablet and Desktop widths, full page, unless the view's flow block sets `capture`) and packages the screenshots with a static, clickable copy of the design and two scripts, as a zip or into a folder in the product's repo (the linked repo by default): `basis-verify/`, or `basis-verify/<view>/` for a view picked out of several, so kits of different views or issues never replace each other. The agent that implements the feature runs `capture.mjs` to photograph the design and its implementation on the same machine with the same settings, and `compare.mjs` to compare them pixel for pixel, aiming at 0% difference. Parts allowed to differ are named exceptions in `exceptions.json`, each with a reason: a region of the image, or elements by CSS selector. Views show images (photos, avatars, illustrations) as placeholders of their own in `views/assets/`, marked `data-basis-media`; the kit leaves those elements out of the comparison on both sides but still fails a shot whose image is missing, moved or resized, so the product's real photos pass when they fill the same boxes. A screen that loads images from another site is reported when the kit is built. Basis takes the screenshots with Playwright's Chromium when it is installed (`npx playwright install chromium`), otherwise with Chrome or Edge; each screen is captured twice, and screens that render differently each time are reported, since nothing can match them.
 - **A prompt for the implementing agent:** the verification kit also tells the coding agent that builds the views in the product what to build and how to check it. `PROMPT.md` states the goal, where everything in the kit is, each view with its screens, and the loop: capture the design and the product, compare, read the diff images, fix and repeat, with the rules for images, exceptions and when to stop and report. Each view gets notes in `views/<view>.md`, written from its source without an agent turn: its screens and their shots, which screen each button leads to (from the view's `go()` calls), the components, patterns and data it uses, and the design's tokens it reads with their values. The source of the views and of what they use is in `source/`. After a build, **Copy prompt** puts a few lines on the clipboard that point the agent at `basis-verify/PROMPT.md` and name the view to build (pick one, or all). The kit carries the same loop as a Claude Code skill (`SKILL.md`), which writing into the product's folder can install as `.claude/skills/basis-verify/SKILL.md`; Basis replaces that file later only while it still carries Basis' marker. The kit's README has the same instructions as a paragraph for `AGENTS.md`.
+
+## The API
+
+A pipeline can use Basis as a step: have a view designed for an issue, wait for it, and fetch its verification
+kit. Start Basis with `BASIS_API_TOKEN` set; the API is off without it. Every request sends
+`Authorization: Bearer <token>`. A project is named by its id or its name.
+
+| Request | What it does |
+| --- | --- |
+| `GET /v1/projects` | The projects: id, name, linked repo |
+| `GET /v1/projects/:project/views` | The project's views and their screens |
+| `GET /v1/projects/:project/views/:view` | One view, and `agent`: `working`, `waiting` (for an answer) or `idle`; 404 until it exists |
+| `POST /v1/projects/:project/views` | `{ "issue": "WEB-12", "title": "…", "description": "…" }` starts the New view turn for the issue; answers 202 with the view's id (`web-12`) and kit folder |
+| `POST /v1/projects/:project/kit` | `{ "issue": "WEB-12" }`, or `{ "views": [...], "folder": "…" }`: the verification kit as a zip, its files under the kit's folder (`basis-verify/web-12/` for an issue), to unpack at the product repo's root |
+
+A typical step: `POST …/views` when the issue reaches design, poll `GET …/views/web-12` until it answers 200
+with `agent: "idle"`, let someone review it in Basis, then `POST …/kit` with the issue and commit the folder to
+the issue's branch, where the implementing agent finds `PROMPT.md`. One kit is built at a time; another request
+meanwhile gets 409.
 
 ## Privacy
 
