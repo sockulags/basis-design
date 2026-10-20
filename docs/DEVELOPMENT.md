@@ -615,7 +615,9 @@ comparison of the whole gallery between two history entries, the icon, and publi
   `&&`, and the rest only reads the workspace or the repo (`isApprovableClaudeRead` in `server/commands.ts`):
   Claude Code's shell keeps its folder between calls, so without that `cd` Basis cannot know where relative paths
   point, and the command still asks. After the `cd`, simple `for` loops over plain words and variables the
-  command sets itself are written out before the check (`expandVariables`); anything else that expands asks. The
+  command sets itself are written out before the check (`expandVariables`); anything else that expands asks. A later
+  `cd` to an existing absolute folder moves what follows there; after `&&` or `||` it may be skipped, so the
+  paths after it must be readable from every folder the shell may be in. The
   brief tells the agent to write its shell commands that way.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Binary images in past versions:** snapshot copies (`server/snapshots.ts`) are written from `git show` as text,

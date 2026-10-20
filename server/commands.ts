@@ -76,7 +76,9 @@ export function isApprovableRead(
  * the command and a description or timeout, nothing else (not in the background). Its shell keeps the folder it was
  * left in between commands, which the request does not say, so the command must begin with `cd` to an absolute
  * folder that exists, followed by `&&`; the rest runs there and must only read what is `readable`. Git Bash on
- * Windows takes `C:/…` as such a folder. Simple loops and variables are written out first (expandVariables).
+ * Windows takes `C:/…` as such a folder. Simple loops and variables are written out first (expandVariables). A
+ * later `cd` to an existing absolute folder moves the rest there; when `&&` or `||` may skip it, what follows
+ * could run in either folder, so its paths must be readable from both.
  */
 export function isApprovableClaudeRead(
   rawInput: unknown,
@@ -94,11 +96,46 @@ export function isApprovableClaudeRead(
   const [cd, folder, and] = tokens ?? [];
   if (!cd || !isArg(cd) || cd.quoted || cd.values[0] !== "cd") return false;
   if (!folder || !isArg(folder) || folder.glob || !and || isArg(and) || and.op !== "&&") return false;
-  const cwd = folder.values[0]!;
-  if (!paths.isAbsolute(cwd) || !plainPath(cwd, paths) || !isFolder(cwd)) return false;
-  const commands = split(tokens!.slice(3));
-  const found = commands ? collect(commands, "posix", false, cwd, paths, []) : null;
-  return found !== null && found.reads.every(readable);
+  const folderOf = (arg: Arg | undefined) => {
+    const target = arg && !arg.glob ? arg.values[0]! : "";
+    return paths.isAbsolute(target) && plainPath(target, paths) && isFolder(target) ? paths.resolve(target) : null;
+  };
+  const first = folderOf(folder);
+  const commands = first ? chain(tokens!.slice(3)) : null;
+  if (!first || !commands) return false;
+  // The folders the shell may be in at each command, and every path read from any of them.
+  let cwds = [first];
+  const reads = [first];
+  for (const [index, { op, args }] of commands.entries()) {
+    if (args[0]!.values[0] === "cd" && !args[0]!.quoted) {
+      const target = args.length === 2 ? folderOf(args[1]) : null;
+      if (!target) return false;
+      reads.push(target);
+      // In a pipeline it runs in a subshell and moves nothing; after && or || it may not run at all.
+      if (op === "|" || commands[index + 1]?.op === "|") continue;
+      cwds = op === ";" ? [target] : [...new Set([...cwds, target])];
+      continue;
+    }
+    if (args.some((arg) => arg.glob)) return false;
+    const found = posixCommand(args);
+    if (!found) return false;
+    for (const target of found) {
+      if (!plainPath(target, paths)) return false;
+      reads.push(...cwds.map((cwd) => paths.resolve(cwd, target)));
+    }
+    reads.push(...cwds);
+  }
+  return reads.every(readable);
+}
+
+/** The commands of a POSIX script with the separator before each (`;` for the first), or null for an empty one. */
+function chain(tokens: Token[]): { op: Op; args: Arg[] }[] | null {
+  const commands: { op: Op; args: Arg[] }[] = [{ op: ";", args: [] }];
+  for (const token of tokens) {
+    if (isArg(token)) commands.at(-1)!.args.push(token);
+    else commands.push({ op: token.op, args: [] });
+  }
+  return commands.every((command) => command.args.length > 0) ? commands : null;
 }
 
 /** One argument: its values (more than one for a PowerShell array, `a, b`), and how it was written. */
@@ -117,7 +154,9 @@ interface Arg {
 }
 
 /** Statement and pipeline separators; every command on either side is checked the same way. */
-type Token = Arg | { op: ";" | "|" | "&&" };
+type Token = Arg | { op: Op };
+/** `&&` and `||` are told apart from `;` in POSIX scripts, where they decide whether a `cd` runs. */
+type Op = ";" | "|" | "&&" | "||";
 
 const isArg = (token: Token): token is Arg => "values" in token;
 
@@ -268,7 +307,7 @@ export function posixTokens(text: string, variables = false): Token[] | null {
       const double = text[i + 1] === char;
       if (char === "&" && !double) return null;
       end();
-      tokens.push({ op: double ? (char === "&" ? "&&" : ";") : "|" });
+      tokens.push({ op: double ? (char === "&" ? "&&" : "||") : "|" });
       if (double) i += 1;
     } else if (char === ">" || char === "<") {
       const drop = word === "2" && !quoted ? /^>(?:&1|\s*\/dev\/null)(?=$|[\s;|&])/.exec(text.slice(i)) : null;

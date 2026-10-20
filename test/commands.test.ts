@@ -439,6 +439,30 @@ describe("isApprovableClaudeRead", () => {
     assert.equal(approved("cd C:/repo && diff -l a b"), false);
   });
 
+  test("follows a later cd, and checks paths from every folder the shell may be in", () => {
+    // What Claude asked while designing a view: the workspace first, then the product repo.
+    assert.equal(
+      approved(
+        String.raw`cd "C:/ws" && sed -n 36,180p patterns/DataTable.tsx; grep -n "@container\|data-label\|::before" patterns/DataTable.module.css patterns/AppShell.module.css; cd "C:/repo" && grep -n -B3 -A40 "<AppShell" apps/admin/web/src/App.tsx | head -90; grep -n -A12 "nav: {" apps/admin/web/src/i18n.ts | head -16`,
+      ),
+      true,
+    );
+    // After `;` the cd always runs, so the next path is read in the repo only.
+    assert.equal(approved("cd C:/ws && ls; cd C:/repo && cat package.json"), true);
+    // After && the cd may be skipped: the path must be readable from both folders; both are, here.
+    assert.equal(approved("cd C:/ws && ls && cd C:/repo; cat a"), true);
+    // ...but a path that leaves one of them is not.
+    assert.equal(approved("cd C:/ws && ls || cd C:/repo/packages; cat ../x"), false);
+    // A cd in a pipeline moves nothing: what follows still runs in the first folder.
+    assert.equal(approved("cd C:/repo/packages && cd C:/Users | ls; cat ../x"), false);
+    // A later cd must name an existing absolute folder that may be read, alone.
+    assert.equal(approved("cd C:/ws && cd C:/Users && ls"), false);
+    assert.equal(approved("cd C:/ws && cd C:/repo/missing && ls"), false);
+    assert.equal(approved("cd C:/ws && cd ../repo && ls"), false);
+    assert.equal(approved("cd C:/ws && cd C:/repo C:/ws && ls"), false);
+    assert.equal(approved(`cd C:/ws && "cd" C:/repo && ls`), false);
+  });
+
   test("asks without a cd into an existing folder first, since the shell's folder is unknown", () => {
     assert.equal(approved("git ls-files"), false);
     assert.equal(approved("ls -la && cd C:/repo && git ls-files"), false);

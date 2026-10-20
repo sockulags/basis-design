@@ -252,6 +252,17 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: The whole pipeline flow with a real agent. Through the API, Auth-service was asked for a view for
+  PV-12 (an audit log in Portvakt's admin portal, a made-up key since Portvakt has no GitHub issues). Claude built
+  `views/GranskningsloggIAdminportalen.specimen.tsx` with id `pv-12`, title "PV-12 Granskningslogg i
+  adminportalen" and four screens in under five minutes; the status call answered 404 while it worked, then 200
+  with `agent: "idle"`; the kit call gave `basis-verify/pv-12/` (64 files, 12 shots, all stable) in 8 seconds.
+  The turn stopped once, for a read-only command with a second `cd` (from the workspace into the repo) in its
+  chain, so `isApprovableClaudeRead` now follows a later `cd` to an existing absolute folder, checking the paths
+  after it from every folder the shell may be in when `&&` or `||` may skip it; `||` is now told apart from `;`.
+  The review of the new view also showed a Vite overlay: the preview loaded the new view's file under the
+  baseline snapshot's path, where its data file does not exist; that is left for its own fix.
+
 - 2026-10-20: Basis in a container (`Dockerfile`, `server/network.ts`). Basis listened on 127.0.0.1 and answered
   only to `localhost`, because the agent it drives runs commands; a container needs it reachable, which made
   access the core of the change. `HOST` chooses the address, and anything but loopback refuses to start without
