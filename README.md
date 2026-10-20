@@ -36,7 +36,7 @@ To work on Basis itself, clone the repository and run `npm install` and `npm run
 | `HOST` | `127.0.0.1` | Address to listen on; anything but loopback needs `BASIS_ACCESS_TOKEN` (see [Run it in a container](#run-it-in-a-container)) |
 | `BASIS_HOSTS` | | Host names besides `localhost` the pages may be opened at, comma-separated, without ports |
 | `BASIS_ACCESS_TOKEN` | | The secret the pages ask for once per browser when Basis listens beyond loopback; at least 16 characters |
-| `BASIS_API_TOKEN` | | Turns on the API under `/v1` (see [The API](#the-api)); requests must send it as a bearer token |
+| `BASIS_API_TOKEN` | | The token the API under `/v1` asks for (see [The API](#the-api)); without it, a Basis on loopback makes its own in `~/.basis/api-token` |
 
 ### Run it in a container
 
@@ -143,8 +143,11 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 ## The API
 
 A pipeline can use Basis as a step: have a view designed for an issue, wait for it, and fetch its verification
-kit. Start Basis with `BASIS_API_TOKEN` set; the API is off without it. Every request sends
-`Authorization: Bearer <token>`. A project is named by its id or its name.
+kit, and tools on your machine (the MCP server, the Claude Code plugin) can do the same. Every request sends
+`Authorization: Bearer <token>`: `BASIS_API_TOKEN` when it is set, and otherwise, on your own machine, the token
+Basis makes the first time it starts and keeps in `~/.basis/api-token`, readable only by you. A Basis that
+listens beyond loopback makes none: there the API is off without `BASIS_API_TOKEN`. A project is named by its id
+or its name.
 
 | Request | What it does |
 | --- | --- |

@@ -252,6 +252,12 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: A local API token. On loopback without `BASIS_API_TOKEN`, Basis makes a token the first time and keeps
+  it in `<BASIS_HOME>/api-token` (mode 600, `server/api-token.ts`), so the API is on for tools on the same machine,
+  such as the MCP server and the Claude Code plugin, without setup; they read the file. Listening beyond loopback
+  never makes one, so a container's API stays off unless it is given a token. A unit test covers making, keeping
+  and replacing a damaged file.
+
 - 2026-10-20: Changes and approval through the Factory plugin, without events. A webhook or SSE from Basis was
   dropped: a Factory plugin only runs when a step is entered or approved, nothing in it listens, and pushing into
   The Factory would mean Basis approving gates as a user. Instead both directions are pulls at those moments.

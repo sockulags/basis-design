@@ -19,6 +19,7 @@ import {
 } from "../shared/protocol.ts";
 import { handleToolRequest, toolSecret, toolServer, TOOLS_PATH, toolsUrl } from "./agent-tools.ts";
 import { API_PATH, handlePipelineApi, type ApiOptions } from "./api.ts";
+import { localApiToken, TOKEN_FILE } from "./api-token.ts";
 import { BACKGROUND_PATH, HOST_PAGE } from "./background.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
@@ -157,7 +158,8 @@ const chromeVite = await createVite({
 const chromeGuard = guard((url) => url === "/preview.html" || url === "/capture.html");
 /** The HTTP API for pipelines (server/api.ts): token-protected, so it answers whatever host it is reached by. */
 const apiOptions: ApiOptions = {
-  token: process.env.BASIS_API_TOKEN || undefined,
+  // On loopback without BASIS_API_TOKEN, a token of Basis' own (server/api-token.ts) keeps the API on for tools here.
+  token: process.env.BASIS_API_TOKEN || (network.accessToken ? undefined : await localApiToken(home)),
   projects: () => projects.list,
   open: (entry) => open.open(entry),
   buildKit: (project, request) => buildKit(project as OpenProject, request),
@@ -754,7 +756,12 @@ chromeServer.listen(port, network.listen, () => {
     console.log(
       `Listening on ${network.listen} for ${network.hosts.join(", ")}; the pages ask for BASIS_ACCESS_TOKEN.`,
     );
-  if (apiOptions.token) console.log(`The API answers at http://localhost:${port}${API_PATH} with BASIS_API_TOKEN.`);
+  if (process.env.BASIS_API_TOKEN)
+    console.log(`The API answers at http://localhost:${port}${API_PATH} with BASIS_API_TOKEN.`);
+  else if (apiOptions.token)
+    console.log(
+      `The API answers at http://localhost:${port}${API_PATH} with the token in ${path.join(home, TOKEN_FILE)}.`,
+    );
   console.log(`Project: ${projects.active!.name} (${projects.active!.dir})`);
 });
 
