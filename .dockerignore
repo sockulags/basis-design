@@ -1,0 +1,11 @@
+.git
+.claude
+node_modules
+dist
+workspace
+workspaces
+basis.projects.json
+test-results
+playwright-report
+*.log
+.env

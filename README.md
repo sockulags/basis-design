@@ -30,9 +30,33 @@ To work on Basis itself, clone the repository and run `npm install` and `npm run
 | `BASIS_HOME` | `~/.basis` | Where the project list (`basis.projects.json`) and new projects (`workspaces/`) live |
 | `BASIS_WORKSPACE` | | Opens just this workspace for one run, without touching the project list (for tests and one-off use) |
 | `BASIS_AGENT` | `claude` | Agent started on boot (`claude` or `codex`) |
-| `PORT` | `5320` | Port of the Basis app (bound to 127.0.0.1 only) |
+| `PORT` | `5320` | Port of the Basis app |
 | `BASIS_PREVIEW_PORT` | `PORT + 1` | Port of the sandboxed preview origin of the first open project; others get free ports |
+| `BASIS_PREVIEW_PORTS` | | A number: open projects' previews take that many ports in a row from `BASIS_PREVIEW_PORT`, so a container can publish them |
+| `HOST` | `127.0.0.1` | Address to listen on; anything but loopback needs `BASIS_ACCESS_TOKEN` (see [Run it in a container](#run-it-in-a-container)) |
+| `BASIS_HOSTS` | | Host names besides `localhost` the pages may be opened at, comma-separated, without ports |
+| `BASIS_ACCESS_TOKEN` | | The secret the pages ask for once per browser when Basis listens beyond loopback; at least 16 characters |
 | `BASIS_API_TOKEN` | | Turns on the API under `/v1` (see [The API](#the-api)); requests must send it as a bearer token |
+
+### Run it in a container
+
+The `Dockerfile` builds Basis with git, Playwright's Chromium and Claude Code. It listens on every address, so it
+needs `BASIS_ACCESS_TOKEN`: the pages ask for it once per browser and keep a cookie. Name the host the pages are
+opened at in `BASIS_HOSTS`, and publish the app's port and the previews' ports under the same numbers, since a
+preview is opened at the app's host name on its own port.
+
+```bash
+docker build -t basis .
+```
+
+```bash
+docker run -p 5320-5324:5320-5324 -e BASIS_ACCESS_TOKEN=<secret> -e BASIS_HOSTS=basis.internal -e BASIS_API_TOKEN=<secret> -v basis-data:/data -v basis-home:/home/node basis
+```
+
+Projects live in `/data`, and Claude Code's login in `/home/node`. Log it in once with
+`docker exec -it <container> claude`. In Kubernetes, run one replica with both volumes and expose ports 5320 to
+5324 on the internal network (a Service of type LoadBalancer, or `kubectl port-forward`). An ingress that routes by
+host name alone cannot reach the previews yet, since each is a port of its own.
 
 ## Projects
 

@@ -24,7 +24,16 @@ import { createInstruction, importInstruction, templateInstruction, viewInstruct
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
 import { OpenProjects } from "./open-projects.ts";
-import { guard, isLocalHost, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
+import { guard, guardUpgrades, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
+import {
+  chromeOriginsFor,
+  handleLogin,
+  hasAccess,
+  isAllowedHost,
+  networkFromEnv,
+  refuseAccess,
+  type Network,
+} from "./network.ts";
 import { pickFolder, suggestRepos } from "./folders.ts";
 import { checkRepo, Projects } from "./projects.ts";
 import { templateChanges } from "./template.ts";
@@ -36,9 +45,20 @@ if (spawnSync("git", ["--version"], { windowsHide: true }).error) {
 }
 
 const root = path.resolve(import.meta.dirname, "..");
-const host = "127.0.0.1";
+const configured = networkFromEnv(process.env);
+if ("error" in configured) {
+  console.error(configured.error);
+  process.exit(1);
+}
+/** Where Basis listens and who may use it: localhost only, unless HOST says otherwise (server/network.ts). */
+const network: Network = configured;
 const port = Number(process.env.PORT ?? 5320);
 const previewPort = Number(process.env.BASIS_PREVIEW_PORT ?? port + 1);
+/**
+ * With BASIS_PREVIEW_PORTS (a count), project previews take the ports from BASIS_PREVIEW_PORT on, one per open
+ * project, so a container can publish them; without it, the first takes BASIS_PREVIEW_PORT and the others free ports.
+ */
+const previewPorts = Math.max(0, Math.floor(Number(process.env.BASIS_PREVIEW_PORTS ?? 0)) || 0);
 /**
  * Holds the project list and the folders of new projects: ~/.basis, never Basis' own folder, which an update or an
  * npx cache may replace.
@@ -49,7 +69,7 @@ let defaultAgent: AgentId = AGENT_IDS.includes(process.env.BASIS_AGENT as AgentI
   ? (process.env.BASIS_AGENT as AgentId)
   : "claude";
 
-const chromeOrigins = [`http://localhost:${port}`, `http://127.0.0.1:${port}`];
+const chromeOrigins = chromeOriginsFor(network, port);
 /** What the agent's MCP server for Basis' tools sends with every request (server/agent-tools.ts). */
 const toolsSecret = toolSecret();
 
@@ -70,19 +90,23 @@ const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 10
 
 /**
  * How a project opens: the first one open on PORT + 1 (or BASIS_PREVIEW_PORT), the others on free ports, since
- * ports in a row could run into another Basis. Its messages go to the tabs that show it, and its screenshot tool
- * names it.
+ * ports in a row could run into another Basis; with BASIS_PREVIEW_PORTS, on the ports in a row it allows. Its
+ * messages go to the tabs that show it, and its screenshot tool names it.
  */
 function projectOptions(entry: ProjectEntry, slot: number): ProjectOptions {
+  if (previewPorts && slot >= previewPorts)
+    console.warn(
+      `[basis] more projects are open than BASIS_PREVIEW_PORTS (${previewPorts}); ${entry.name} gets a free port`,
+    );
   return {
     root,
-    host,
-    previewPort: slot === 0 ? previewPort : 0,
+    network,
+    previewPort: slot === 0 || slot < previewPorts ? previewPort + slot : 0,
     slot,
     chromeOrigins,
     agent: defaultAgent,
     home,
-    mcpServers: [toolServer(toolsUrl(`http://${host}:${port}`, entry.id), toolsSecret)],
+    mcpServers: [toolServer(toolsUrl(`http://${network.self}:${port}`, entry.id), toolsSecret)],
     broadcast: (message) => sendProject(entry.id, message),
   };
 }
@@ -145,7 +169,21 @@ chromeServer.on("request", (req, res) => {
     void handlePipelineApi(req, res, apiOptions);
     return;
   }
-  if (!isLocalHost(req, port)) return refuseHost(res);
+  if (!isAllowedHost(req, network, port)) return refuseHost(res);
+  if (network.accessToken) {
+    void handleLogin(req, res, network, chromeOrigins).then((answered) => {
+      if (answered) return;
+      if (!hasAccess(req, network)) return refuseAccess(req, res, true);
+      answerChrome(req, res);
+    });
+    return;
+  }
+  answerChrome(req, res);
+});
+guardUpgrades(chromeServer, network, () => port);
+
+/** The chrome's own pages and requests, once the host and access are known to be right. */
+function answerChrome(req: http.IncomingMessage, res: http.ServerResponse): void {
   if (req.method === "GET" && req.url?.split("?")[0] === "/export/starter-kit.zip") {
     // The tab names its project; without one, the project shown last.
     const id = new URL(req.url, "http://local").searchParams.get("project") ?? projects.active?.id ?? "";
@@ -171,7 +209,7 @@ chromeServer.on("request", (req, res) => {
     return;
   }
   chromeGuard(req, res, () => chromeVite.middlewares(req, res));
-});
+}
 
 /** True while a folder dialog is open: one at a time. */
 let picking = false;
@@ -345,7 +383,7 @@ async function verificationKit(
 
 chromeServer.on("upgrade", (req, socket, head) => {
   if (req.url?.split("?")[0] !== "/bridge") return; // Vite's HMR socket handles its own upgrades.
-  if (!chromeOrigins.includes(req.headers.origin ?? "")) {
+  if (!chromeOrigins.includes(req.headers.origin ?? "") || !hasAccess(req, network)) {
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
     return;
@@ -710,8 +748,12 @@ chromeServer.once("error", (error) => {
   exitIfPortInUse(error);
   throw error;
 });
-chromeServer.listen(port, host, () => {
+chromeServer.listen(port, network.listen, () => {
   console.log(`Basis is running at http://localhost:${port}`);
+  if (network.accessToken)
+    console.log(
+      `Listening on ${network.listen} for ${network.hosts.join(", ")}; the pages ask for BASIS_ACCESS_TOKEN.`,
+    );
   if (apiOptions.token) console.log(`The API answers at http://localhost:${port}${API_PATH} with BASIS_API_TOKEN.`);
   console.log(`Project: ${projects.active!.name} (${projects.active!.dir})`);
 });

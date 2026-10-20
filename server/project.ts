@@ -1,6 +1,7 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import type { Duplex } from "node:stream";
 import type * as acp from "@agentclientprotocol/sdk";
 import { createServer as createVite, type Connect, type ViteDevServer } from "vite";
 import { SOURCE_FOLDERS } from "../shared/frame.ts";
@@ -8,6 +9,7 @@ import type { AgentId, ProjectEntry, ServerMessage } from "../shared/protocol.ts
 import { widthList, type Widths } from "../shared/widths.ts";
 import { AgentHost } from "./agent.ts";
 import { BackgroundPreview, pageForFiles } from "./background.ts";
+import { hasAccess, isAllowedHost, refuseAccess, type Network } from "./network.ts";
 import { PreviewHold } from "./hold.ts";
 import { PreviewReports } from "./previews.ts";
 import { rebasePlugin } from "./rebase.ts";
@@ -18,7 +20,8 @@ import { Workspace } from "./workspace.ts";
 export interface ProjectOptions {
   /** Where Basis is installed: Vite's root for the preview. */
   root: string;
-  host: string;
+  /** Where Basis listens, and who may use it (server/network.ts). */
+  network: Network;
   /** The preview's port; 0 takes a free one. */
   previewPort: number;
   /** The project's slot among those open (server/open-projects.ts): its own Vite cache, as projects run at once. */
@@ -34,18 +37,20 @@ export interface ProjectOptions {
   broadcast: (message: ServerMessage) => void;
 }
 
-/**
- * True when a request names Basis' own host and port. A web page that points its own name at 127.0.0.1 (DNS
- * rebinding) sends its name instead, so it cannot read Basis' pages or the starter kit.
- */
-export function isLocalHost(req: http.IncomingMessage, port: number): boolean {
-  return req.headers.host === `localhost:${port}` || req.headers.host === `127.0.0.1:${port}`;
-}
-
-/** Answers 403 to requests for another host (see isLocalHost). */
+/** Answers 403 to requests for a host Basis does not answer to (isAllowedHost in server/network.ts). */
 export function refuseHost(res: http.ServerResponse): void {
   res.writeHead(403, { "Content-Type": "text/plain" });
-  res.end("Basis only answers on localhost.");
+  res.end("Basis does not answer to this host name. On another machine, list it in BASIS_HOSTS.");
+}
+
+/**
+ * Closes upgrade requests (Vite's hot reload socket) from a host Basis does not answer to, or without access.
+ * Added before Vite's own listener, which then finds the socket closed.
+ */
+export function guardUpgrades(server: http.Server, network: Network, port: () => number): void {
+  server.prependListener("upgrade", (req: http.IncomingMessage, socket: Duplex) => {
+    if (!isAllowedHost(req, network, port()) || !hasAccess(req, network)) socket.destroy();
+  });
 }
 
 /** Answers 404 for page entries that do not belong on this origin; everything else falls through. */
@@ -123,7 +128,7 @@ export class OpenProject {
     try {
       await new Promise<void>((resolve, reject) => {
         previewServer.once("error", reject);
-        previewServer.listen(options.previewPort, options.host, resolve);
+        previewServer.listen(options.previewPort, options.network.listen, resolve);
       });
       const previewPort = (previewServer.address() as AddressInfo).port;
       return await OpenProject.setUp(entry, options, workspace, previewServer, previewPort);
@@ -142,7 +147,7 @@ export class OpenProject {
     previewPort: number,
   ): Promise<OpenProject> {
     const { root, broadcast } = options;
-    const screenshots = new Screenshots(`http://${options.host}:${previewPort}/capture.html`, {
+    const screenshots = new Screenshots(`http://${options.network.self}:${previewPort}/capture.html`, {
       widths: () => widthList(workspace.widths),
     });
     const views = new ViewStability(entry.dir, screenshots, () => workspace.state.design);
@@ -194,8 +199,10 @@ export class OpenProject {
     // New specimen files must be noticed even when the workspace lives outside this repo.
     previewVite.watcher.add(SOURCE_FOLDERS.map((folder) => path.join(entry.dir, folder)));
     const previewGuard = guard((url) => url === "/" || url === "/index.html");
+    guardUpgrades(previewServer, options.network, () => previewPort);
     previewServer.on("request", (req, res) => {
-      if (!isLocalHost(req, previewPort)) return refuseHost(res);
+      if (!isAllowedHost(req, options.network, previewPort)) return refuseHost(res);
+      if (!hasAccess(req, options.network)) return refuseAccess(req, res, false);
       // The capture page (capture.html) reads the current tokens from here, as the kit's copy reads its own file.
       if (req.method === "GET" && req.url?.split("?")[0] === "/design.json") {
         res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });

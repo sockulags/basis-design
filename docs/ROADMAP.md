@@ -252,6 +252,25 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: Basis in a container (`Dockerfile`, `server/network.ts`). Basis listened on 127.0.0.1 and answered
+  only to `localhost`, because the agent it drives runs commands; a container needs it reachable, which made
+  access the core of the change. `HOST` chooses the address, and anything but loopback refuses to start without
+  `BASIS_ACCESS_TOKEN` (16 characters or more). The pages then send a browser to `/login`, a form whose post
+  (only from Basis' own origin) sets an HttpOnly, SameSite=Strict cookie holding a hash of the token. The chrome,
+  the bridge, every preview and Vite's hot reload sockets check it; cookies ignore ports, so the previews on their
+  own ports get it too, while staying other origins for the sandbox. Basis' own requests (its headless browser,
+  the agent's tool server) come from loopback to a loopback name and pass, and Basis reaches itself at 127.0.0.1
+  when it listens on every address. `BASIS_HOSTS` adds host names to the localhost-only check, which still guards
+  against DNS rebinding, and to the origins the bridge and `frame-ancestors` allow (not `[::1]`, which CSP cannot
+  name). `BASIS_PREVIEW_PORTS` gives open projects ports in a row so they can be published. A separate token for
+  the pages rather than the API's: a pipeline's token need not open the app to a person. An ingress that routes by
+  host name alone is left for later, since the preview is found by port. Verified: unit tests for the settings,
+  hosts, cookie and login; the full unit and e2e suites in the usual local mode; and a container built from the
+  Dockerfile (4.1 GB, node:22 with Chromium's libraries), where from outside a page without login went to
+  `/login`, a preview answered 401, another host 403 and a login from another origin 403; after logging in at
+  `/login` in a browser the app and the gallery loaded with the agent ready, the API listed the views and built a
+  kit of one view with the container's Playwright Chromium on Linux (9 shots).
+
 - 2026-10-20: An API for pipelines (`server/api.ts`). The-factory (a board that runs cards through workflow steps
   with agents, gates and plugin hooks, in Kubernetes) could use Basis as a step: an enter hook asks Basis for a
   view for the card's issue, the gate is a person reviewing it in Basis, and an exit hook fetches the kit into the
