@@ -1,0 +1,14 @@
+{
+  "name": "basis-design",
+  "description": "Basis: design systems and product screens made with your own coding agent, and the checks that keep implementations true to them.",
+  "owner": { "name": "Lucas Skog" },
+  "plugins": [
+    {
+      "name": "basis",
+      "source": "./plugins/basis",
+      "description": "The product's design system, screens designed for an issue in Basis, their verification kit, and basis-diff.",
+      "category": "design",
+      "tags": ["design-system", "verification", "screens"]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "basis",
+  "displayName": "Basis",
+  "description": "Design with Basis from any repo: the product's design system, screens designed for an issue, their verification kit, and basis-diff, Basis' own check that the product matches the design.",
+  "version": "0.1.0",
+  "author": { "name": "Lucas Skog" },
+  "homepage": "https://github.com/sockulags/basis-design",
+  "repository": "https://github.com/sockulags/basis-design",
+  "license": "Apache-2.0",
+  "keywords": ["design-system", "design-tokens", "visual-regression", "screens", "verification"],
+  "userConfig": {
+    "basis_url": {
+      "type": "string",
+      "title": "Basis URL",
+      "description": "Where Basis answers. Leave empty for a Basis on this machine (http://localhost:5320).",
+      "required": false
+    },
+    "basis_api_token": {
+      "type": "string",
+      "title": "Basis API token",
+      "description": "Basis' BASIS_API_TOKEN. Leave empty for a Basis on this machine, which keeps its own in ~/.basis/api-token.",
+      "sensitive": true,
+      "required": false
+    },
+    "basis_project": {
+      "type": "string",
+      "title": "Basis project",
+      "description": "The project that designs for this product, by id or name. Leave empty when Basis has one project.",
+      "required": false
+    }
+  }
+}

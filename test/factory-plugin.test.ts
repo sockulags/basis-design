@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DEFAULT_DESIGN } from "../shared/design.ts";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -53,7 +54,11 @@ describe("the Factory plugin against Basis' API", () => {
       prompt: async (text) => void turns.push(text),
     },
     screenshots: { list: async () => list() },
-    workspace: { review: null as { show: { specimen: string }[]; files: string[] } | null },
+    workspace: {
+      review: null as { show: { specimen: string }[]; files: string[] } | null,
+      dir: "/nowhere",
+      state: { design: DEFAULT_DESIGN },
+    },
   };
   const options: ApiOptions = {
     token: TOKEN,

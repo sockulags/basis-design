@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DEFAULT_DESIGN } from "../shared/design.ts";
 import http from "node:http";
 import { after, before, describe, test } from "node:test";
 import { strToU8, unzipSync, zipSync } from "fflate";
@@ -37,7 +38,11 @@ function fakeProject(views: string[]) {
       prompt: async (text, { instruction }, { thread }) => void turns.push({ text, instruction, thread }),
     },
     screenshots: { list: async () => list },
-    workspace: { review: null as { show: { specimen: string }[]; files: string[] } | null },
+    workspace: {
+      review: null as { show: { specimen: string }[]; files: string[] } | null,
+      dir: "/nowhere",
+      state: { design: DEFAULT_DESIGN },
+    },
   };
   return { project, turns };
 }
@@ -244,6 +249,17 @@ describe("the pipeline API", () => {
     } finally {
       await rm(storeDir, { recursive: true, force: true });
     }
+  });
+
+  test("gives the design system: tokens as JSON and CSS variables, and the contracts there are", async () => {
+    const design = (await (await call("/v1/projects/p1/design")).json()) as {
+      name: string;
+      css: string;
+      contracts: object;
+    };
+    assert.equal(design.name, DEFAULT_DESIGN.name);
+    assert.match(design.css, /--color-primary:/);
+    assert.deepEqual(design.contracts, {});
   });
 
   test("is off without a token", async () => {

@@ -252,6 +252,22 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: Basis for any coding agent: an MCP server, a Claude Code plugin and a marketplace. The server
+  (`plugins/basis/mcp/basis-mcp.mjs`) has no dependencies, like the agent's own tool server, so it runs from the
+  plugin's folder with Node wherever the plugin is installed; it unpacks the kit itself (zlib), refusing files
+  outside the folder Basis names. Its settings come from the environment (`BASIS_URL`, `BASIS_API_TOKEN`,
+  `BASIS_PROJECT`), falling back to localhost and the token in `~/.basis/api-token`, and it treats an empty value
+  or an unfilled `${…}` placeholder as none, since Claude Code passes a `userConfig` value the user left empty
+  as its placeholder. A new `GET /v1/projects/:project/design` gives the tokens (JSON and CSS variables) and the
+  component and pattern contracts, for the `basis-tokens` skill. The plugin (`plugins/basis/`) bundles the
+  server through `.mcp.json` with `${CLAUDE_PLUGIN_ROOT}` and optional `userConfig` settings, and four skills:
+  basis-design, basis-verify (one skill for every kit, finding its folder), basis-tokens and basis-diff. The
+  marketplace is `.claude-plugin/marketplace.json` in this repo, so it installs with
+  `/plugin install basis --marketplace sockulags/basis-design`. `claude plugin validate` passes for both, the
+  plugin with `--strict`; the server is tested as a process over JSON-RPC against the API; and Claude Code with
+  the plugin loaded from its folder listed the local Basis' projects and PV-12's status from the token file,
+  without settings.
+
 - 2026-10-20: basis-diff (`server/diff.ts`). Proof that an implementation looks like its view, which the agent
   that built it cannot change: the kit's own loop runs where the agent can edit the reference images, the
   exceptions and the scripts. The agent sends only URLs (`POST …/views/:view/verify`, the kit's targets format,

@@ -1,9 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import type http from "node:http";
+import path from "node:path";
 import { kitFolder, viewKitFolder, type CaptureList } from "../shared/capture.ts";
 import { isComponentName, pageById, toComponentName } from "../shared/frame.ts";
 import { issueKey, issueViewId } from "../shared/issue.ts";
+import type { Design } from "../shared/design.ts";
 import type { ProjectEntry, VerifyKitSummary } from "../shared/protocol.ts";
+import { exportCss } from "../shared/tokens.ts";
 import { viewChangesInstruction, viewInstruction } from "./brief.ts";
 import { checkDiffRequest, type DiffReport, type DiffRequest, type Verifications } from "./diff.ts";
 import type { KitFile } from "./verify.ts";
@@ -14,6 +18,8 @@ import type { KitFile } from "./verify.ts";
  * with the token in BASIS_API_TOKEN (`Authorization: Bearer <token>`), and is off without one.
  *
  *   GET  /v1/projects                         the projects
+ *   GET  /v1/projects/:project/design         the design system: tokens (JSON and CSS variables) and the
+ *                                             contracts of its components and patterns
  *   GET  /v1/projects/:project/views          the project's views with their screens
  *   GET  /v1/projects/:project/views/:view    one view, whether the project's agent is working, and whether
  *                                             an open review shows it
@@ -42,7 +48,12 @@ export interface ApiProject {
   };
   screenshots: { list(): Promise<CaptureList> };
   /** The open review, if any: what it shows and the files it changed. */
-  workspace: { review: { show: { specimen: string }[]; files: string[] } | null };
+  workspace: {
+    review: { show: { specimen: string }[]; files: string[] } | null;
+    /** The workspace folder, where the design's contracts live. */
+    dir: string;
+    state: { design: Design };
+  };
 }
 
 export interface ApiOptions {
@@ -74,6 +85,14 @@ class ApiError extends Error {
 }
 
 const MAX_BODY = 1024 * 1024;
+
+/** The files that hold the props every component and pattern accepts: the baseline's and the design's own. */
+const CONTRACT_FILES = [
+  ".basis/contracts.ts",
+  "components/contracts.ts",
+  ".basis/pattern-contracts.ts",
+  "patterns/contracts.ts",
+];
 
 /** Whether `header` carries the token, compared in constant time. */
 function authorized(header: string | undefined, token: string): boolean {
@@ -179,6 +198,15 @@ async function route(
   const project = await options.open(entry);
   const [, , what, id] = parts;
 
+  if (what === "design" && parts.length === 3 && method === "GET") {
+    const design = project.workspace.state.design;
+    const contracts: Record<string, string> = {};
+    for (const file of CONTRACT_FILES) {
+      const text = await readFile(path.join(project.workspace.dir, file), "utf8").catch(() => null);
+      if (text !== null) contracts[file] = text;
+    }
+    return { body: { name: design.name, tokens: design, css: exportCss(design), contracts } };
+  }
   if (what === "views" && parts.length === 3 && method === "GET") {
     return { body: { views: viewsOf(await project.screenshots.list()) } };
   }

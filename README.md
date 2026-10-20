@@ -140,6 +140,18 @@ Every `components/*.specimen.tsx` file becomes a gallery section and a sidebar e
 - **Verification kit:** proof that a feature was built as its view shows. The **Verification kit** tab photographs every screen of the views you check (all of them until you pick some; the choice is kept per project) at fixed widths (the project's Mobile, Tablet and Desktop widths, full page, unless the view's flow block sets `capture`) and packages the screenshots with a static, clickable copy of the design and two scripts, as a zip or into a folder in the product's repo (the linked repo by default): `basis-verify/`, or `basis-verify/<view>/` for a view picked out of several, so kits of different views or issues never replace each other. The agent that implements the feature runs `capture.mjs` to photograph the design and its implementation on the same machine with the same settings, and `compare.mjs` to compare them pixel for pixel, aiming at 0% difference. Parts allowed to differ are named exceptions in `exceptions.json`, each with a reason: a region of the image, or elements by CSS selector. Views show images (photos, avatars, illustrations) as placeholders of their own in `views/assets/`, marked `data-basis-media`; the kit leaves those elements out of the comparison on both sides but still fails a shot whose image is missing, moved or resized, so the product's real photos pass when they fill the same boxes. A screen that loads images from another site is reported when the kit is built. Basis takes the screenshots with Playwright's Chromium when it is installed (`npx playwright install chromium`), otherwise with Chrome or Edge; each screen is captured twice, and screens that render differently each time are reported, since nothing can match them.
 - **A prompt for the implementing agent:** the verification kit also tells the coding agent that builds the views in the product what to build and how to check it. `PROMPT.md` states the goal, where everything in the kit is, each view with its screens, and the loop: capture the design and the product, compare, read the diff images, fix and repeat, with the rules for images, exceptions and when to stop and report. Each view gets notes in `views/<view>.md`, written from its source without an agent turn: its screens and their shots, which screen each button leads to (from the view's `go()` calls), the components, patterns and data it uses, and the design's tokens it reads with their values. The source of the views and of what they use is in `source/`. After a build, **Copy prompt** puts a few lines on the clipboard that point the agent at `basis-verify/PROMPT.md` and name the view to build (pick one, or all). The kit carries the same loop as a Claude Code skill (`SKILL.md`), which writing into the product's folder can install as `.claude/skills/basis-verify/SKILL.md`; Basis replaces that file later only while it still carries Basis' marker. The kit's README has the same instructions as a paragraph for `AGENTS.md`.
 
+## Use it from any coding agent
+
+The Basis plugin gives coding agents in any repo the product's design system, screens designed for an issue,
+their verification kit and basis-diff, through an MCP server and four skills. In Claude Code:
+
+```text
+/plugin install basis --marketplace sockulags/basis-design
+```
+
+For a Basis on your machine it needs no settings. [plugins/basis/](plugins/basis/README.md) covers the settings
+for a team's Basis, and Codex and other agents.
+
 ## The API
 
 A pipeline can use Basis as a step: have a view designed for an issue, wait for it, and fetch its verification

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "basis": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/basis-mcp.mjs"],
+      "env": {
+        "BASIS_URL": "${user_config.basis_url}",
+        "BASIS_API_TOKEN": "${user_config.basis_api_token}",
+        "BASIS_PROJECT": "${user_config.basis_project}"
+      }
+    }
+  }
+}
