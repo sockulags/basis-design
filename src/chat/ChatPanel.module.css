@@ -39,7 +39,6 @@
   align-items: center;
   gap: 6px;
   color: var(--app-muted);
-  font-family: var(--app-mono);
   font-size: 11px;
 }
 
@@ -141,7 +140,6 @@
   border-radius: 999px;
   background: var(--app-ink-3);
   color: var(--app-muted);
-  font-family: var(--app-mono);
   font-size: 10px;
   font-weight: 500;
 }
@@ -263,7 +261,6 @@
   display: block;
   margin-bottom: 4px;
   color: var(--app-subtle);
-  font-family: var(--app-mono);
   font-size: 10.5px;
 }
 
@@ -595,7 +592,6 @@
   margin: 6px 0 0;
   padding-left: 16px;
   color: var(--app-muted);
-  font-family: var(--app-mono);
   font-size: 11px;
 }
 
@@ -613,7 +609,6 @@
   margin: 6px 0 8px;
   padding-left: 16px;
   color: var(--app-muted);
-  font-family: var(--app-mono);
   font-size: 11px;
 }
 
@@ -704,7 +699,6 @@
   border-radius: 6px;
   background: var(--app-ink);
   color: var(--app-text);
-  font-family: var(--app-mono);
   font-size: 11px;
 }
 
@@ -895,7 +889,6 @@
   background: transparent;
   color: var(--app-muted);
   font: inherit;
-  font-family: var(--app-mono);
   font-size: 11px;
   cursor: pointer;
   transition:
@@ -925,7 +918,6 @@
   gap: 8px;
   margin-bottom: 4px;
   color: var(--app-subtle);
-  font-family: var(--app-mono);
   font-size: 10.5px;
 }
 

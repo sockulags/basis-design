@@ -48,7 +48,7 @@
   padding-bottom: var(--space-1);
   border-bottom: var(--border-thin) dashed var(--color-border);
   color: var(--color-text-subtle);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
 }
 
@@ -343,4 +343,15 @@
   color: var(--color-text-subtle);
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+/* The pairs that pass, folded under the ones that fail (Foundations.tsx). */
+.contrastPassing > summary {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.contrastPassing[open] > summary {
+  margin-bottom: var(--space-3);
 }

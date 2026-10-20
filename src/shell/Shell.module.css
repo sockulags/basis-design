@@ -180,7 +180,7 @@
   left: 10px;
   height: 2px;
   border-radius: 2px;
-  background: var(--app-signal);
+  background: var(--app-text);
 }
 
 .actions {
@@ -384,9 +384,8 @@
   margin-left: 6px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--app-signal) 18%, transparent);
-  color: var(--app-signal);
-  font-family: var(--app-mono);
+  background: var(--app-ink-3);
+  color: var(--app-text);
   font-size: 10px;
   font-weight: 500;
 }
@@ -394,7 +393,6 @@
 .muted {
   overflow: hidden;
   color: var(--app-subtle);
-  font-family: var(--app-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -948,8 +946,8 @@ a.primaryButton {
 }
 
 .repoChip[aria-pressed="true"] {
-  border-color: var(--app-signal);
-  color: var(--app-signal);
+  border-color: var(--app-muted);
+  color: var(--app-text);
 }
 
 .createFields textarea {
@@ -972,7 +970,7 @@ a.primaryButton {
 }
 
 .versionSelect select {
-  max-width: 320px;
+  max-width: 240px;
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--app-line);
@@ -1013,8 +1011,8 @@ a.primaryButton {
 }
 
 .reviewChip[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--app-signal) 50%, var(--app-line));
-  background: color-mix(in srgb, var(--app-signal) 12%, transparent);
+  border-color: var(--app-muted);
+  background: var(--app-ink-3);
   color: var(--app-text);
 }
 
@@ -1077,7 +1075,6 @@ a.primaryButton {
   border-radius: 999px;
   background: var(--app-ink-3);
   color: var(--app-muted);
-  font-family: var(--app-mono);
   font-size: 10px;
   font-weight: 500;
 }
@@ -1298,4 +1295,85 @@ a.primaryButton {
 
 .kitViewCheck span {
   overflow-wrap: anywhere;
+}
+
+/* The review bar (ReviewBar.tsx): one row that keeps its shape; the title gives way first. */
+.reviewBar {
+  flex: none;
+  max-height: 45vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--app-line);
+  background: var(--app-ink-2);
+  color: var(--app-text);
+}
+
+.reviewRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--app-bar-height);
+  padding: 6px 14px;
+  background: inherit;
+}
+
+.reviewText {
+  display: grid;
+  flex: 1 1 160px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.reviewText > strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewStatus {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewChanges {
+  flex: none;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--app-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reviewChanges:hover:not(:disabled) {
+  background: var(--app-ink-3);
+}
+
+.reviewChanges:disabled {
+  color: var(--app-subtle);
+  cursor: default;
+}
+
+.reviewSpacer {
+  flex: 0 1 8px;
+}
+
+.reviewDiscard {
+  flex: none;
+}
+
+.reviewRow > .themeToggle,
+.reviewRow > label {
+  flex: none;
 }

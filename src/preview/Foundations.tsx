@@ -65,14 +65,49 @@ function Ratio({
         Aa
       </span>
       {ratio.toFixed(2)}
-      <span className={styles.ratioBadge}>{pass ? "Pass" : "Fail"}</span>
+      {!pass && <span className={styles.ratioBadge}>Fail</span>}
     </span>
+  );
+}
+
+type ContrastPair = (typeof CONTRAST_PAIRS)[number];
+
+/** Whether a pair reaches its target in both themes; unresolved colours count as passing until they resolve. */
+function pairPasses(pair: ContrastPair, resolved: ReturnType<typeof useResolvedColors>): boolean {
+  return [resolved.light, resolved.dark].every((theme) => {
+    const a = theme[pair.fg];
+    const b = theme[pair.bg];
+    return !a || !b || contrast(a, b) >= pair.target;
+  });
+}
+
+function ContrastTable({ pairs, resolved }: { pairs: ContrastPair[]; resolved: ReturnType<typeof useResolvedColors> }) {
+  return (
+    <div className={styles.contrastTable}>
+      <span className={styles.th}>Pair</span>
+      <span className={styles.th}>Target</span>
+      <span className={styles.th}>Light</span>
+      <span className={styles.th}>Dark</span>
+      {pairs.map((pair) => (
+        <div key={`${pair.fg}-${pair.bg}`} className={styles.contrastRow}>
+          <span className={styles.pair}>
+            {pair.fg} <span className={styles.on}>on</span> {pair.bg}
+          </span>
+          <span className={styles.target}>{pair.target}:1</span>
+          <Ratio resolved={resolved.light} {...pair} />
+          <Ratio resolved={resolved.dark} {...pair} />
+        </div>
+      ))}
+    </div>
   );
 }
 
 export function Colors({ design, onAsk }: FoundationProps) {
   const resolved = useResolvedColors(design);
   const failures = contrastFailures(resolved);
+  // What needs attention first; the pairs that pass are there on request.
+  const failing = CONTRAST_PAIRS.filter((pair) => !pairPasses(pair, resolved));
+  const passing = CONTRAST_PAIRS.filter((pair) => pairPasses(pair, resolved));
 
   return (
     <Section
@@ -120,22 +155,17 @@ export function Colors({ design, onAsk }: FoundationProps) {
           )
         }
       >
-        <div className={styles.contrastTable}>
-          <span className={styles.th}>Pair</span>
-          <span className={styles.th}>Target</span>
-          <span className={styles.th}>Light</span>
-          <span className={styles.th}>Dark</span>
-          {CONTRAST_PAIRS.map((pair) => (
-            <div key={`${pair.fg}-${pair.bg}`} className={styles.contrastRow}>
-              <span className={styles.pair}>
-                {pair.fg} <span className={styles.on}>on</span> {pair.bg}
-              </span>
-              <span className={styles.target}>{pair.target}:1</span>
-              <Ratio resolved={resolved.light} {...pair} />
-              <Ratio resolved={resolved.dark} {...pair} />
-            </div>
-          ))}
-        </div>
+        {failing.length > 0 && <ContrastTable pairs={failing} resolved={resolved} />}
+        {passing.length > 0 && (
+          <details className={styles.contrastPassing}>
+            <summary>
+              {failing.length === 0
+                ? `All ${passing.length} pairs reach their target in both themes. Show them`
+                : `Show the ${passing.length} pairs that pass`}
+            </summary>
+            <ContrastTable pairs={passing} resolved={resolved} />
+          </details>
+        )}
       </Group>
     </Section>
   );

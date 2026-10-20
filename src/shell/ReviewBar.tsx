@@ -33,7 +33,18 @@ interface ReviewBarProps {
 const LIST_LIMIT = 60;
 const CONFIRM_MS = 3000;
 
-/** The open review: what it is about, its iterations and changes, and the way out (approve or discard). */
+/** How the preview shows the review: three ways of comparing, or the gallery around it. */
+const SHOW = [
+  { value: "split", label: "Side by side" },
+  { value: "stacked", label: "Stacked" },
+  { value: "blink", label: "Blink" },
+  { value: "gallery", label: "Gallery" },
+] as const;
+
+/**
+ * The open review, in one row that keeps its shape: what it is about, its iterations and changes, how to look at
+ * it, and, always at the right end in the same order, the way out (discard, then approve, the one filled button).
+ */
 export function ReviewBar(props: ReviewBarProps) {
   const { review, baselineDesign, current, busy, problems, impact, peeks, layout, showing } = props;
   const [expanded, setExpanded] = useState(false);
@@ -67,11 +78,11 @@ export function ReviewBar(props: ReviewBarProps) {
   ].filter(Boolean);
 
   return (
-    <div className={styles.inspect} data-review>
-      <div className={styles.inspectRow}>
-        <div className={styles.inspectText}>
-          <strong>Reviewing “{review.title}”</strong>
-          <span className={styles.muted}>
+    <div className={styles.reviewBar} data-review>
+      <div className={styles.reviewRow}>
+        <div className={styles.reviewText}>
+          <strong title={review.title}>Reviewing “{review.title}”</strong>
+          <span className={styles.reviewStatus}>
             {alternatives && !alternatives.done
               ? `The agent is making alternative ${alternatives.options.length + 1} of ${alternatives.count}…`
               : busy
@@ -80,7 +91,7 @@ export function ReviewBar(props: ReviewBarProps) {
                   ? `${alternatives.count} alternatives for “${alternatives.prompt.slice(0, 60)}”. Pick one to continue with.`
                   : steps.length === 0
                     ? `Started ${when(review.startedAt)}`
-                    : `Iteration ${steps.length} · ${when(latest!.at)}. Keep asking in the chat, then approve.`}
+                    : `Iteration ${steps.length} · ${when(latest!.at)} · keep asking in the chat, then approve`}
           </span>
         </div>
         {steps.length > 1 && (
@@ -99,33 +110,37 @@ export function ReviewBar(props: ReviewBarProps) {
         )}
         <button
           type="button"
-          className={styles.inspectToggle}
+          className={styles.reviewChanges}
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
           disabled={summary.length === 0}
         >
           {summary.length ? `${summary.join(" · ")} changed` : "No changes yet"}
+          {summary.length > 0 && <span aria-hidden="true">{expanded ? " ▴" : " ▾"}</span>}
         </button>
-        <div className={styles.themeToggle} role="group" aria-label="Preview">
-          <button type="button" aria-pressed={showing} onClick={() => props.onShowing(true)}>
-            Review
-          </button>
-          <button type="button" aria-pressed={!showing} onClick={() => props.onShowing(false)}>
-            Gallery
-          </button>
-        </div>
-        {showing && (
-          <div className={styles.themeToggle} role="group" aria-label="Review layout">
-            {(["split", "stacked", "blink"] as const).map((value) => (
-              <button key={value} type="button" aria-pressed={layout === value} onClick={() => props.onLayout(value)}>
-                {value === "split" ? "Side by side" : value === "stacked" ? "Stacked" : "Blink"}
+        <div className={styles.themeToggle} role="group" aria-label="Show">
+          {SHOW.map(({ value, label }) => {
+            const active = value === "gallery" ? !showing : showing && layout === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  if (value === "gallery") return props.onShowing(false);
+                  props.onLayout(value);
+                  props.onShowing(true);
+                }}
+              >
+                {label}
               </button>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
+        <span className={styles.reviewSpacer} />
         <button
           type="button"
-          className={styles.chromeButton}
+          className={`${styles.chromeButton} ${styles.reviewDiscard}`}
           data-confirming={confirming || undefined}
           onClick={() => {
             if (!confirming) return setConfirming(true);
@@ -148,7 +163,7 @@ export function ReviewBar(props: ReviewBarProps) {
       </div>
       {alternatives?.done && (
         <div className={styles.reviewImpact}>
-          <span className={styles.muted}>Continue with:</span>
+          <span className={styles.reviewStatus}>Continue with:</span>
           {alternatives.options.map((option, index) => (
             <button
               key={option.label}
@@ -169,7 +184,7 @@ export function ReviewBar(props: ReviewBarProps) {
       )}
       {impact.length > 0 && (
         <div className={styles.reviewImpact}>
-          <span className={styles.muted}>Also changed:</span>
+          <span className={styles.reviewStatus}>Also changed:</span>
           {impact.map((section) => (
             <button
               key={section.id}

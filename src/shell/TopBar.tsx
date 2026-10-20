@@ -74,7 +74,7 @@ export function TopBar({
           ))}
         </div>
         {history}
-        <button type="button" className={styles.primaryButton} onClick={onExport} disabled={!canExport}>
+        <button type="button" className={styles.chromeButton} onClick={onExport} disabled={!canExport}>
           Export
         </button>
       </div>

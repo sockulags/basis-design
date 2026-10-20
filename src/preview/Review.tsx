@@ -367,6 +367,7 @@ function PastPane({ side, version, missing, rebasedNote, live, target, label, th
       data-side={side.key}
       data-theme={theme}
       data-hidden={hidden || undefined}
+      data-empty={past.state === "none" || undefined}
       onSubmit={preventSubmit}
     >
       <p className={styles.paneLabel}>

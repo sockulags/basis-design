@@ -70,13 +70,15 @@ test("a project in the background gets its render errors and checks from a headl
   await expect(projectButton(page)).toContainText("Broken finished in the background", { timeout: 60_000 });
 
   await switchTo(page, "Broken");
-  const report = page.getByText("Your last change left problems");
+  // What Basis told the agent is a line in the chat, opened to read it all.
+  const report = page.locator("details", { hasText: "Your last change left problems" });
   await expect(report).toBeVisible();
+  await report.locator("summary").click();
   await expect(report).toContainText("The preview fails to render");
   await expect(report).toContainText("E2E broken block");
   await expect(report).toContainText("accessibility checks");
   // The fix-up turn repaired both, so no second report followed.
-  await expect(page.getByText("Your last change left problems")).toHaveCount(1);
+  await expect(report).toHaveCount(1);
 });
 
 test("a project waiting for an approval in the background shows outside the menu", async ({ page, basis }) => {
