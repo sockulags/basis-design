@@ -252,6 +252,17 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: The verification kit of chosen views. The Verification kit tab lists the design's views as
+  checkboxes with one for all of them, and both Build .zip and Write kit build the kit of the checked ones
+  (`views` in the `verify-kit` message; `captureViews` skips the rest). Every view is checked until the user picks
+  some, so a view added later is in the kit too; the choice is kept per project in the browser
+  (`useViewChoice`), chosen views that are gone drop out, and with none left every view is checked again. The
+  kit's notes, source, targets and prompt follow the views in it, while `design/` stays the whole design, since
+  the views run in it. Writing a kit of some views into the product replaces the views a kit there had, rather
+  than merging them: a kit is a snapshot of one design, and screens of views left out could be stale against it.
+  Verified with an e2e test (two views, one chosen, the zip holds only it, and the choice is there when the
+  dialog opens again) and the existing kit tests.
+
 - 2026-10-20: No "don't ask again" for Claude. Choosing "Yes, and don't ask again for … commands" in a question
   from Claude made claude-agent-acp 0.92.0 answer with a rule for `localSettings`, which Claude Code wrote into
   the workspace's `.claude/settings.local.json` (found in a real workspace with three rules). Basis opens Claude

@@ -385,7 +385,12 @@ export function Workbench({
           result={state.exportResult}
           send={send}
           onClose={() => setExporting(false)}
-          verify={{ repo: state.project?.repo, progress: state.verifyProgress, result: state.verifyResult }}
+          verify={{
+            repo: state.project?.repo,
+            views: sections.filter((section) => section.page === "views").map(({ id, title }) => ({ id, title })),
+            progress: state.verifyProgress,
+            result: state.verifyResult,
+          }}
         />
       )}
     </div>

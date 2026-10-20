@@ -5,7 +5,7 @@ import { exportCss, exportJson, exportTailwind } from "../../shared/tokens.ts";
 import { BrowseButton } from "./FolderField.tsx";
 import { readPref, writePref } from "./prefs.ts";
 import styles from "./Shell.module.css";
-import { VerifyKit, type VerifyKitProps } from "./VerifyKit.tsx";
+import { useViewChoice, VerifyKit, type VerifyKitProps } from "./VerifyKit.tsx";
 
 const FORMATS = [
   { id: "css", label: "CSS variables", file: "tokens.css", type: "text/css", build: exportCss },
@@ -26,7 +26,7 @@ interface ExportDialogProps {
   result: ExportWriteResult | null;
   send: (message: ClientMessage) => void;
   onClose: () => void;
-  verify: Omit<VerifyKitProps, "workspace" | "send">;
+  verify: Omit<VerifyKitProps, "workspace" | "send" | "choice">;
 }
 
 /** The folder the kit was last written to, remembered per project so one never writes into another's. */
@@ -164,6 +164,8 @@ export function ExportDialog({
 }: ExportDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<Tab>("kit");
+  // Here rather than in the tab, since the footer's Build .zip builds the chosen views too.
+  const viewChoice = useViewChoice(workspace, verify.views);
   const [copied, setCopied] = useState(false);
   const format = FORMATS.find((item) => item.id === tab);
   const code = useMemo(() => format?.build(design) ?? "", [format, design]);
@@ -230,7 +232,7 @@ export function ExportDialog({
         {tab === "kit" ? (
           <StarterKit workspace={workspace} problems={problems} manifest={manifest} result={result} send={send} />
         ) : tab === "verify" ? (
-          <VerifyKit workspace={workspace} send={send} {...verify} />
+          <VerifyKit workspace={workspace} send={send} choice={viewChoice} {...verify} />
         ) : (
           <pre className={styles.code}>{code}</pre>
         )}
@@ -241,8 +243,8 @@ export function ExportDialog({
               <button
                 type="button"
                 className={styles.primaryButton}
-                disabled={verify.progress !== null}
-                onClick={() => send({ type: "verify-kit" })}
+                disabled={verify.progress !== null || (verify.views.length > 0 && viewChoice.chosen.size === 0)}
+                onClick={() => send({ type: "verify-kit", views: viewChoice.request })}
               >
                 {verify.progress ? "Building…" : "Build .zip"}
               </button>

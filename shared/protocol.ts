@@ -321,7 +321,8 @@ export type ClientMessage =
    * Builds the verification kit: into `<project>/basis-verify/` with `project`, else as a zip to download. With
    * `skill`, writing into a folder also installs the kit's SKILL.md in its `.claude/skills/basis-verify/`.
    */
-  | { type: "verify-kit"; project?: string; skill?: boolean }
+  /** `views` names the views to put in the kit; all of them when absent. */
+  | { type: "verify-kit"; project?: string; skill?: boolean; views?: string[] }
   /** Shows another project in this tab; the one it showed goes on in the background. */
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */

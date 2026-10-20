@@ -201,6 +201,48 @@ test("the verification kit captures every screen of the views and runs as a stat
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("unpacked from the .zip");
 });
 
+test("the verification kit holds the views the user chooses, and remembers the choice", async ({ page, basis }) => {
+  await writeFile(
+    path.join(basis.workspace, "views", "Billing.specimen.tsx"),
+    `import { defineSpecimen } from "../components/specimen.ts";
+
+export default defineSpecimen({
+  id: "billing",
+  title: "Billing",
+  group: "Settings",
+  blocks: [{ kind: "flow", screens: [{ id: "plan", label: "Plan", render: () => <main>Your plan</main> }] }],
+});
+`,
+  );
+  await open(page, basis);
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("tab", { name: "Verification kit" }).click();
+  const views = page.getByRole("group", { name: "Views in the kit" });
+  await expect(views.getByRole("checkbox", { name: "All views (2)" })).toBeChecked();
+
+  // Nothing chosen: nothing to build.
+  await views.getByRole("checkbox", { name: "All views (2)" }).uncheck();
+  await expect(views.getByText("Choose at least one view.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Build .zip" })).toBeDisabled();
+
+  await views.getByRole("checkbox", { name: "Billing" }).check();
+  await page.getByRole("button", { name: "Build .zip" }).click();
+  await expect(page.getByText(/Captured \d+ shots? of 1 screen in 1 view/)).toBeVisible({ timeout: 90_000 });
+  const response = await page.request.get(`${basis.url}/export/verification-kit.zip`);
+  const files = unzipSync(new Uint8Array(await response.body()));
+  const manifest = JSON.parse(new TextDecoder().decode(files["basis-verify/basis-verify.json"]));
+  expect(manifest.views.map((view: { id: string }) => view.id)).toEqual(["billing"]);
+  expect(Object.keys(files).some((file) => file.startsWith("basis-verify/screens/team-members/"))).toBe(false);
+  expect(files["basis-verify/views/team-members.md"]).toBeUndefined();
+
+  // The choice is kept for the project the next time the dialog opens.
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("tab", { name: "Verification kit" }).click();
+  await expect(views.getByRole("checkbox", { name: "Billing" })).toBeChecked();
+  await expect(views.getByRole("checkbox", { name: "Team members" })).not.toBeChecked();
+});
+
 test("the starter template has no layout findings, and a broken specimen shows each kind", async ({ page, basis }) => {
   // The preview reports its checks to the chrome; keep the latest report.
   await page.addInitScript(() => {

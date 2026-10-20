@@ -152,20 +152,21 @@ export async function takeShot(
 /**
  * Captures every shot of every view the capture page at `pageUrl` lists. `pageUrl` is the page without a query
  * (".../capture.html" on the preview server, ".../index.html" in the kit's copy of the design). `widths` are the
- * project's, for flows without capture widths of their own.
+ * project's, for flows without capture widths of their own. With `only`, just the views with those ids.
  */
 export async function captureViews(
   pageUrl: string,
   browser: Browser,
   widths: number[],
   onProgress?: (done: number, total: number) => void,
+  only?: string[],
 ): Promise<CaptureResult> {
   const context = await browser.newContext(CAPTURE_CONTEXT);
   try {
     const page = await context.newPage();
     await openCapturePage(page, `${pageUrl}${listQuery(widths)}`);
     const listed = await page.evaluate(() => window.__basisCapture);
-    const views = listed?.views ?? [];
+    const views = (listed?.views ?? []).filter((view) => !only || only.includes(view.id));
     const problems = listed?.problems ?? [];
     const total = views.reduce((sum, view) => sum + view.screens.reduce((count, s) => count + s.shots.length, 0), 0);
     const shots: Shot[] = [];

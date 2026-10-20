@@ -246,6 +246,7 @@ async function verificationKit(
   target: OpenProject,
   project: string | undefined,
   skill: boolean,
+  views: string[] | undefined,
   socket: WebSocket,
 ): Promise<void> {
   if (verifying) {
@@ -259,6 +260,7 @@ async function verificationKit(
       design: target.workspace.state.design,
       workspaceDir: target.workspace.dir,
       widths: widthList(target.widths),
+      views,
       onProgress: (step, done, total) => sendProject(id, { type: "verify-progress", step, done, total }),
     });
     if (project === undefined) {
@@ -575,6 +577,7 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
         project,
         typeof message.project === "string" ? message.project : undefined,
         message.skill === true,
+        Array.isArray(message.views) ? message.views.filter((id) => typeof id === "string") : undefined,
         socket,
       );
       return;

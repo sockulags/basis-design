@@ -220,7 +220,10 @@ component source, patterns and the gallery specimens.
     `base: "./"`), serves it on a free local port, captures it, and returns the kit: `design/`, `screens/`,
     `basis-verify.json` (every shot and the render settings, the media marker, and the remote images a shot
     loads), a `.boxes.json` beside each shot, a README for the implementing agent, and the two scripts from
-    `server/verify-kit/`. Images a view imports are built into `design/assets/` like any Vite asset. The chrome asks for it over the bridge (`verify-kit`), gets
+    `server/verify-kit/`. Images a view imports are built into `design/assets/` like any Vite asset. With `views`
+    (ids, from the Export dialog's checkboxes, `useViewChoice` in `src/shell/VerifyKit.tsx`) only those views are
+    captured, and the notes, source, targets and prompt cover only them; `design/` is always the whole design.
+    Writing such a kit replaces the views a kit there had. The chrome asks for it over the bridge (`verify-kit`), gets
     `verify-progress` and `verify-result` back, and downloads a zip from `GET /export/verification-kit.zip`; or
     the kit is written into `<product>/basis-verify/`, replacing only what Basis generates (`GENERATED`), and with
     `skill` its SKILL.md also into `<product>/.claude/skills/basis-verify/`, over a file there only when it has

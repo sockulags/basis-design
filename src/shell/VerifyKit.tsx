@@ -5,8 +5,17 @@ import { BrowseButton } from "./FolderField.tsx";
 import { readPref, writePref } from "./prefs.ts";
 import styles from "./Shell.module.css";
 
+/** A view of the design, as the Views page lists it. */
+export interface KitView {
+  id: string;
+  title: string;
+}
+
 export interface VerifyKitProps {
   workspace: string;
+  /** The design's views, to choose from. */
+  views: KitView[];
+  choice: ViewChoice;
   /** The product repo the project designs for: where the kit belongs, unless the user chose a folder before. */
   repo: string | undefined;
   progress: { step: string; done?: number; total?: number } | null;
@@ -18,17 +27,60 @@ export interface VerifyKitProps {
 const targetPref = (workspace: string) => `verify-target:${workspace}`;
 /** Whether writing the kit also installs its skill in the product's .claude/skills/, per project. */
 const skillPref = (workspace: string) => `verify-skill:${workspace}`;
+/** The views last chosen for the kit, per project: their ids as JSON, or empty for every view. */
+const viewsPref = (workspace: string) => `verify-views:${workspace}`;
+
+function storedViews(workspace: string): string[] | null {
+  try {
+    const stored: unknown = JSON.parse(readPref(viewsPref(workspace)) || "null");
+    return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Which views go into the kit. */
+export interface ViewChoice {
+  chosen: Set<string>;
+  toggle: (id: string) => void;
+  setAll: (all: boolean) => void;
+  /** The ids to build the kit from, or undefined for every view. */
+  request: string[] | undefined;
+}
+
+/**
+ * The views chosen for the kit, remembered per project. Every view until the user picks some, so views added
+ * later are in the kit too; checking them all goes back to that. Chosen views that are gone are dropped, and when
+ * none of them is left, every view is chosen again.
+ */
+export function useViewChoice(workspace: string, views: KitView[]): ViewChoice {
+  const [stored, setStored] = useState(() => storedViews(workspace));
+  const ids = views.map((view) => view.id);
+  const kept = stored?.filter((id) => ids.includes(id));
+  const chosen = new Set(!kept || (kept.length === 0 && stored!.length > 0) ? ids : kept);
+  const store = (next: string[] | null) => {
+    const value = next && next.length === ids.length ? null : next;
+    setStored(value);
+    writePref(viewsPref(workspace), value ? JSON.stringify(value) : "");
+  };
+  return {
+    chosen,
+    toggle: (id) => store(chosen.has(id) ? [...chosen].filter((other) => other !== id) : [...chosen, id]),
+    setAll: (all) => store(all ? null : []),
+    request: chosen.size === ids.length ? undefined : [...chosen],
+  };
+}
 
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
 /**
- * The verification kit tab of the Export dialog: builds the kit (a runnable copy of the design, screenshots of
- * every view's screens and the scripts that check an implementation against them) as a zip or into the product's
+ * The verification kit tab of the Export dialog: builds the kit (a runnable copy of the design, screenshots of the
+ * chosen views' screens and the scripts that check an implementation against them) as a zip or into the product's
  * folder.
  */
-export function VerifyKit({ workspace, repo, progress, result: latest, send }: VerifyKitProps) {
+export function VerifyKit({ workspace, views, choice, repo, progress, result: latest, send }: VerifyKitProps) {
   const [target, setTarget] = useState(() => readPref(targetPref(workspace)) ?? repo ?? "");
   const [skill, setSkill] = useState(() => readPref(skillPref(workspace)) === "true");
   const [browseError, setBrowseError] = useState<string | null>(null);
@@ -36,20 +88,22 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
   const [stale] = useState(latest);
   const result = latest === stale ? null : latest;
   const busy = progress !== null;
+  const none = views.length > 0 && choice.chosen.size === 0;
 
   const build = (project?: string) => {
     if (project !== undefined) writePref(targetPref(workspace), project);
-    send({ type: "verify-kit", project, skill: project !== undefined && skill });
+    send({ type: "verify-kit", project, skill: project !== undefined && skill, views: choice.request });
   };
 
   return (
     <div className={styles.kit}>
       <p className={styles.kitIntro}>
-        Proof that a feature was built as designed. The kit holds a runnable copy of the design, screenshots of every
-        view's screens at the widths the view asks for, and two scripts: one captures the implementation the same way,
-        the other compares the images pixel for pixel. Give it to the agent that builds the feature; the target is 0%
-        difference, and anything allowed to differ is a named exception.
+        Proof that a feature was built as designed. The kit holds a runnable copy of the design, screenshots of the
+        chosen views' screens at the widths each view asks for, and two scripts: one captures the implementation the
+        same way, the other compares the images pixel for pixel. Give it to the agent that builds the feature; the
+        target is 0% difference, and anything allowed to differ is a named exception.
       </p>
+      {views.length > 0 && <ViewPicker views={views} choice={choice} />}
       <form
         className={styles.kitWrite}
         onSubmit={(event) => {
@@ -72,13 +126,13 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
             onPick={setTarget}
             onError={setBrowseError}
           />
-          <button type="submit" className={styles.chromeButton} disabled={!target.trim() || busy}>
+          <button type="submit" className={styles.chromeButton} disabled={!target.trim() || busy || none}>
             Write kit
           </button>
         </div>
         <span className={styles.kitNote}>
-          The kit goes into <code>basis-verify/</code> there. Writing it again replaces what Basis generated and keeps
-          the project's targets, exceptions and captures.
+          The kit goes into <code>basis-verify/</code> there. Writing it again replaces everything Basis generated
+          there, including views left out this time, and keeps the project's targets, exceptions and captures.
         </span>
         <label className={styles.projectCheck}>
           <input
@@ -105,6 +159,38 @@ export function VerifyKit({ workspace, repo, progress, result: latest, send }: V
       {result && !result.ok && <p className={styles.kitError}>{result.error}</p>}
       {result?.ok && <Summary result={result} />}
     </div>
+  );
+}
+
+/** Checkboxes for the views in the kit, with one for all of them. */
+function ViewPicker({ views, choice }: { views: KitView[]; choice: ViewChoice }) {
+  const all = choice.chosen.size === views.length;
+  return (
+    <fieldset className={styles.kitViews}>
+      <legend>Views in the kit</legend>
+      <label className={styles.kitViewCheck}>
+        <input
+          type="checkbox"
+          checked={all}
+          ref={(input) => {
+            if (input) input.indeterminate = !all && choice.chosen.size > 0;
+          }}
+          onChange={(event) => choice.setAll(event.target.checked)}
+        />
+        <span>
+          All views <span className={styles.muted}>({views.length})</span>
+        </span>
+      </label>
+      <div className={styles.kitViewList}>
+        {views.map((view) => (
+          <label key={view.id} className={styles.kitViewCheck}>
+            <input type="checkbox" checked={choice.chosen.has(view.id)} onChange={() => choice.toggle(view.id)} />
+            <span>{view.title}</span>
+          </label>
+        ))}
+      </div>
+      {choice.chosen.size === 0 && <span className={styles.kitError}>Choose at least one view.</span>}
+    </fieldset>
   );
 }
 

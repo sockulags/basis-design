@@ -143,14 +143,21 @@ export interface BuildKitOptions {
   workspaceDir: string;
   /** The project's widths, narrowest first: the shots of a flow without capture widths of its own. */
   widths: number[];
+  /** The ids of the views to put in the kit; every view when absent. */
+  views?: string[];
   onProgress?: (step: string, done?: number, total?: number) => void;
 }
 
-/** Builds the design, photographs every screen and returns the kit's files with a summary for the user. */
+/**
+ * Builds the design, photographs every screen of the chosen views and returns the kit's files with a summary for
+ * the user. The kit's notes, source, targets and prompt cover those views only; its copy of the design is the whole
+ * design, as the views run in it.
+ */
 export async function buildVerificationKit({
   design,
   workspaceDir,
   widths,
+  views: chosen,
   onProgress,
 }: BuildKitOptions): Promise<{ files: KitFile[]; summary: VerifyKitSummary }> {
   const temp = await mkdtemp(path.join(os.tmpdir(), "basis-verify-"));
@@ -163,14 +170,19 @@ export async function buildVerificationKit({
     const server = await serve(designDir);
     let result;
     try {
-      result = await captureViews(server.url, browser, widths, (done, total) =>
-        onProgress?.("Taking screenshots", done, total),
+      result = await captureViews(
+        server.url,
+        browser,
+        widths,
+        (done, total) => onProgress?.("Taking screenshots", done, total),
+        chosen,
       );
     } finally {
       server.close();
       await browser.close();
     }
     const { views, problems, shots } = result;
+    if (chosen && views.length === 0) throw new Error("None of the chosen views is in the design any more.");
     const byFile = new Map(shots.map((shot) => [shot.file, shot]));
     const sources = await readSources(workspaceDir);
     const read = new Map(views.map((view) => [view.id, readView(sources, view.file)]));
