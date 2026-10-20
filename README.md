@@ -40,6 +40,8 @@ To work on Basis itself, clone the repository and run `npm install` and `npm run
 
 ### Run it in a container
 
+[docs/DEPLOY.md](docs/DEPLOY.md) covers running Basis for a team with Docker Compose (`compose.yaml`, `.env.example`) or Kubernetes, and [integrations/the-factory/](integrations/the-factory/README.md) has a plugin that makes it a workflow step in The Factory. In short:
+
 The `Dockerfile` builds Basis with git, Playwright's Chromium and Claude Code. It listens on every address, so it
 needs `BASIS_ACCESS_TOKEN`: the pages ask for it once per browser and keep a cookie. Name the host the pages are
 opened at in `BASIS_HOSTS`, and publish the app's port and the previews' ports under the same numbers, since a

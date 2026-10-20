@@ -1,0 +1,44 @@
+# Basis in a container (docs/DEPLOY.md). Copy .env.example to .env, fill in the secrets, then:
+#
+#   docker compose up -d --build
+#   docker compose exec basis claude      # log Claude Code in once
+#
+# and open http://localhost:5320.
+services:
+  basis:
+    build: .
+    image: basis
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "5320"
+      BASIS_PREVIEW_PORT: "5321"
+      BASIS_PREVIEW_PORTS: "4"
+      BASIS_HOME: /data
+    # A preview is opened at the app's host name on its own port, so the ports are published as they are.
+    ports:
+      - "5320-5324:5320-5324"
+    volumes:
+      # Projects, their history and chats.
+      - basis-data:/data
+      # Claude Code's login and the agents' caches.
+      - basis-home:/home/node
+      # Product repos the projects design for, read-only: link them in Basis as /repos/<name>.
+      # - ./repos:/repos:ro
+    healthcheck:
+      # From loopback Basis answers without the access token.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5320/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+
+volumes:
+  basis-data:
+  basis-home:

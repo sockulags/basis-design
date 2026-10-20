@@ -252,6 +252,19 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: The Factory plugin and Docker Compose. The plugin lives here (`integrations/the-factory/`), next to the
+  API it calls, and The Factory gets a copy: it imports only zod and declares the parts of The Factory's plugin
+  types it uses, which match structurally (`builtinPlugins()` casts its list anyway). `design.start_view` (enter)
+  starts the view for the card's key unless Basis has it, so a re-entry after "changes requested" adds no turn;
+  `design.fetch_kit` (exit) runs after The Factory commits the step, so it commits the kit itself. The hook runs
+  on The Factory's server while the worktree is on its runner, whose only file access is a shell command, and
+  its image (`node:22-slim`) has neither curl nor unzip, so the runner gets a Node script, base64 in the command
+  so sh and cmd leave it alone, that fetches the zip with the token from the runner's environment and unpacks it,
+  refusing any file outside the folder Basis names in `X-Basis-Kit-Folder`. Tests drive the plugin against the
+  real API handler and zip, with a runner that runs the command in a temporary worktree. `compose.yaml` runs the
+  Dockerfile with the two volumes, the published ports and a healthcheck from loopback; built and started, it
+  was healthy, the API, login, app and preview answered and Claude Code was in the image.
+
 - 2026-10-20: No error overlay when reviewing a new view with a file of its own. Reviewing PV-12 showed Vite's
   overlay: `Failed to resolve import "./granskningslogg-data.ts"` from
   `.basis/snapshots/<start>/views/GranskningsloggIAdminportalen.specimen.basis-now.tsx`. The view did not exist at

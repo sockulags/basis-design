@@ -1,0 +1,62 @@
+# The Factory's feature workflow with a design step in Basis, between the spec and the technical design.
+# Copy it over workflows/feature/workflow.yaml (and prompts/screens.md into workflows/feature/prompts/), or add
+# the screens step to a workflow of your own.
+type: feature
+name: Feature
+description: New capability. Agree what and how, with its screens designed in Basis, before building it.
+
+steps:
+  spec:
+    agent: claude
+    mode: consult
+    prompt: prompts/spec.md
+    gate: human
+
+  # Basis' agent designs the screens; a person reviews them in Basis and approves here. Approving brings the
+  # verification kit to the card's branch (basis-verify/<card key in lowercase>/).
+  screens:
+    agent: claude
+    mode: consult
+    prompt: prompts/screens.md
+    gate: human
+    hooks:
+      enter: [design.start_view]
+      exit: [design.fetch_kit]
+
+  design:
+    agent: claude
+    mode: consult
+    consult: [codex]
+    prompt: prompts/design.md
+    gate: human
+
+  plan:
+    agent: codex
+    mode: consult
+    prompt: prompts/plan.md
+    gate: auto
+
+  implement:
+    agent: claude
+    mode: write
+    prompt: prompts/implement.md
+    gate: checks
+    maxCheckAttempts: 3
+
+  review:
+    agent: codex
+    mode: consult
+    prompt: ../bug/prompts/review.md
+    gate: human
+    on:
+      approved: docs
+      changes_requested: implement
+
+  docs:
+    agent: claude
+    mode: write
+    prompt: ../_shared/docs.md
+    gate: human
+    outputs: [doc_proposal]
+    hooks:
+      exit: [vcs.open_pr]

@@ -14,5 +14,15 @@
     "allowImportingTsExtensions": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "server", "shared", "template", "test", "scripts", "vite.config.ts", "playwright.config.ts"]
+  "include": [
+    "src",
+    "server",
+    "integrations",
+    "shared",
+    "template",
+    "test",
+    "scripts",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ]
 }
