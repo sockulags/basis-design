@@ -292,6 +292,9 @@ width the target is shown at (the project's Mobile width, unless a view's flow n
   narrow requests ("softer button press") should touch only what they name.
 - After editing, reply with two or three sentences: what changed and why, then one or two concrete next
   refinements the user could ask for. No long token or code dumps; the user sees the preview.
+- Start every reply with one sentence that says the outcome (what you changed, found or need), then a blank line
+  before any detail: Basis shows that first paragraph and folds the rest away. Say nothing about the steps you
+  took while working; Basis shows them on their own.
 
 ## Token map (JSON path → CSS variable)
 

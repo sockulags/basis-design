@@ -13,6 +13,7 @@ import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./Markdown.tsx";
 import { ThreadMenu } from "./ThreadMenu.tsx";
+import { describeSummary, groupChat, type ChatBlock, type WorkStep } from "./turns.ts";
 
 const STARTERS = [
   "Calm fintech: deep navy and cool greys, generous whitespace, crisp 6px corners, restrained motion.",
@@ -79,6 +80,11 @@ export function ChatPanel({
   );
   const ready = connected && agent?.status === "ready";
   const sent = chat.flatMap((item) => (item.kind === "user" && !item.auto && item.text ? [item.text] : []));
+  const blocks = groupChat(
+    chat.filter((item) => !isQueued(item)),
+    running,
+  );
+  const liveWork = blocks.some((block) => block.type === "work" && block.live);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -159,9 +165,15 @@ export function ChatPanel({
             </div>
           </div>
         ) : (
-          chat.filter((item) => !isQueued(item)).map((item) => <ChatEntry key={item.id} item={item} send={send} />)
+          blocks.map((block) =>
+            block.type === "work" ? (
+              <WorkBlock key={block.id} block={block} />
+            ) : (
+              <ChatEntry key={block.item.id} item={block.item} send={send} />
+            ),
+          )
         )}
-        {running && <div className={styles.working}>Working on it…</div>}
+        {running && !liveWork && <div className={styles.working}>Working on it…</div>}
         {/* Queued messages wait below the running turn, in the order they will run. */}
         {chat.filter(isQueued).map((item) => (
           <ChatEntry key={item.id} item={item} send={send} />
@@ -239,12 +251,110 @@ const TOOL_ICON: Record<string, string> = {
   failed: "✕",
 };
 
+/** A long answer shows its first paragraph, and the rest when asked. */
+const LONG_ANSWER = 700;
+
+/**
+ * One turn's work, folded to a line: what it amounted to, or while it runs, the step in progress. Opened, every
+ * step, with the call as it was for a tool whose line says it in fewer words.
+ */
+function WorkBlock({ block }: { block: Extract<ChatBlock, { type: "work" }> }) {
+  const current = block.current;
+  const headline =
+    block.live && current ? (current.type === "tool" ? current.label : "Thinking") : describeSummary(block.summary);
+  return (
+    <details className={styles.work} data-live={block.live || undefined}>
+      <summary>
+        <span className={styles.workIcon} aria-hidden="true">
+          {block.live ? "◌" : block.summary.failed ? "!" : "✓"}
+        </span>
+        <span className={styles.workHeadline}>{headline}</span>
+      </summary>
+      <ol className={styles.steps}>
+        {block.steps.map((step) => (
+          <li key={step.id}>
+            <Step step={step} />
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+function Step({ step }: { step: WorkStep }) {
+  switch (step.type) {
+    case "tool": {
+      const line = (
+        <>
+          <span className={styles.stepIcon}>{TOOL_ICON[step.status] ?? "○"}</span>
+          <span className={styles.stepLabel}>{step.label}</span>
+          {step.count > 1 && <span className={styles.stepCount}>{step.count}×</span>}
+        </>
+      );
+      return step.detail === step.label ? (
+        <div className={styles.step} data-status={step.status} title={step.detail}>
+          {line}
+        </div>
+      ) : (
+        <details className={styles.stepDetails}>
+          <summary className={styles.step} data-status={step.status}>
+            {line}
+          </summary>
+          <pre>{step.detail}</pre>
+        </details>
+      );
+    }
+    case "thought":
+      return (
+        <details className={styles.stepDetails}>
+          <summary className={styles.step}>
+            <span className={styles.stepIcon}>…</span>
+            <span className={styles.stepLabel}>Thought</span>
+          </summary>
+          <p>{step.text}</p>
+        </details>
+      );
+    case "note":
+      return <p className={styles.stepNote}>{step.text}</p>;
+    case "allowed":
+      return (
+        <div className={styles.step} title={step.title}>
+          <span className={styles.stepIcon}>✓</span>
+          <span className={styles.stepLabel}>
+            {step.resolved}: {step.title}
+          </span>
+        </div>
+      );
+  }
+}
+
+/** The agent's answer: whole when short, else its first paragraph with the rest a click away. */
+function Answer({ text }: { text: string }) {
+  const split = text.indexOf("\n\n");
+  if (text.length < LONG_ANSWER || split === -1) return <Markdown text={text} />;
+  return (
+    <div className={styles.answer}>
+      <Markdown text={text.slice(0, split)} />
+      <details className={styles.more}>
+        <summary>Show all</summary>
+        <Markdown text={text.slice(split + 2)} />
+      </details>
+    </div>
+  );
+}
+
 function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessage) => void }) {
   switch (item.kind) {
     case "user":
-      return (
-        <div className={styles.user} data-auto={item.auto || undefined} data-queued={item.queued || undefined}>
-          {item.auto && <span className={styles.autoLabel}>Basis → agent</span>}
+      return item.auto ? (
+        <details className={styles.system}>
+          <summary>
+            <span className={styles.systemLabel}>Basis asked the agent</span> {item.text.split("\n")[0]}
+          </summary>
+          <p>{item.text}</p>
+        </details>
+      ) : (
+        <div className={styles.user} data-queued={item.queued || undefined}>
           {item.alternatives && <span className={styles.alternativesLabel}>{item.alternatives} alternatives</span>}
           {item.queued && (
             <span className={styles.queuedLabel}>
@@ -281,21 +391,11 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
         </div>
       );
     case "agent":
-      return <Markdown text={item.text} />;
+      return <Answer text={item.text} />;
     case "thought":
-      return (
-        <details className={styles.thought}>
-          <summary>Thinking</summary>
-          <p>{item.text}</p>
-        </details>
-      );
     case "tool":
-      return (
-        <div className={styles.tool} data-status={item.status}>
-          <span className={styles.toolIcon}>{TOOL_ICON[item.status] ?? "○"}</span>
-          <span className={styles.toolTitle}>{item.title}</span>
-        </div>
-      );
+      // Always inside a turn's work (groupChat).
+      return null;
     case "plan":
       return (
         <ol className={styles.plan}>
@@ -309,7 +409,10 @@ function ChatEntry({ item, send }: { item: ChatItem; send: (message: ClientMessa
     case "permission":
       return (
         <div className={styles.permission}>
-          <p className={styles.permissionTitle}>{item.title}</p>
+          {/* For a command the title is the command itself: then it is shown once, as code. */}
+          <p className={styles.permissionTitle}>
+            {item.detail && item.detail === item.title ? "The agent asks to run this" : item.title}
+          </p>
           {item.detail && <pre className={styles.permissionDetail}>{item.detail}</pre>}
           {item.resolved ? (
             <p className={styles.permissionResolved}>→ {item.resolved}</p>

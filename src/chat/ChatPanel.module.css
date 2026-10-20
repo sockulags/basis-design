@@ -259,24 +259,6 @@
   overflow-wrap: anywhere;
 }
 
-.user[data-auto] {
-  align-self: stretch;
-  max-width: none;
-  border: 1px dashed var(--app-line);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--app-muted);
-  font-size: 12px;
-}
-
-.autoLabel {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--app-signal);
-  font-family: var(--app-mono);
-  font-size: 10.5px;
-}
-
 .alternativesLabel {
   display: block;
   margin-bottom: 4px;
@@ -332,56 +314,6 @@
 
 .mdHeading {
   font-weight: 650;
-}
-
-.thought {
-  color: var(--app-subtle);
-  font-size: 12px;
-}
-
-.thought summary {
-  font-family: var(--app-mono);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.thought p {
-  margin: 6px 0 0;
-  white-space: pre-wrap;
-}
-
-.tool {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--app-muted);
-  font-family: var(--app-mono);
-  font-size: 11.5px;
-}
-
-.toolIcon {
-  width: 12px;
-  color: var(--app-subtle);
-  text-align: center;
-}
-
-.tool[data-status="completed"] .toolIcon {
-  color: var(--app-signal);
-}
-
-.tool[data-status="failed"] .toolIcon {
-  color: var(--app-danger);
-}
-
-.tool[data-status="in_progress"] .toolIcon,
-.tool[data-status="pending"] .toolIcon {
-  animation: pulse 900ms ease-in-out infinite;
-}
-
-.toolTitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .plan {
@@ -456,25 +388,197 @@
 .permissionResolved {
   margin: 0;
   color: var(--app-muted);
-  font-family: var(--app-mono);
+  font-size: 12.5px;
+}
+
+/* A turn's work, folded to one line (turns.ts): what it amounted to, or the step in progress. */
+.work {
+  border-radius: 8px;
+  color: var(--app-muted);
+  font-size: 12.5px;
+}
+
+.work > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  list-style: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.work > summary::-webkit-details-marker {
+  display: none;
+}
+
+.work > summary:hover,
+.work[open] > summary {
+  background: var(--app-ink-2);
+}
+
+.workIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--app-ink-3);
+  color: var(--app-muted);
+  font-size: 10px;
+}
+
+.work[data-live] .workIcon {
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+.work[data-live] .workHeadline {
+  color: var(--app-text);
+}
+
+.workHeadline {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.steps {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 2px 16px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--app-line);
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+  color: var(--app-muted);
+}
+
+.stepIcon {
+  flex: none;
+  width: 12px;
+  color: var(--app-subtle);
+  text-align: center;
+}
+
+.step[data-status="failed"] .stepIcon {
+  color: var(--app-danger);
+}
+
+.step[data-status="in_progress"] .stepIcon,
+.step[data-status="pending"] .stepIcon {
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+.stepLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepCount {
+  flex: none;
+  color: var(--app-subtle);
+  font-size: 11px;
+}
+
+.stepDetails > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.stepDetails > summary::-webkit-details-marker {
+  display: none;
+}
+
+.stepDetails > summary:hover .stepLabel {
+  color: var(--app-text);
+}
+
+.stepDetails pre,
+.stepDetails p {
+  margin: 2px 0 6px 20px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--app-ink-2);
+  color: var(--app-muted);
   font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stepDetails pre {
+  font-family: var(--app-mono);
+}
+
+.stepNote {
+  margin: 2px 0;
+  color: var(--app-subtle);
+  font-size: 12px;
+}
+
+/* A long answer: its first paragraph, then the rest on request. */
+.more > summary {
+  margin-top: 4px;
+  color: var(--app-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+/* What Basis itself sends the agent (the fix loop, guided turns): a line, opened on demand. */
+.system {
+  color: var(--app-muted);
+  font-size: 12.5px;
+}
+
+.system > summary {
+  overflow: hidden;
+  padding: 4px 8px;
+  border-left: 2px solid var(--app-line);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.systemLabel {
+  color: var(--app-text);
+}
+
+.system p {
+  margin: 4px 0 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .notice {
   margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--app-line);
   color: var(--app-muted);
-  font-family: var(--app-mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 .notice[data-tone="error"] {
+  border-left-color: var(--app-danger);
   color: var(--app-danger);
 }
 
 .working {
   color: var(--app-subtle);
-  font-family: var(--app-mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
   animation: pulse 1400ms ease-in-out infinite;
 }
 
