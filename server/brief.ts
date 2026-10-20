@@ -1,3 +1,4 @@
+import { issueViewId } from "../shared/issue.ts";
 import { MAX_SCREENSHOTS, MAX_SHOT_HEIGHT } from "./agent-tools.ts";
 
 /**
@@ -366,9 +367,14 @@ export function createInstruction(
 }
 
 /** The guided turn behind "New view": the screens of one feature, as a flow, from what the workspace has. */
-export function viewInstruction(folder: string, name: string, purpose: string): string {
+export function viewInstruction(folder: string, name: string, purpose: string, issue?: string): string {
   return [
     `The user pressed "New view" in Basis. Build the view ${name} in ${folder}/${name}.specimen.tsx, following "Views: whole screens" in AGENTS.md.`,
+    ...(issue
+      ? [
+          `The view is for the issue ${issue}, and is named for it: give the specimen \`id: "${issueViewId(issue)}"\` and a title that starts with the key ("${issue} " and a few words for the feature), and name the issue in its description. The verification kit and anything else that looks the view up go by that id, so keep it.`,
+        ]
+      : []),
     purpose
       ? "The feature (or the ticket describing it) is in the user's message below."
       : "The user gave no description: infer the feature from the name, and ask first if it is ambiguous.",

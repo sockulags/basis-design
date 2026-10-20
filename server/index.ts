@@ -7,6 +7,7 @@ import { createServer as createVite } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
 import { kitFolder } from "../shared/capture.ts";
 import { isComponentName, isPageId, pageById } from "../shared/frame.ts";
+import { issueKey } from "../shared/issue.ts";
 import { parseWidths, widthList } from "../shared/widths.ts";
 import {
   AGENT_IDS,
@@ -514,10 +515,11 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
       const purpose = String(message.purpose ?? "")
         .trim()
         .slice(0, page.kind === "view" ? 8000 : 2000);
-      const text = `New ${page.kind}: ${name}${purpose ? `\n\n${purpose}` : ""}`;
+      const issue = page.kind === "view" && typeof message.issue === "string" ? issueKey(message.issue) : null;
+      const text = `New ${page.kind}: ${name}${issue ? ` (${issue})` : ""}${purpose ? `\n\n${purpose}` : ""}`;
       const instruction =
         page.kind === "view"
-          ? viewInstruction(page.folder, name, purpose)
+          ? viewInstruction(page.folder, name, purpose, issue ?? undefined)
           : createInstruction(page.kind, page.folder, name, purpose);
       await agent.prompt(text, { instruction }, { thread: message.thread });
       return;

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { viewKitFolder } from "../../shared/capture.ts";
 import { isComponentName, pageById, type PageId } from "../../shared/frame.ts";
+import { issueKey, issueViewId } from "../../shared/issue.ts";
 import type { ClientMessage } from "../../shared/protocol.ts";
 import styles from "./Shell.module.css";
 
@@ -26,12 +28,15 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
   const dialog = useRef<HTMLDialogElement>(null);
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [issue, setIssue] = useState("");
   const { kind, folder } = pageById(page);
   const isView = kind === "view";
   const componentName = toComponentName(name);
   const nameProblem =
     name.trim() && !isComponentName(componentName) ? "Start with a letter; use letters and digits." : null;
-  const canCreate = agentReady && isComponentName(componentName);
+  const key = issueKey(issue);
+  const issueProblem = isView && issue.trim() && !key ? "Use the issue's key, such as WEB-12 or owner/repo#42." : null;
+  const canCreate = agentReady && isComponentName(componentName) && !issueProblem;
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -39,7 +44,13 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
 
   const create = () => {
     if (!canCreate) return;
-    send({ type: "create", page, name: componentName, purpose: purpose.trim() });
+    send({
+      type: "create",
+      page,
+      name: componentName,
+      purpose: purpose.trim(),
+      ...(isView && key ? { issue: key } : {}),
+    });
     onCreated();
     dialog.current?.close();
   };
@@ -92,6 +103,29 @@ export function CreateDialog({ page, agentReady, send, onCreated, onClose }: Cre
           <p id="create-name-hint" className={nameProblem ? styles.kitError : styles.muted}>
             {nameProblem ?? (componentName && componentName !== name.trim() ? `Created as ${componentName}` : " ")}
           </p>
+          {isView && (
+            <>
+              <label htmlFor="create-issue">
+                Issue <span className={styles.muted}>Optional</span>
+              </label>
+              <input
+                id="create-issue"
+                value={issue}
+                onChange={(event) => setIssue(event.target.value)}
+                placeholder="WEB-12"
+                spellCheck={false}
+                autoComplete="off"
+                aria-describedby="create-issue-hint"
+                aria-invalid={issueProblem ? true : undefined}
+              />
+              <p id="create-issue-hint" className={issueProblem ? styles.kitError : styles.kitNote}>
+                {issueProblem ??
+                  (key
+                    ? `The view is named for ${key}: its id is ${issueViewId(key)}, and its kit goes into ${viewKitFolder(issueViewId(key))}/.`
+                    : "The issue the view is for, so the view and its verification kit are named for it.")}
+              </p>
+            </>
+          )}
           <label htmlFor="create-purpose">
             {isView ? "The feature, or the ticket text" : "What is it for?"}{" "}
             <span className={styles.muted}>Optional</span>

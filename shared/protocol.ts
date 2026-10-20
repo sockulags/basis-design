@@ -278,7 +278,8 @@ export type ClientMessage =
   /** With `alternatives` (2 or 3), the agent makes that many takes on the prompt to choose between. */
   | { type: "prompt"; text: string; images?: PromptImage[]; annotations?: Annotation[]; alternatives?: number }
   /** Asks the agent to create a new component or pattern (decided by the page) in a guided turn. */
-  | { type: "create"; page: PageId; name: string; purpose: string }
+  /** `issue`: the key of the issue a new view is for (views only); the view is named for it (shared/issue.ts). */
+  | { type: "create"; page: PageId; name: string; purpose: string; issue?: string }
   | { type: "cancel" }
   | { type: "permission"; id: string; optionId: string | null }
   /** Starts a new thread (a chat with a session of its own) and shows it; an empty thread there is reused. */

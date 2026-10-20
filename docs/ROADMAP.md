@@ -252,6 +252,14 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: Views named for their issue. New view takes an optional issue key (Jira's `WEB-12`, GitHub's
+  `owner/repo#42`, a pipeline card's key; `issueKey` in `shared/issue.ts`). The guided turn tells the agent to
+  give the specimen the key in kebab-case as its id (`issueViewId`: `web-12`, `owner-repo-42`) and a title that
+  starts with the key. The id is the link, rather than a new `issue` field on the specimen: the Specimen type lives
+  in every workspace's own `components/specimen.ts`, so a new field would be a type error in existing workspaces
+  until the template change reached them, and the id already reaches everything that finds a view (the kit's
+  folder `basis-verify/<id>/`, the gallery, the capture page). Unit tests for the key, the id and the instruction.
+
 - 2026-10-20: A kit's folder in the product. Writing a kit of some views replaced the kit already there, views
   and all, which is wrong for a kit per feature or issue. Rather than merging kits (their shots would come from
   different versions of the design), each kit can have a folder of its own: the Verification kit tab has a "Kit
