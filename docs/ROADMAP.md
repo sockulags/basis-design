@@ -252,6 +252,17 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: No error overlay when reviewing a new view with a file of its own. Reviewing PV-12 showed Vite's
+  overlay: `Failed to resolve import "./granskningslogg-data.ts"` from
+  `.basis/snapshots/<start>/views/GranskningsloggIAdminportalen.specimen.basis-now.tsx`. The view did not exist at
+  the starting point, so the review's before side tried today's file on that version (`loadRebasedSpecimen`),
+  whose relative imports resolve inside the snapshot, where the new data file is not. The preview already caught
+  the failed import and showed "New in this review", and it already kept snapshot errors out of its problems, but
+  the failure was a compile error on the server, which Vite sends to every page as its overlay. `rebasePlugin` now
+  resolves a relative import from a rebased file to a module that throws when it runs when the snapshot lacks the
+  target, so only the import fails. A unit test drives the plugin's hooks (it fails without the change); with a
+  restarted Basis the same review showed no overlay and the server logged no error.
+
 - 2026-10-20: The whole pipeline flow with a real agent. Through the API, Auth-service was asked for a view for
   PV-12 (an audit log in Portvakt's admin portal, a made-up key since Portvakt has no GitHub issues). Claude built
   `views/GranskningsloggIAdminportalen.specimen.tsx` with id `pv-12`, title "PV-12 Granskningslogg i

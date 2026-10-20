@@ -54,7 +54,9 @@ component source, patterns and the gallery specimens.
   - **Preview** on `PORT + 1` (5321) for the first open project, a free port for each other one, serves
     `preview.html` in a sandboxed iframe; the `hello` tells the chrome its port. Aliases: `@ds`
     (components/index.ts) and `@workspace` (the workspace folder, for the specimen glob). `server/rebase.ts` is a
-    Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews).
+    Vite plugin that serves today's specimen file inside a snapshot copy (see Reviews). A relative import there of
+    a file the snapshot lacks (a new view's data file) becomes a module that throws when it runs, so the review
+    takes it as "cannot run there" instead of Vite failing to compile it and showing its error overlay.
   - `server/hold.ts` holds the preview while an agent turn runs (`PreviewHold`, one per open project, held from the
     start to the end of each `runTurn`, fix-ups included). Its Vite plugin's `hotUpdate` hook (order `post`, after
     the specimen glob adds its importer for a new file) returns no modules, after invalidating them as Vite's own
