@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { pageById, type FromPreview, type PageId, type PreviewView } from "../../shared/frame.ts";
 import { previewCss } from "../../shared/tokens.ts";
 import type { Widths } from "../../shared/widths.ts";
@@ -10,7 +10,9 @@ import { contrastFailures } from "../../shared/contrast.ts";
 import { scheduleDemoChecks } from "./a11y.ts";
 import { useResolvedColors } from "./color.ts";
 import { clearProblems, onHotUpdate, setFindings, setProblem } from "./errors.ts";
-import { Colors, Motion, Shape, Typography } from "./Foundations.tsx";
+import { Colors, FOUNDATION_TEXT, Motion, Shape, Typography } from "./Foundations.tsx";
+import { entryMeta, FOUNDATION_PICTURES, Overview, type PageEntry } from "./Overview.tsx";
+import overview from "./Overview.module.css";
 import styles from "./Preview.module.css";
 import { findSpecimen } from "./narrow.ts";
 import { onReveal, useProgressiveCount } from "./progressive.ts";
@@ -23,6 +25,14 @@ const INTROS: Partial<Record<PageId, string>> = {
   views:
     "Whole screens of a product's flows, built from the patterns and components. Click through them, or jump to a screen from the strip above it.",
 };
+
+/** Basis' own sections of the design system page, before the components. */
+const FOUNDATIONS = [
+  { id: "color", Component: Colors },
+  { id: "typography", Component: Typography },
+  { id: "shape", Component: Shape },
+  { id: "motion", Component: Motion },
+] as const;
 
 interface PreviewProps {
   /** What to show: the page, or the open review instead of it. */
@@ -113,6 +123,30 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
   const onWidths = useCallback((next: Widths | null) => post({ type: "widths-set", widths: next }), [post]);
 
   const props = { design, onAsk };
+  // The page's sections as entries: an overview shows them as cards, and each can be shown alone.
+  const entries: PageEntry[] = [
+    ...(page === "system"
+      ? FOUNDATIONS.map(({ id }) => ({
+          id,
+          group: "Foundations",
+          ...FOUNDATION_TEXT[id],
+          picture: FOUNDATION_PICTURES[id],
+        }))
+      : []),
+    ...onPage.map((specimen) => ({
+      id: specimen.id,
+      title: specimen.title,
+      group: specimen.group,
+      description: specimen.description ?? "",
+      specimen,
+      meta: entryMeta(specimen),
+    })),
+  ];
+  const focusIndex = view.focus ? entries.findIndex((entry) => entry.id === view.focus) : -1;
+  const focused = entries[focusIndex];
+  // The hidden copies always show the whole page, so the checks cover all of it.
+  const mode = view.all || themeCheck ? "all" : focused ? "one" : "overview";
+  const navigate = (focus: string | null, all = false) => post({ type: "navigate", focus, ...(all ? { all } : {}) });
   const inFullScreen = fullScreen.shown && specimens.find((specimen) => specimen.id === fullScreen.shown?.specimen);
   // A view the agent removed while it was in full screen leaves it.
   const gone = Boolean(fullScreen.shown && !inFullScreen);
@@ -150,44 +184,70 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
           </>
         ) : (
           <div className={styles.inner}>
-            {page === "system" ? (
+            {mode === "one" && focused ? (
+              <One
+                entry={focused}
+                previous={entries[focusIndex - 1]}
+                next={entries[focusIndex + 1]}
+                pageLabel={pageById(page).label}
+                onNavigate={navigate}
+              >
+                {focused.specimen ? (
+                  <>
+                    <FrameBar choice={frameChoice} onChange={setFrameChoice} widths={widths} onWidths={onWidths} />
+                    <SpecimenSection
+                      specimen={focused.specimen}
+                      design={design}
+                      onAsk={onAsk}
+                      frames={frames}
+                      fullScreen={flows}
+                    />
+                  </>
+                ) : (
+                  FOUNDATIONS.filter(({ id }) => id === focused.id).map(({ id, Component }) => (
+                    <Component key={id} {...props} />
+                  ))
+                )}
+              </One>
+            ) : page === "system" ? (
               <>
                 <header className={styles.hero}>
                   <p className={styles.kicker}>Design system</p>
                   <h1 className={styles.title}>{design.name}</h1>
                   {design.description && <p className={styles.description}>{design.description}</p>}
+                  <ModeSwitch all={mode === "all"} onNavigate={navigate} hidden={themeCheck} />
                 </header>
-                <Colors {...props} />
-                <Typography {...props} />
-                <Shape {...props} />
-                <Motion {...props} />
+                {mode === "all" && FOUNDATIONS.map(({ id, Component }) => <Component key={id} {...props} />)}
               </>
             ) : (
               <header className={styles.hero}>
                 <p className={styles.kicker}>{design.name}</p>
                 <h1 className={styles.title}>{pageById(page).label}</h1>
                 {INTROS[page] && <p className={styles.description}>{INTROS[page]}</p>}
+                <ModeSwitch all={mode === "all"} onNavigate={navigate} hidden={themeCheck} />
               </header>
             )}
-            {onPage.length > 0 && (
+            {mode === "overview" && <Overview entries={entries} design={design} onOpen={(id) => navigate(id)} />}
+            {mode === "all" && onPage.length > 0 && (
               <FrameBar choice={frameChoice} onChange={setFrameChoice} widths={widths} onWidths={onWidths} />
             )}
-            {onPage.map((specimen, index) =>
-              index < rendered ? (
-                <SpecimenSection
-                  key={specimen.id}
-                  specimen={specimen}
-                  design={design}
-                  onAsk={onAsk}
-                  frames={frames}
-                  fullScreen={flows}
-                />
-              ) : (
-                <section key={specimen.id} id={specimen.id} className={styles.pending} aria-busy="true">
-                  <h2>{specimen.title}</h2>
-                </section>
-              ),
-            )}
+            {mode === "all" &&
+              onPage.map((specimen, index) =>
+                index < rendered ? (
+                  <SpecimenSection
+                    key={specimen.id}
+                    specimen={specimen}
+                    design={design}
+                    onAsk={onAsk}
+                    frames={frames}
+                    fullScreen={flows}
+                  />
+                ) : (
+                  <section key={specimen.id} id={specimen.id} className={styles.pending} aria-busy="true">
+                    <h2>{specimen.title}</h2>
+                  </section>
+                ),
+              )}
             {problems.map((problem) => (
               <div key={problem.file + problem.message} className="section-error" role="alert">
                 <strong>{problem.file} could not be shown</strong>
@@ -216,5 +276,65 @@ export function Preview({ view, post, themeCheck = false }: PreviewProps) {
         />
       )}
     </ProjectWidths.Provider>
+  );
+}
+
+/** Below a page's title: the page as cards, or everything on it in turn. */
+function ModeSwitch({
+  all,
+  onNavigate,
+  hidden,
+}: {
+  all: boolean;
+  onNavigate: (focus: string | null, all?: boolean) => void;
+  hidden: boolean;
+}) {
+  if (hidden) return null;
+  return (
+    <button type="button" className={overview.viewToggle} onClick={() => onNavigate(null, !all)}>
+      {all ? "Show as cards" : "Show all on one page"}
+    </button>
+  );
+}
+
+/** One section on its own: the way back to the page's cards above it, and the sections either side below. */
+function One({
+  entry,
+  previous,
+  next,
+  pageLabel,
+  onNavigate,
+  children,
+}: {
+  entry: PageEntry;
+  previous: PageEntry | undefined;
+  next: PageEntry | undefined;
+  pageLabel: string;
+  onNavigate: (focus: string | null) => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <button type="button" className={overview.back} onClick={() => onNavigate(null)}>
+        <span aria-hidden="true">←</span> {pageLabel}
+      </button>
+      {children}
+      {(previous || next) && (
+        <nav className={overview.pager} aria-label={`Next to ${entry.title}`}>
+          {previous && (
+            <button type="button" onClick={() => onNavigate(previous.id)}>
+              <small>Previous</small>
+              {previous.title}
+            </button>
+          )}
+          {next && (
+            <button type="button" onClick={() => onNavigate(next.id)}>
+              <small>Next</small>
+              {next.title}
+            </button>
+          )}
+        </nav>
+      )}
+    </>
   );
 }

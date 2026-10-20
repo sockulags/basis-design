@@ -114,6 +114,10 @@ export interface PreviewView {
   fullscreen: FullScreenView | null;
   /** The project's widths, which Show at's frames and the layout check use. */
   widths: Widths;
+  /** The section the page shows alone (a component, a pattern, a view, a foundation), or null for the page. */
+  focus: string | null;
+  /** The whole page on one page, every section in turn; otherwise the page is an overview of cards. */
+  all: boolean;
 }
 
 export type ToPreview =
@@ -143,7 +147,9 @@ export type FromPreview =
   /** The full-screen bar's Exit, or Esc where the browser leaves it to the page. */
   | { type: "fullscreen-exit" }
   /** New widths for the project from the control next to Show at (null: Basis' defaults); taken only after a click. */
-  | { type: "widths-set"; widths: Widths | null };
+  | { type: "widths-set"; widths: Widths | null }
+  /** A card or a link in the gallery: show this section alone, or the page (null), or everything on it; after a click. */
+  | { type: "navigate"; focus: string | null; all?: boolean };
 
 const text = (value: unknown, max: number): string | null => (typeof value === "string" ? value.slice(0, max) : null);
 
@@ -263,6 +269,12 @@ export function parseFromPreview(data: unknown): FromPreview | null {
     }
     case "fullscreen-exit":
       return { type: "fullscreen-exit" };
+    case "navigate": {
+      if (raw.focus !== null && typeof raw.focus !== "string") return null;
+      const focus = raw.focus === null ? null : text(raw.focus, 80);
+      if (focus !== null && !/^[a-z0-9-]+$/.test(focus)) return null;
+      return { type: "navigate", focus, ...(raw.all === true ? { all: true } : {}) };
+    }
     case "widths-set": {
       if (raw.widths === null) return { type: "widths-set", widths: null };
       const widths = parseWidths(raw.widths);

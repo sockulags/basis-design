@@ -252,6 +252,17 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-21: The interface, reworked from a UX review (Hick, Fitts, chunking, proximity, progressive disclosure,
+  Jakob, peak-end). The chat shows each agent turn as its answer, with the work folded into one line ("Edited 3
+  files · 2 commands"), and starts every answer with its outcome. The design comes first and the chat sits at the
+  right, folding to a rail (Ctrl+J). A review is one steady row whose only accent is Approve. Labels are sans and
+  denser; the accent is kept for the main action. The contrast table shows failing pairs first and folds the
+  passing ones. Pages open as cards (an overview), a card shows one section alone, and "All on one page" keeps the
+  long page; every place has an address (`/p/<project>/<page>/<section>`, `?all`) with Back and Forward. So the
+  checks still cover the whole page while the user sees less, a hidden copy renders it in the same theme next to
+  the other theme's; axe skips colour contrast for offscreen content, so rendering the rest offscreen was not
+  enough.
+
 - 2026-10-20: Basis for any coding agent: an MCP server, a Claude Code plugin and a marketplace. The server
   (`plugins/basis/mcp/basis-mcp.mjs`) has no dependencies, like the agent's own tool server, so it runs from the
   plugin's folder with Node wherever the plugin is installed; it unpacks the kit itself (zlib), refusing files

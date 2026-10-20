@@ -32,6 +32,8 @@ const view: PreviewView = {
   review: null,
   fullscreen: null,
   widths: DEFAULT_WIDTHS,
+  focus: null,
+  all: true,
 };
 
 /** Pages that report what the host page would, held open until the session stops. */

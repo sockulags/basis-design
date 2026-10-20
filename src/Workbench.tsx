@@ -23,6 +23,7 @@ import { ReviewBar } from "./shell/ReviewBar.tsx";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import styles from "./shell/Shell.module.css";
 import { TopBar } from "./shell/TopBar.tsx";
+import { formatRoute, parseRoute } from "./shell/route.ts";
 import { useReview } from "./shell/useReview.ts";
 
 const asFlag = (stored: string | null) => stored === "true";
@@ -50,7 +51,15 @@ export function Workbench({
   const [chatWidth, setChatWidth] = usePref("chat-width", asChatWidth);
   const [chatHidden, setChatHidden] = usePref("chat-hidden", asFlag);
   const [sidebarCollapsed, setSidebarCollapsed] = usePref("sidebar-collapsed", asFlag);
-  const [page, setPage] = usePref("page", asPage);
+  const projectId = state.project?.id;
+  // Where the address says to be, when it names this project; otherwise the page shown last, as cards.
+  const [arrived] = useState(() => parseRoute(location.pathname, location.search));
+  const here = Boolean(projectId) && arrived.project === projectId;
+  const [page, setPage] = usePref("page", (stored) => (here && arrived.page ? arrived.page : asPage(stored)));
+  /** The section shown alone, or null for the page. */
+  const [focus, setFocus] = useState<string | null>(here ? arrived.focus : null);
+  /** The whole page on one page instead of its cards. */
+  const [all, setAll] = useState(here && arrived.all);
   // The unsent message survives a reload, one per thread of each project (the workbench is mounted once per project).
   const [draft, setDraft] = usePref(`draft:${state.project?.id ?? ""}:${thread ?? ""}`, (stored) => stored ?? "", {
     delay: 300,
@@ -177,6 +186,18 @@ export function Workbench({
     focusComposer();
   }, [focusComposer]);
 
+  /** Shows a section alone (null: the page's cards), or the whole page; leaves a review the user had open. */
+  const hideReview = reviewing.setHidden;
+  const goTo = useCallback(
+    (next: string | null, nextAll = false) => {
+      setFocus(next);
+      setAll(nextAll);
+      setActiveSection(undefined);
+      hideReview(true);
+    },
+    [hideReview],
+  );
+
   const { setImpact } = reviewing;
   /** Everything the preview reports, already validated by the frame. */
   const onPreviewMessage = useCallback(
@@ -216,19 +237,48 @@ export function Workbench({
           return setFullscreen({ view: message.view, screen: message.screen, theme: message.theme });
         case "fullscreen-exit":
           return setFullscreen(null);
+        case "navigate":
+          // Only right after a click in the gallery, so the preview's code cannot move the chrome on its own.
+          if (navigator.userActivation && !navigator.userActivation.isActive) return;
+          return goTo(message.focus, message.all === true);
         case "widths-set":
           // Only right after the user acted in the gallery, so the preview's code cannot change them on its own.
           if (navigator.userActivation && !navigator.userActivation.isActive) return;
           return send({ type: "widths-set", widths: message.widths });
       }
     },
-    [ask, finishPicking, setImpact, send],
+    [ask, finishPicking, setImpact, send, goTo],
   );
 
   const view = useMemo<PreviewView | null>(
-    () => (design ? { design, theme, page, review: reviewing.view, fullscreen, widths: state.widths } : null),
-    [design, theme, page, reviewing.view, fullscreen, state.widths],
+    () =>
+      design ? { design, theme, page, review: reviewing.view, fullscreen, widths: state.widths, focus, all } : null,
+    [design, theme, page, reviewing.view, fullscreen, state.widths, focus, all],
   );
+
+  // The address follows where the chrome is, one history entry per move, so back and forward retrace them. The
+  // first only corrects the address the tab opened at.
+  const addressed = useRef(false);
+  useEffect(() => {
+    if (!projectId) return;
+    const url = formatRoute({ project: projectId, page, focus, all });
+    if (url !== location.pathname + location.search)
+      window.history[addressed.current ? "pushState" : "replaceState"](null, "", url);
+    addressed.current = true;
+  }, [projectId, page, focus, all]);
+  useEffect(() => {
+    const onPop = () => {
+      const route = parseRoute(location.pathname, location.search);
+      // Another project's address: the server shows that project in this tab, and its workbench takes over.
+      if (route.project && route.project !== projectId)
+        return sendProject({ type: "project-switch", id: route.project });
+      if (route.page) setPage(route.page);
+      setFocus(route.focus);
+      setAll(route.all);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [projectId, sendProject, setPage]);
 
   const step = (direction: -1 | 1) => {
     const next = history[inspectIndex + direction];
@@ -249,7 +299,8 @@ export function Workbench({
             setPage(next);
             if (review) reviewing.setHidden(true);
             setActiveSection(undefined);
-            window.history.replaceState(null, "", " ");
+            setFocus(null);
+            setAll(false);
           }}
           theme={theme}
           onTheme={setTheme}
@@ -314,13 +365,21 @@ export function Workbench({
         )}
         <div className={styles.stage}>
           <Sidebar
-            active={activeSection}
+            active={all ? activeSection : (focus ?? undefined)}
             sections={sections}
             page={page}
+            overview={!focus && !all && !reviewing.view}
+            all={all}
+            hrefFor={(id, wholePage) =>
+              projectId ? formatRoute({ project: projectId, page, focus: id, all: wholePage ?? false }) : "#"
+            }
+            onOverview={() => goTo(null)}
+            onAll={() => goTo(null, true)}
             onNavigate={(id) => {
-              window.history.replaceState(null, "", `#${id}`);
+              // With everything on one page, the sidebar scrolls to the section; otherwise it shows it alone.
+              if (!all) return goTo(id);
               if (!reviewing.view) return frame.current?.scrollTo(id);
-              // The sidebar navigates the gallery: leave the review view, then scroll once the page is back.
+              // Leave the review view, then scroll once the page is back.
               reviewing.setHidden(true);
               setTimeout(() => frame.current?.scrollTo(id), 120);
             }}

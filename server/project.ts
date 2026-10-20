@@ -100,6 +100,9 @@ export class OpenProject {
         review: null,
         fullscreen: null,
         widths: workspace.widths,
+        // The whole page, as the checks need it.
+        focus: null,
+        all: true,
       }),
       (report) =>
         report

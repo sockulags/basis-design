@@ -1,10 +1,19 @@
 import { pageById, type NavSection, type PageId } from "../../shared/frame.ts";
+import type { MouseEvent } from "react";
 import { buildPages } from "./navigation.tsx";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
-  /** Section currently at the top of the preview, reported by the preview frame. */
+  /** The section shown alone, or the one at the top of the preview while the whole page shows. */
   active: string | undefined;
+  /** The page shows as cards. */
+  overview: boolean;
+  /** The whole page shows on one page. */
+  all: boolean;
+  /** The address of a section alone (null: the page's cards), or of the whole page. */
+  hrefFor: (id: string | null, all?: boolean) => string;
+  onOverview: () => void;
+  onAll: () => void;
   /** Sections of every page, reported by the preview. */
   sections: NavSection[];
   page: PageId;
@@ -15,7 +24,26 @@ interface SidebarProps {
   onCreate: () => void;
 }
 
-export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggleCollapsed, onCreate }: SidebarProps) {
+export function Sidebar({
+  active,
+  overview,
+  all,
+  hrefFor,
+  onOverview,
+  onAll,
+  sections,
+  page,
+  onNavigate,
+  collapsed,
+  onToggleCollapsed,
+  onCreate,
+}: SidebarProps) {
+  /** A link the browser can open in a new tab, which the sidebar follows itself on a plain click. */
+  const follow = (action: () => void) => (event: MouseEvent) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    action();
+  };
   const pages = buildPages(sections).filter((item) => item.id === page);
   const { kind } = pageById(page);
   return (
@@ -23,7 +51,15 @@ export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggl
       <div className={styles.scroll}>
         {pages.map((page) => (
           <div key={page.id} className={styles.page}>
-            <p className={styles.pageLabel}>{page.label}</p>
+            <a
+              href={hrefFor(null)}
+              className={styles.pageLabel}
+              aria-current={overview ? "page" : undefined}
+              title={collapsed ? `${page.label}: overview` : undefined}
+              onClick={follow(onOverview)}
+            >
+              {page.label}
+            </a>
             {page.groups.map((group) => (
               <div key={group.label} className={styles.group}>
                 <p className={styles.groupLabel}>{group.label}</p>
@@ -31,14 +67,11 @@ export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggl
                   {group.items.map((item) => (
                     <li key={item.id}>
                       <a
-                        href={`#${item.id}`}
+                        href={all ? `${hrefFor(null, true)}#${item.id}` : hrefFor(item.id)}
                         className={styles.item}
-                        aria-current={active === item.id ? "location" : undefined}
+                        aria-current={active === item.id ? (all ? "location" : "page") : undefined}
                         title={collapsed ? item.label : undefined}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          onNavigate(item.id);
-                        }}
+                        onClick={follow(() => onNavigate(item.id))}
                       >
                         {item.icon}
                         <span className={styles.label}>{item.label}</span>
@@ -48,6 +81,18 @@ export function Sidebar({ active, sections, page, onNavigate, collapsed, onToggl
                 </ul>
               </div>
             ))}
+            <a
+              href={hrefFor(null, true)}
+              className={`${styles.item} ${styles.allLink}`}
+              aria-current={all ? "page" : undefined}
+              title={collapsed ? "All on one page" : undefined}
+              onClick={follow(onAll)}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden>
+                <path d="M3 3.5h10M3 6.5h10M3 9.5h10M3 12.5h6" />
+              </svg>
+              <span className={styles.label}>All on one page</span>
+            </a>
           </div>
         ))}
         <button

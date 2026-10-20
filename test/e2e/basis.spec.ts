@@ -5,8 +5,19 @@ import { expect, gallery, historyCount, open, prompt, test } from "./basis.ts";
 
 test("the gallery renders the design system in its sandbox", async ({ page, basis }) => {
   await open(page, basis);
-  await expect(gallery(page).getByRole("heading", { name: "Buttons", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Buttons" })).toBeVisible();
+  const frame = gallery(page);
+  // A page opens as cards; a card shows its section alone, at an address of its own.
+  await frame.getByRole("button", { name: /^Buttons/ }).click();
+  await expect(frame.getByRole("heading", { name: "Buttons", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/[^/]+\/system\/[a-z-]+$/);
+  await expect(page.getByRole("link", { name: "Buttons" })).toHaveAttribute("aria-current", "page");
+  // Back goes back to the cards, and the whole page is one link away.
+  await page.goBack();
+  await expect(frame.getByRole("button", { name: /^Buttons/ })).toBeVisible();
+  await page.getByRole("link", { name: "All on one page" }).click();
+  await expect(page).toHaveURL(/\/system\?all$/);
+  await expect(frame.getByRole("heading", { name: "Buttons", exact: true })).toBeVisible();
+  await expect(frame.getByRole("heading", { name: "Color", exact: true })).toBeVisible();
 });
 
 test("an agent turn becomes one history entry, and Undo takes it back", async ({ page, basis }) => {
@@ -51,13 +62,16 @@ test("a turn that writes a new view in steps shows it once it ends, with no erro
 }) => {
   await open(page, basis);
   await page.getByRole("button", { name: "Views", exact: true }).click();
-  await expect(gallery(page).getByRole("heading", { name: "Team members", exact: true })).toBeVisible();
+  await expect(gallery(page).getByRole("button", { name: /^Team members/ })).toBeVisible();
   await page.getByPlaceholder(/Describe a change/).fill("E2E-VIEW a view that needs its data");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   // Mid-turn the gallery waits, and says so.
   await expect(page.getByRole("status").filter({ hasText: "Changes show when the agent is done" })).toBeVisible();
-  await expect(gallery(page).getByRole("heading", { name: "Later view", exact: true })).toHaveCount(0);
+  await expect(gallery(page).getByRole("button", { name: /^Later view/ })).toHaveCount(0);
   await expect(page.getByText("Ready", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await gallery(page)
+    .getByRole("button", { name: /^Later view/ })
+    .click();
   await expect(gallery(page).getByText("Written last")).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Changes show when the agent is done" })).toHaveCount(0);
   await expect(page.getByText(/problems? in the workspace/)).toHaveCount(0);
@@ -86,6 +100,7 @@ test("a view opens in full screen, moves through its flow there and comes back t
 }) => {
   await open(page, basis);
   await page.getByRole("button", { name: "Views", exact: true }).click();
+  await page.getByRole("link", { name: "Team members" }).click();
   const frame = gallery(page);
   await frame.getByRole("button", { name: "Full screen", exact: true }).click();
 
@@ -129,6 +144,7 @@ test("the Navbar keeps its links in a wide gallery and moves them behind a menu 
 }) => {
   await open(page, basis);
   await page.getByRole("button", { name: "Patterns", exact: true }).click();
+  await page.getByRole("link", { name: "Navbar" }).click();
   const frame = gallery(page);
   const navbar = frame.locator('[data-ds="navbar"]').first();
   await expect(navbar.getByRole("link", { name: "Overview" })).toBeVisible();
@@ -331,6 +347,7 @@ test("the project's widths are chosen next to Show at, and a view gets exactly t
   };
   await open(page, basis);
   await page.getByRole("button", { name: "Views", exact: true }).click();
+  await page.getByRole("link", { name: "Team members" }).click();
   const frame = gallery(page);
   await frame.getByRole("button", { name: "Mobile", exact: true }).click();
   await frame.getByRole("button", { name: "Fit", exact: true }).click();
@@ -399,6 +416,7 @@ export default defineSpecimen({
   // They are the project's: a reload keeps them, and Reset goes back to Basis' own.
   await page.reload();
   await page.getByRole("button", { name: "Views", exact: true }).click();
+  await page.getByRole("link", { name: "Team members" }).click();
   await expect(frame.getByText("Mobile · 390px").first()).toBeVisible();
   await frame.getByRole("button", { name: /^The project's widths: Mobile 390/ }).click();
   await frame.getByRole("button", { name: "Reset to 375, 768, 1440" }).click();

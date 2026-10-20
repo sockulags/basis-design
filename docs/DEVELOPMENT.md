@@ -284,10 +284,18 @@ component source, patterns and the gallery specimens.
 
 ### Chrome and preview
 
-The chrome sends the preview one `PreviewView` (`shared/frame.ts`: design, theme, page, review) whenever any of
-it changes, and receives every preview message through one `onMessage` handler in `App.tsx`. A new preview
-feature adds a field to `PreviewView` or a message to `FromPreview` (with its parser case), not a prop at every
-layer.
+The chrome sends the preview one `PreviewView` (`shared/frame.ts`: design, theme, page, review, focus, all)
+whenever any of it changes, and receives every preview message through one `onMessage` handler in `App.tsx`. A new
+preview feature adds a field to `PreviewView` or a message to `FromPreview` (with its parser case), not a prop at
+every layer.
+
+**Pages, cards and addresses.** A page shows as cards (`Overview.tsx`) unless `PreviewView.focus` names a section
+(shown alone, with the way back and the sections either side) or `all` is set (every section in turn, rendered
+progressively). Cards and those links send `navigate`, which the chrome takes only with transient user activation,
+like `fullscreen-open`. The chrome keeps page, focus and all in the address (`src/shell/route.ts`:
+`/p/<project>/<page>/<section>`, `?all`), one history entry per move, and follows `popstate`; the bridge's first
+connection asks for the address's project, so a shared link opens that project. Vite serves `index.html` for any
+path (`appType: "spa"`). With everything on one page the sidebar scrolls (`scroll-to`); otherwise it sets the focus.
 
 **Full screen.** Full screen on a view's strip (only in the gallery, through `SpecimenSection`; reviews and
 `capture.html` have no such button) sends `fullscreen-open`. The chrome takes it only while it has transient user
@@ -358,10 +366,11 @@ after anything that changes them, and keeps serious and critical WCAG A/AA viola
 the text stays stable for the comparison. Duplicate-id rules are off, since the gallery repeats demos. While a
 check is scheduled or running the preview says so, and the fix loop waits for it (up to 8 s after the reloaded
 gallery reported) before it decides what the turn introduced; the copy in the other theme counts as running from
-when it is embedded until it first reports. The user sees one theme, so the preview keeps a copy of
-itself in the other one (`ThemeChecker` in `src/preview/main.tsx`): a same-origin frame at full size, transparent,
-inert and behind the page, opened with `?theme-check`. It renders the same view without impact copies and posts
-only its own axe findings, which join the preview's. Every finding names its theme, taken from the nearest
+when it is embedded until it first reports. The user sees one theme, and often only cards or one section, so the
+preview keeps copies of itself (`Checker` in `src/preview/main.tsx`): same-origin frames at full size, transparent,
+inert and behind the page, opened with `?theme-check`. One shows the whole page in the other theme; while the user
+looks at less than the whole page, a second shows it in this theme. They render the view without impact copies and
+post only their own axe findings, which join the preview's (each copy is a run of its own in `a11y.ts`). Every finding names its theme, taken from the nearest
 `data-theme`, so the two documents (and the gallery's both-themes frames) agree on the text and repeats drop out.
 The copy turns off transitions and animations, since a hidden frame does not play them and a theme switch would
 leave colours halfway; the preview's CSP allows `'self'` as a frame ancestor for it. The gallery's own labels

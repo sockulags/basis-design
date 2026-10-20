@@ -8,9 +8,9 @@ import { layoutFindings } from "./layout.ts";
  * Checks of what the agent made, over the live demos (elements marked with CHECKED, named after their section)
  * once the preview has settled. Accessibility: axe-core's serious and critical WCAG A/AA violations. Layout (see
  * layout.ts): content wider than its frame, clipped text and small targets. Past versions, Basis' own sections and
- * offscreen copies are never marked, so they are never checked. The other theme is checked by a hidden copy of the
- * preview (see ThemeChecker in main.tsx), whose findings join this document's; every finding names the theme it
- * was found in.
+ * offscreen copies are never marked, so they are never checked. Hidden copies of the preview (see Checker in
+ * main.tsx) check the whole page in the other theme, and in this theme while the user looks at cards or one
+ * section; their findings join this document's, and every finding names the theme it was found in.
  */
 
 /** Marks a live demo the checks cover; the value names it in findings. */
@@ -21,7 +21,8 @@ type Check = (typeof CHECKS)[number];
 const MAX_FINDINGS: Record<Check, number> = { Accessibility: 25, Layout: 15 };
 /** This document's run, and the hidden copy's, kept apart so the fix loop waits for both. */
 const RUN = "Checks of the demos";
-const OTHER_THEME = "Checks of the demos in the other theme";
+/** The hidden copies whose findings join this document's (see main.tsx), by the run they count as. */
+const copies = new Map<string, string[]>();
 /** Quiet time before a run, so a burst of hot updates or progressive steps costs one run. */
 const DELAY_MS = 600;
 /** The gallery's own labels inside the demos (group titles, column heads, captions) are Basis', not the agent's. */
@@ -34,14 +35,16 @@ let again = false;
 let scheduled = false;
 /** This document's findings by check, and the ones the copy in the other theme reported, as the preview lists them. */
 let own: Record<Check, string[]> = { Accessibility: [], Layout: [] };
-let other: string[] = [];
 const ownListeners = new Set<(findings: string[], running: boolean) => void>();
 
 function publish(): void {
   // With both themes shown in the gallery, the two documents find the same things; list them once.
   for (const check of CHECKS) {
     const prefix = `${check}: `;
-    const theirs = other.filter((item) => item.startsWith(prefix)).map((item) => item.slice(prefix.length));
+    const theirs = [...copies.values()]
+      .flat()
+      .filter((item) => item.startsWith(prefix))
+      .map((item) => item.slice(prefix.length));
     setFindings(check, [...new Set([...own[check], ...theirs])].slice(0, MAX_FINDINGS[check]));
   }
 }
@@ -60,11 +63,15 @@ function setOwn(findings: Record<Check, string[]> | null, running: boolean): voi
   for (const listener of ownListeners) listener(listed(), running);
 }
 
-/** What the copy in the other theme found (each led by its check's name); it reports again whenever it runs. */
-export function setOtherThemeFindings(findings: string[], running: boolean): void {
-  other = findings;
+/**
+ * What a hidden copy found, by the run it counts as (the copy in the other theme, or the whole page in this theme
+ * while the user looks at an overview or one item). Its findings join this document's, and the fix loop waits
+ * while it runs.
+ */
+export function setCopyFindings(run: string, findings: string[], running: boolean): void {
+  copies.set(run, findings);
   publish();
-  setChecking(OTHER_THEME, running);
+  setChecking(run, running);
 }
 
 /** This document's own findings and whether its checks run, for the copy to pass on to the preview. */

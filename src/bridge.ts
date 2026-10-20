@@ -17,6 +17,7 @@ import type {
 } from "../shared/protocol.ts";
 import type { ReviewState } from "../shared/review.ts";
 import { DEFAULT_WIDTHS, type Widths } from "../shared/widths.ts";
+import { parseRoute } from "./shell/route.ts";
 
 export interface BridgeState {
   connected: boolean;
@@ -185,9 +186,13 @@ export function useBridge(): { state: BridgeState; send: (message: Tagged<Client
     let closed = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
+      // A first connection asks for the project its address names (see shell/route.ts), if any.
+      const named = parseRoute(location.pathname, location.search).project;
       const query = shown.current
         ? `?project=${encodeURIComponent(shown.current.project)}&thread=${encodeURIComponent(shown.current.thread)}`
-        : "";
+        : named
+          ? `?project=${encodeURIComponent(named)}`
+          : "";
       const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/bridge${query}`);
       socket.current = ws;
       ws.onmessage = (event) => {

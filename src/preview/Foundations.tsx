@@ -7,6 +7,29 @@ import { useResolvedColors, type ResolvedTheme } from "./color.ts";
 import styles from "./Foundations.module.css";
 import { Group, Section, Token } from "./Gallery.tsx";
 
+/** Basis' own sections of the design system page, as their headers and their cards in the overview name them. */
+export const FOUNDATION_TEXT = {
+  color: {
+    title: "Color",
+    description:
+      "Semantic roles for both themes. Components only ever read these roles, so changing a role restyles everything that uses it.",
+  },
+  typography: {
+    title: "Typography",
+    description:
+      "Families, a size scale, weights, line heights and tracking. Headings use the display family; interface text uses sans.",
+  },
+  shape: {
+    title: "Space, shape & depth",
+    description: "Spacing steps, corner radii, border widths and elevation.",
+  },
+  motion: {
+    title: "Motion",
+    description:
+      "Durations and easing curves. Press play to run every track; components below use the same tokens for hover, press, enter and exit.",
+  },
+} as const;
+
 interface FoundationProps {
   design: Design;
   onAsk: (prefix: string) => void;
@@ -112,8 +135,8 @@ export function Colors({ design, onAsk }: FoundationProps) {
   return (
     <Section
       id="color"
-      title="Color"
-      description="Semantic roles for both themes. Components only ever read these roles, so changing a role restyles everything that uses it."
+      title={FOUNDATION_TEXT.color.title}
+      description={FOUNDATION_TEXT.color.description}
       onAsk={onAsk}
     >
       {COLOR_GROUPS.map((group) => (
@@ -177,8 +200,8 @@ export function Typography({ design, onAsk }: FoundationProps) {
   return (
     <Section
       id="typography"
-      title="Typography"
-      description="Families, a size scale, weights, line heights and tracking. Headings use the display family; interface text uses sans."
+      title={FOUNDATION_TEXT.typography.title}
+      description={FOUNDATION_TEXT.typography.description}
       onAsk={onAsk}
     >
       <Group title="Families">
@@ -278,8 +301,8 @@ export function Shape({ design, onAsk }: FoundationProps) {
   return (
     <Section
       id="shape"
-      title="Space, shape & depth"
-      description="Spacing steps, corner radii, border widths and elevation."
+      title={FOUNDATION_TEXT.shape.title}
+      description={FOUNDATION_TEXT.shape.description}
       onAsk={onAsk}
     >
       <Group title="Spacing">
@@ -355,8 +378,8 @@ export function Motion({ design, onAsk }: FoundationProps) {
   return (
     <Section
       id="motion"
-      title="Motion"
-      description="Durations and easing curves. Press play to run every track; components below use the same tokens for hover, press, enter and exit."
+      title={FOUNDATION_TEXT.motion.title}
+      description={FOUNDATION_TEXT.motion.description}
       onAsk={onAsk}
     >
       <Group
