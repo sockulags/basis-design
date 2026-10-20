@@ -10,7 +10,7 @@ import {
 } from "../shared/frame.ts";
 import type { ClientMessage, Tagged } from "../shared/protocol.ts";
 import type { BridgeState } from "./bridge.ts";
-import { ChatPanel } from "./chat/ChatPanel.tsx";
+import { ChatPanel, ChatRail } from "./chat/ChatPanel.tsx";
 import { CHAT_DEFAULT_WIDTH, ChatResizer, clampChatWidth } from "./shell/ChatResizer.tsx";
 import { CreateDialog } from "./shell/CreateDialog.tsx";
 import { ExportDialog } from "./shell/ExportDialog.tsx";
@@ -88,10 +88,11 @@ export function Workbench({
     return () => window.removeEventListener("resize", onResize);
   }, [setChatWidth]);
 
-  // Ctrl/Cmd+B toggles the chat, like a sidebar.
+  // Ctrl/Cmd+J (or B) toggles the chat.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "b") {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && (key === "j" || key === "b")) {
         event.preventDefault();
         setChatHidden((hidden) => !hidden);
       }
@@ -240,32 +241,9 @@ export function Workbench({
       data-chat-hidden={chatHidden || undefined}
       style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
     >
-      <ChatPanel
-        agent={state.agent}
-        threads={state.threads}
-        thread={state.thread}
-        chat={state.chat}
-        connected={state.connected}
-        problems={problems}
-        checks={checks}
-        draft={draft}
-        onDraft={setDraft}
-        send={send}
-        composerRef={composer}
-        annotations={annotations}
-        onRemoveAnnotation={(index) => frame.current?.removePick(index)}
-        onClearAnnotations={() => frame.current?.clearPicks()}
-        picking={picking}
-        onTogglePick={() => (picking ? finishPicking() : setPicking(true))}
-        reviewing={Boolean(review)}
-        resizer={!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
-      />
       <main className={styles.main}>
         <h1 className="visually-hidden">Basis</h1>
         <TopBar
-          chatHidden={chatHidden}
-          onToggleChat={() => setChatHidden((hidden) => !hidden)}
-          agentBusy={state.agent?.status === "busy"}
           page={page}
           onPage={(next) => {
             setPage(next);
@@ -366,6 +344,34 @@ export function Workbench({
           )}
         </div>
       </main>
+      <ChatPanel
+        agent={state.agent}
+        threads={state.threads}
+        thread={state.thread}
+        chat={state.chat}
+        connected={state.connected}
+        problems={problems}
+        checks={checks}
+        draft={draft}
+        onDraft={setDraft}
+        send={send}
+        composerRef={composer}
+        annotations={annotations}
+        onRemoveAnnotation={(index) => frame.current?.removePick(index)}
+        onClearAnnotations={() => frame.current?.clearPicks()}
+        picking={picking}
+        onTogglePick={() => (picking ? finishPicking() : setPicking(true))}
+        reviewing={Boolean(review)}
+        resizer={!chatHidden && <ChatResizer width={chatWidth} onResize={setChatWidth} />}
+        onHide={() => setChatHidden(true)}
+      />
+      {chatHidden && (
+        <ChatRail
+          busy={state.agent?.status === "busy"}
+          attention={pendingPermission}
+          onShow={() => setChatHidden(false)}
+        />
+      )}
       {creating && (
         <CreateDialog
           page={page}

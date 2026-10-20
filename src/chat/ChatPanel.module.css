@@ -3,7 +3,7 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  border-right: 1px solid var(--app-line);
+  border-left: 1px solid var(--app-line);
   background: var(--app-ink);
   color: var(--app-text);
 }
@@ -932,4 +932,80 @@
 
 .queuedLabel button:hover {
   color: var(--app-text);
+}
+
+/* The header's button that folds the chat to the edge, and the rail it folds into (ChatRail). */
+.hideButton,
+.railButton {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.hideButton {
+  margin-left: auto;
+}
+
+.hideButton:hover,
+.railButton:hover {
+  background: var(--app-ink-3);
+  color: var(--app-text);
+}
+
+.hideButton svg,
+.railButton svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 11px;
+  border-left: 1px solid var(--app-line);
+  background: var(--app-ink);
+}
+
+.railDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-muted);
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+.railDot[data-attention] {
+  background: var(--app-signal);
+  animation: none;
+}
+
+@media (max-width: 900px) {
+  .rail {
+    flex-direction: row;
+    justify-content: flex-end;
+    padding: 6px 10px;
+    border-top: 1px solid var(--app-line);
+    border-left: 0;
+  }
 }

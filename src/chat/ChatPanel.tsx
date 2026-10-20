@@ -46,6 +46,39 @@ interface ChatPanelProps {
   reviewing: boolean;
   /** The handle that resizes the panel; inside it, so it belongs to the panel's landmark. */
   resizer?: ReactNode;
+  onHide: () => void;
+}
+
+/** The chat folded to the window's edge: a button to bring it back, and whether the agent works or waits. */
+export function ChatRail({ busy, attention, onShow }: { busy: boolean; attention: boolean; onShow: () => void }) {
+  return (
+    <div className={styles.rail}>
+      <button
+        type="button"
+        className={styles.railButton}
+        onClick={onShow}
+        title="Show chat (Ctrl+J)"
+        aria-label="Show chat"
+      >
+        <ChatIcon />
+        {(busy || attention) && (
+          <span
+            className={styles.railDot}
+            data-attention={attention || undefined}
+            aria-label={attention ? "The agent waits for an answer" : "The agent is working"}
+          />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.75 3.75a1 1 0 0 1 1-1h8.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5h-.25a1 1 0 0 1-1-1z" />
+    </svg>
+  );
 }
 
 const STATUS_TEXT: Record<AgentState["status"], string> = {
@@ -69,6 +102,7 @@ export function ChatPanel({
   send,
   composerRef,
   resizer,
+  onHide,
   ...composer
 }: ChatPanelProps) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -112,6 +146,17 @@ export function ChatPanel({
           <span className={styles.statusDot} />
           {connected ? (agent ? STATUS_TEXT[agent.status] : "…") : "Reconnecting"}
         </span>
+        <button
+          type="button"
+          className={styles.hideButton}
+          onClick={onHide}
+          title="Hide chat (Ctrl+J)"
+          aria-label="Hide chat"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6 4.5 9.5 8 6 11.5" />
+          </svg>
+        </button>
       </header>
       <ThreadMenu threads={threads} thread={thread} empty={chat.length === 0} connected={connected} send={send} />
 

@@ -29,7 +29,8 @@ export function ChatResizer({ width, onResize }: ChatResizerProps) {
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (dragging.current) onResize(clampChatWidth(event.clientX));
+    // The chat is at the right: its width is what lies right of the pointer.
+    if (dragging.current) onResize(clampChatWidth(window.innerWidth - event.clientX));
   };
 
   const stop = (event: PointerEvent<HTMLDivElement>) => {
@@ -41,8 +42,8 @@ export function ChatResizer({ width, onResize }: ChatResizerProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 64 : 16;
-    if (event.key === "ArrowLeft") onResize(clampChatWidth(width - step));
-    else if (event.key === "ArrowRight") onResize(clampChatWidth(width + step));
+    if (event.key === "ArrowLeft") onResize(clampChatWidth(width + step));
+    else if (event.key === "ArrowRight") onResize(clampChatWidth(width - step));
     else if (event.key === "Home") onResize(clampChatWidth(0));
     else if (event.key === "End") onResize(clampChatWidth(Infinity));
     else return;

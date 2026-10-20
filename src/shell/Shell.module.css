@@ -1,14 +1,14 @@
 .app {
   position: relative;
   display: grid;
-  grid-template-columns: var(--chat-width, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--chat-width, 380px);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
 .app[data-chat-hidden] {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 44px;
 }
 
 .app[data-chat-hidden] > aside {
@@ -19,10 +19,10 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: var(--chat-width, 380px);
+  right: var(--chat-width, 380px);
   z-index: 10;
   width: 9px;
-  translate: -50% 0;
+  translate: 50% 0;
   cursor: col-resize;
   touch-action: none;
 }
@@ -53,51 +53,6 @@
 /* The preview must not swallow pointer events (or animate) while the splitter is dragged. */
 :global(body[data-resizing]) .main {
   pointer-events: none;
-}
-
-.chatToggle {
-  position: relative;
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  margin-left: -4px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--app-muted);
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.chatToggle:hover {
-  background: var(--app-ink-3);
-  color: var(--app-text);
-}
-
-.chatToggle svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.chatToggleDot {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--app-signal);
-  animation: blink 900ms ease-in-out infinite;
 }
 
 @keyframes blink {
@@ -837,7 +792,7 @@ a.primaryButton {
   .app > aside {
     order: 2;
     border-top: 1px solid var(--app-line);
-    border-right: 0;
+    border-left: 0;
   }
 
   .resizer {
@@ -845,7 +800,8 @@ a.primaryButton {
   }
 
   .app[data-chat-hidden] {
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 }
 
