@@ -4,7 +4,7 @@ import { kitFolder, viewKitFolder, type CaptureList } from "../shared/capture.ts
 import { isComponentName, pageById, toComponentName } from "../shared/frame.ts";
 import { issueKey, issueViewId } from "../shared/issue.ts";
 import type { ProjectEntry, VerifyKitSummary } from "../shared/protocol.ts";
-import { viewInstruction } from "./brief.ts";
+import { viewChangesInstruction, viewInstruction } from "./brief.ts";
 import type { KitFile } from "./verify.ts";
 
 /*
@@ -14,8 +14,10 @@ import type { KitFile } from "./verify.ts";
  *
  *   GET  /v1/projects                         the projects
  *   GET  /v1/projects/:project/views          the project's views with their screens
- *   GET  /v1/projects/:project/views/:view    one view, and whether the project's agent is working
+ *   GET  /v1/projects/:project/views/:view    one view, whether the project's agent is working, and whether
+ *                                             an open review shows it
  *   POST /v1/projects/:project/views          { issue, title?, description?, name? }: starts the New view turn
+ *   POST /v1/projects/:project/views/:view/messages   { text }: asks for changes to the view, in a turn of its own
  *   POST /v1/projects/:project/kit            { issue? | views?, folder? }: the verification kit as a zip
  *
  * A project is named by its id or its name. Answers are JSON, except the kit.
@@ -34,6 +36,8 @@ export interface ApiProject {
     prompt(text: string, attachments: { instruction?: string }, options: { thread?: string }): Promise<void>;
   };
   screenshots: { list(): Promise<CaptureList> };
+  /** The open review, if any: what it shows and the files it changed. */
+  workspace: { review: { show: { specimen: string }[]; files: string[] } | null };
 }
 
 export interface ApiOptions {
@@ -93,6 +97,16 @@ function viewsOf(list: CaptureList) {
     file: view.file,
     screens: view.screens.map((screen) => ({ id: screen.id, label: screen.label })),
   }));
+}
+
+/** Whether the open review shows the view, or changed its file. */
+function inReview(project: ApiProject, view: { id: string; title: string; file: string }): boolean {
+  const review = project.workspace.review;
+  if (!review) return false;
+  return (
+    review.show.some((target) => target.specimen === view.id || target.specimen === view.title) ||
+    review.files.includes(view.file)
+  );
 }
 
 /** The file name of a new view for an issue: the name given, else the title, else the key, in PascalCase. */
@@ -162,7 +176,23 @@ async function route(
     const view = viewsOf(await project.screenshots.list()).find((item) => item.id === id);
     const agent = project.waiting ? "waiting" : project.busy ? "working" : "idle";
     if (!view) return { status: 404, body: { error: `No view ${id} yet.`, agent } };
-    return { body: { ...view, agent } };
+    return { body: { ...view, agent, review: inReview(project, view) ? "open" : null } };
+  }
+  if (what === "views" && parts.length === 5 && parts[4] === "messages" && method === "POST") {
+    const view = viewsOf(await project.screenshots.list()).find((item) => item.id === id);
+    if (!view) throw new ApiError(404, `No view ${id}.`);
+    const message = text((await readJson(req)).text).slice(0, 8000);
+    if (!message) throw new ApiError(400, "Say what to change in text.");
+    if (!(await project.agent.whenReady())) throw new ApiError(503, "The project's agent could not start.");
+    const thread = project.agent.newThread();
+    void project.agent
+      .prompt(
+        `Changes to ${view.title}\n\n${message}`,
+        { instruction: viewChangesInstruction(view.file, view.title, view.id) },
+        { thread },
+      )
+      .catch((error: unknown) => console.error("[basis] the API's changes turn failed:", error));
+    return { status: 202, body: { view: view.id, thread } };
   }
   if (what === "views" && parts.length === 3 && method === "POST") {
     const body = await readJson(req);

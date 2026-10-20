@@ -5,9 +5,11 @@ import { z } from "zod";
  * card's branch for the implementing step. Copy this file into the-factory's packages/core/src/plugins/ and add
  * basisPlugin() to builtinPlugins(); README.md beside it says how to configure and use it.
  *
- *   design.start_view  (enter hook)  asks Basis for a view for the card's issue, unless it has one already,
- *                                    and links the card to Basis
- *   design.fetch_kit   (exit hook)   writes the view's verification kit into the card's worktree
+ *   design.start_view  (enter hook)  asks Basis for a view for the card's issue and links the card to Basis;
+ *                                    entered again after "changes requested", sends the reviewer's comment
+ *                                    to Basis as a change to that view instead
+ *   design.fetch_kit   (exit hook)   once Basis is done and its review of the view is approved, writes the
+ *                                    view's verification kit into the card's worktree
  *                                    (basis-verify/<card key in lowercase>/) and commits it
  *
  * Only zod is imported, so the file builds in either repo; the types below are the parts of the Factory's own
@@ -25,13 +27,18 @@ const Config = z.object({
   tokenEnv: z.string().min(1).default("BASIS_API_TOKEN"),
   /** Where the kit goes in the repo; Basis' default, basis-verify/<view id>, when absent. */
   folder: z.string().optional(),
+  /** Whether the kit waits for the view's review in Basis to be approved there (default true). */
+  requireApproval: z.boolean().default(true),
 });
 export type BasisConfig = z.infer<typeof Config>;
 
 /** What the hooks use of a Factory hook's context. */
 export interface BasisHookContext {
   card: { id: string; key: string; title: string; body: string; worktreePath: string | null };
+  step: { id: string };
   board: {
+    /** The card's history, oldest first: gate decisions (with the reviewer's comment) and hook results. */
+    events(cardId: string): Promise<{ id: string; kind: string; payload: unknown }[]>;
     addLink(input: {
       cardId: string;
       plugin: string;
@@ -55,6 +62,30 @@ interface BasisView {
   title: string;
   screens: { id: string; label: string }[];
   agent: "working" | "waiting" | "idle";
+  /** "open" while a review in Basis shows the view and is not approved yet. */
+  review: "open" | null;
+}
+
+/**
+ * The reviewer's comment from the latest "changes requested" on this step, unless an earlier run of the enter hook
+ * sent it already (its result names the event), so a retry sends it once.
+ */
+export function pendingComment(
+  events: { id: string; kind: string; payload: unknown }[],
+  step: string,
+): { id: string; text: string } | null {
+  const decided = events.filter((event) => {
+    const payload = (event.payload ?? {}) as { step?: string; decision?: string };
+    return event.kind === "gate_decided" && payload.step === step && payload.decision === "changes_requested";
+  });
+  const last = decided.at(-1);
+  const text = ((last?.payload ?? {}) as { comment?: string | null }).comment?.trim();
+  if (!last || !text) return null;
+  const sent = events.some((event) => {
+    const payload = (event.payload ?? {}) as { hook?: string; result?: { forwarded?: string } | null };
+    return event.kind === "hook_ran" && payload.hook === "design.start_view" && payload.result?.forwarded === last.id;
+  });
+  return sent ? null : { id: last.id, text };
 }
 
 /** The id Basis gives the view for an issue: WEB-12 gives web-12 (shared/issue.ts in Basis). */
@@ -93,6 +124,17 @@ export function basisPlugin(deps: { fetch?: typeof fetch } = {}) {
           throw new Error(`Basis: could not start the view (HTTP ${res.status}: ${body.error ?? ""})`);
         return { view: body.view, thread: body.thread ?? "" };
       },
+      async askChanges(id: string, text: string): Promise<{ thread: string }> {
+        const res = await doFetch(`${base}/views/${encodeURIComponent(id)}/messages`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ text }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { thread?: string; error?: string };
+        if (res.status !== 202)
+          throw new Error(`Basis: could not send the changes (HTTP ${res.status}: ${body.error ?? ""})`);
+        return { thread: body.thread ?? "" };
+      },
       kitUrl: `${base}/kit`,
     };
   };
@@ -105,12 +147,14 @@ export function basisPlugin(deps: { fetch?: typeof fetch } = {}) {
     config: Config,
     exampleConfig: { url: "http://basis:5320", appUrl: "http://basis.internal:5320", project: "Auth-service" },
     hooks: {
-      "design.start_view": async ({ card, board, config, env }: BasisHookContext) => {
+      "design.start_view": async ({ card, step, board, config, env }: BasisHookContext) => {
         const basis = api(config, env);
         const id = viewIdFor(card.key);
-        // Entered again (changes requested): the view is there, and the designer goes on in Basis.
         const existing = await basis.view(id);
         const started = existing.view ? null : await basis.startView(card);
+        // Entered again after "changes requested": the reviewer's comment goes to Basis as a change to the view.
+        const comment = existing.view ? pendingComment(await board.events(card.id), step.id) : null;
+        const changes = comment ? await basis.askChanges(id, comment.text) : null;
         await board.addLink({
           cardId: card.id,
           plugin: "basis",
@@ -119,7 +163,12 @@ export function basisPlugin(deps: { fetch?: typeof fetch } = {}) {
           url: config.appUrl ?? config.url,
           title: `${card.key} in Basis`,
         });
-        return { view: id, started: started !== null, thread: started?.thread ?? null };
+        return {
+          view: id,
+          started: started !== null,
+          thread: started?.thread ?? changes?.thread ?? null,
+          forwarded: comment?.id ?? null,
+        };
       },
       "design.fetch_kit": async ({ card, runner, config, env }: BasisHookContext) => {
         if (!card.worktreePath) throw new Error("Basis: the card has no worktree to write the kit into");
@@ -128,6 +177,10 @@ export function basisPlugin(deps: { fetch?: typeof fetch } = {}) {
         const { view, agent } = await basis.view(id);
         if (!view) throw new Error(`Basis has no view ${id} yet; its agent is ${agent}.`);
         if (agent !== "idle") throw new Error(`Basis' agent is ${agent} on ${id}; approve when it is done.`);
+        if (config.requireApproval && view.review === "open")
+          throw new Error(
+            `${card.key} is still in review in Basis: approve the review there, then approve this step again.`,
+          );
         // The runner may be another machine than this server, so it fetches the kit itself.
         const body = JSON.stringify({ issue: card.key, ...(config.folder ? { folder: config.folder } : {}) });
         const result = await runner.exec(

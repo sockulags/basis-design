@@ -366,6 +366,20 @@ export function createInstruction(
   ].join(" ");
 }
 
+/**
+ * The turn that changes a view as a reviewer asked (from the API, when a pipeline's reviewer requests changes): the
+ * view keeps its id, since the verification kit and the pipeline find it by that.
+ */
+export function viewChangesInstruction(file: string, title: string, id: string): string {
+  return [
+    `A reviewer asked for changes to the view "${title}" in ${file}; their words are in the user's message below.`,
+    `1. Read the view and what it uses, then make the changes, following "Views: whole screens" in AGENTS.md. Keep the specimen's id "${id}" and its title's issue key.`,
+    "2. If a screen needs something the patterns lack, add or extend a pattern rather than building it inside the view.",
+    `3. Write review.json with a title for the change and show: [{ "specimen": "${title}" }], so the reviewer sees it in a review.`,
+    "Finish with a short summary of what you changed, and anything in the request you did not do and why.",
+  ].join("\n");
+}
+
 /** The guided turn behind "New view": the screens of one feature, as a flow, from what the workspace has. */
 export function viewInstruction(folder: string, name: string, purpose: string, issue?: string): string {
   return [

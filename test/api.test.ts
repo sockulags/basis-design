@@ -33,6 +33,7 @@ function fakeProject(views: string[]) {
       prompt: async (text, { instruction }, { thread }) => void turns.push({ text, instruction, thread }),
     },
     screenshots: { list: async () => list },
+    workspace: { review: null as { show: { specimen: string }[]; files: string[] } | null },
   };
   return { project, turns };
 }
@@ -141,6 +142,35 @@ describe("the pipeline API", () => {
     const busy = await call("/v1/projects/p1/kit", { method: "POST", body: "{}" });
     building = false;
     assert.equal(busy.status, 409);
+  });
+
+  test("says when an open review shows a view, by its id or title or its file", async () => {
+    const review = async () =>
+      ((await (await call("/v1/projects/p1/views/web-12")).json()) as { review: unknown }).review;
+    assert.equal(await review(), null);
+    project.workspace.review = { show: [{ specimen: "web-12" }], files: [] };
+    assert.equal(await review(), "open");
+    project.workspace.review = { show: [{ specimen: "Buttons" }], files: ["views/web-12.specimen.tsx"] };
+    assert.equal(await review(), "open");
+    project.workspace.review = { show: [{ specimen: "Buttons" }], files: ["components/Button.tsx"] };
+    assert.equal(await review(), null);
+    project.workspace.review = null;
+  });
+
+  test("asks for changes to a view in a turn of its own", async () => {
+    const response = await call("/v1/projects/p1/views/web-12/messages", {
+      method: "POST",
+      body: JSON.stringify({ text: "Show the IP address in the list too." }),
+    });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { view: "web-12", thread: "t-1" });
+    const turn = turns.at(-1)!;
+    assert.equal(turn.text, "Changes to web-12\n\nShow the IP address in the list too.");
+    assert.match(turn.instruction ?? "", /Keep the specimen's id "web-12"/);
+    const missing = await call("/v1/projects/p1/views/web-99/messages", { method: "POST", body: '{"text":"x"}' });
+    assert.equal(missing.status, 404);
+    const empty = await call("/v1/projects/p1/views/web-12/messages", { method: "POST", body: '{"text":" "}' });
+    assert.equal(empty.status, 400);
   });
 
   test("is off without a token", async () => {

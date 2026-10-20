@@ -150,8 +150,9 @@ kit. Start Basis with `BASIS_API_TOKEN` set; the API is off without it. Every re
 | --- | --- |
 | `GET /v1/projects` | The projects: id, name, linked repo |
 | `GET /v1/projects/:project/views` | The project's views and their screens |
-| `GET /v1/projects/:project/views/:view` | One view, and `agent`: `working`, `waiting` (for an answer) or `idle`; 404 until it exists |
+| `GET /v1/projects/:project/views/:view` | One view, `agent`: `working`, `waiting` (for an answer) or `idle`, and `review`: `open` while a review in Basis shows it; 404 until it exists |
 | `POST /v1/projects/:project/views` | `{ "issue": "WEB-12", "title": "…", "description": "…" }` starts the New view turn for the issue; answers 202 with the view's id (`web-12`) and kit folder |
+| `POST /v1/projects/:project/views/:view/messages` | `{ "text": "…" }` asks for changes to the view, in a turn of its own that keeps its id and opens a review; answers 202 |
 | `POST /v1/projects/:project/kit` | `{ "issue": "WEB-12" }`, or `{ "views": [...], "folder": "…" }`: the verification kit as a zip, its files under the kit's folder (`basis-verify/web-12/` for an issue), to unpack at the product repo's root |
 
 A typical step: `POST …/views` when the issue reaches design, poll `GET …/views/web-12` until it answers 200

@@ -252,6 +252,17 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: Changes and approval through the Factory plugin, without events. A webhook or SSE from Basis was
+  dropped: a Factory plugin only runs when a step is entered or approved, nothing in it listens, and pushing into
+  The Factory would mean Basis approving gates as a user. Instead both directions are pulls at those moments.
+  Entered again after "changes requested", `design.start_view` reads the step's latest comment from the card's
+  events and sends it to the new `POST …/views/:view/messages`, which starts a turn of its own (a fresh thread
+  with `viewChangesInstruction`: keep the id, open a review); the hook's result names the event, which The
+  Factory records, so a retry does not send it again. `GET …/views/:view` now says `review: "open"` while the
+  open review shows the view (by id, title or changed file), and `design.fetch_kit` refuses until it is approved
+  in Basis (`requireApproval`, default true), so the designer's approval in Basis counts. Tests cover the API
+  (review status, the change request) and the plugin (forwarding once, waiting for approval).
+
 - 2026-10-20: The Factory plugin and Docker Compose. The plugin lives here (`integrations/the-factory/`), next to the
   API it calls, and The Factory gets a copy: it imports only zod and declares the parts of The Factory's plugin
   types it uses, which match structurally (`builtinPlugins()` casts its list anyway). `design.start_view` (enter)

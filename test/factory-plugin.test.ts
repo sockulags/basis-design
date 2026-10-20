@@ -8,7 +8,7 @@ import { after, before, describe, test } from "node:test";
 import { strToU8 } from "fflate";
 import type { CaptureList } from "../shared/capture.ts";
 import type { VerifyKitSummary } from "../shared/protocol.ts";
-import { basisPlugin, viewIdFor, type BasisHookContext } from "../integrations/the-factory/basis.ts";
+import { basisPlugin, pendingComment, viewIdFor, type BasisHookContext } from "../integrations/the-factory/basis.ts";
 import { handlePipelineApi, type ApiOptions, type ApiProject } from "../server/api.ts";
 import { zipVerificationKit } from "../server/verify.ts";
 
@@ -52,6 +52,7 @@ describe("the Factory plugin against Basis' API", () => {
       prompt: async (text) => void turns.push(text),
     },
     screenshots: { list: async () => list() },
+    workspace: { review: null as { show: { specimen: string }[]; files: string[] } | null },
   };
   const options: ApiOptions = {
     token: TOKEN,
@@ -79,9 +80,12 @@ describe("the Factory plugin against Basis' API", () => {
   const plugin = basisPlugin();
   const links: unknown[] = [];
   const commits: string[] = [];
+  /** The card's history, as The Factory keeps it. */
+  const events: { id: string; kind: string; payload: unknown }[] = [];
   const context = (): BasisHookContext => ({
     card: { id: "c1", key: "WEB-12", title: "Audit log", body: "Admins see who signed in.", worktreePath: worktree },
-    board: { addLink: async (link) => void links.push(link) },
+    step: { id: "screens" },
+    board: { addLink: async (link) => void links.push(link), events: async () => events },
     runner: { exec: run, commitAll: async (_, message) => (commits.push(message), "abc123") },
     config: plugin.config.parse({ url, project: "Auth-service", appUrl: "http://basis.internal:5320" }),
     env: { BASIS_API_TOKEN: TOKEN },
@@ -89,7 +93,7 @@ describe("the Factory plugin against Basis' API", () => {
 
   test("starts the view for the card once, and links the card to Basis", async () => {
     const first = await plugin.hooks["design.start_view"](context());
-    assert.deepEqual(first, { view: "web-12", started: true, thread: "t-1" });
+    assert.deepEqual(first, { view: "web-12", started: true, thread: "t-1", forwarded: null });
     assert.match(turns[0]!, /^New view: AuditLog \(WEB-12\)\n\nAudit log\n\nAdmins see who signed in\.$/);
     assert.deepEqual(links[0], {
       cardId: "c1",
@@ -99,11 +103,38 @@ describe("the Factory plugin against Basis' API", () => {
       url: "http://basis.internal:5320",
       title: "WEB-12 in Basis",
     });
-    // Entered again after "changes requested": the designer goes on in Basis, no second turn.
+    // Entered again without a comment (a retry): no second turn.
     views.add("web-12");
     const again = await plugin.hooks["design.start_view"](context());
     assert.equal(again.started, false);
     assert.equal(turns.length, 1);
+  });
+
+  test("sends the reviewer's comment to Basis as a change to the view, once", async () => {
+    events.push(
+      {
+        id: "e1",
+        kind: "gate_decided",
+        payload: { step: "spec", decision: "changes_requested", comment: "Not this one" },
+      },
+      {
+        id: "e2",
+        kind: "gate_decided",
+        payload: { step: "screens", decision: "changes_requested", comment: " Add the IP address. " },
+      },
+    );
+    const entered = await plugin.hooks["design.start_view"](context());
+    assert.deepEqual(entered, { view: "web-12", started: false, thread: "t-1", forwarded: "e2" });
+    assert.equal(turns.at(-1), "Changes to web-12\n\nAdd the IP address.");
+    // The Factory records the hook's result; entering again (a retry) does not send it twice.
+    events.push({
+      id: "e3",
+      kind: "hook_ran",
+      payload: { hook: "design.start_view", phase: "enter", result: entered },
+    });
+    const count = turns.length;
+    assert.equal((await plugin.hooks["design.start_view"](context())).forwarded, null);
+    assert.equal(turns.length, count);
   });
 
   test("brings the kit into the worktree and commits it, keeping the project's own files", async () => {
@@ -119,6 +150,14 @@ describe("the Factory plugin against Basis' API", () => {
     await assert.rejects(readFile(path.join(kit, "screens", "stale.png")), "the kit's screens replace the old ones");
     assert.equal(await readFile(path.join(kit, "targets.json"), "utf8"), '{ "mine": true }');
     assert.deepEqual(commits, ["WEB-12 Design: verification kit from Basis"]);
+  });
+
+  test("waits for the review in Basis to be approved, unless told not to", async () => {
+    project.workspace.review = { show: [{ specimen: "web-12" }], files: [] };
+    await assert.rejects(plugin.hooks["design.fetch_kit"](context()), /WEB-12 is still in review in Basis/);
+    const relaxed = { ...context(), config: { ...context().config, requireApproval: false } };
+    assert.equal((await plugin.hooks["design.fetch_kit"](relaxed)).view, "web-12");
+    project.workspace.review = null;
   });
 
   test("waits for Basis: no view yet, or its agent still working", async () => {
@@ -145,4 +184,21 @@ describe("the Factory plugin against Basis' API", () => {
 test("the card key becomes the view's id as Basis makes it", () => {
   assert.equal(viewIdFor("WEB-12"), "web-12");
   assert.equal(viewIdFor("owner/repo#42"), "owner-repo-42");
+});
+
+test("the comment to send is the step's latest change request, with text, not sent before", () => {
+  const decided = (id: string, step: string, comment: string | null) => ({
+    id,
+    kind: "gate_decided",
+    payload: { step, decision: "changes_requested", comment },
+  });
+  assert.equal(pendingComment([], "screens"), null);
+  assert.equal(pendingComment([decided("a", "screens", "  ")], "screens"), null);
+  assert.equal(pendingComment([decided("a", "spec", "x")], "screens"), null);
+  assert.deepEqual(pendingComment([decided("a", "screens", "x"), decided("b", "screens", "y")], "screens"), {
+    id: "b",
+    text: "y",
+  });
+  const approved = { id: "c", kind: "gate_decided", payload: { step: "screens", decision: "approved", comment: "ok" } };
+  assert.deepEqual(pendingComment([decided("a", "screens", "x"), approved], "screens"), { id: "a", text: "x" });
 });
