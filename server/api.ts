@@ -5,6 +5,7 @@ import { isComponentName, pageById, toComponentName } from "../shared/frame.ts";
 import { issueKey, issueViewId } from "../shared/issue.ts";
 import type { ProjectEntry, VerifyKitSummary } from "../shared/protocol.ts";
 import { viewChangesInstruction, viewInstruction } from "./brief.ts";
+import { checkDiffRequest, type DiffReport, type DiffRequest, type Verifications } from "./diff.ts";
 import type { KitFile } from "./verify.ts";
 
 /*
@@ -19,6 +20,10 @@ import type { KitFile } from "./verify.ts";
  *   POST /v1/projects/:project/views          { issue, title?, description?, name? }: starts the New view turn
  *   POST /v1/projects/:project/views/:view/messages   { text }: asks for changes to the view, in a turn of its own
  *   POST /v1/projects/:project/kit            { issue? | views?, folder? }: the verification kit as a zip
+ *   POST /v1/projects/:project/views/:view/verify   { targets, exceptions?, label? }: basis-diff, Basis'
+ *                                             own photographs of the view and the product's pages, compared
+ *   GET  /v1/projects/:project/views/:view/verifications   the view's reports, newest first
+ *   GET  /v1/projects/:project/verifications/:id           one report; /files/<kind>/<file> its images
  *
  * A project is named by its id or its name. Answers are JSON, except the kit.
  */
@@ -52,6 +57,11 @@ export interface ApiOptions {
     request: { views?: string[]; folder?: string },
   ) => Promise<{ files: KitFile[]; summary: VerifyKitSummary } | null>;
   zip: (files: KitFile[], folder: string) => Uint8Array;
+  /** Runs basis-diff for a view, or null when Basis is photographing something else already. */
+  verify: (project: ApiProject, view: CaptureList["views"][number], request: DiffRequest) => Promise<DiffReport | null>;
+  verifications: Verifications;
+  /** Where people read a report in Basis (a page behind its login). */
+  reportPath: (project: string, id: string) => string;
 }
 
 class ApiError extends Error {
@@ -214,6 +224,59 @@ async function route(
       .catch((error: unknown) => console.error("[basis] the API's view turn failed:", error));
     const view = issueViewId(key);
     return { status: 202, body: { view, name, thread, kitFolder: viewKitFolder(view) } };
+  }
+  if (what === "views" && parts.length === 5 && parts[4] === "verify" && method === "POST") {
+    const view = (await project.screenshots.list()).views.find((item) => item.id === id);
+    if (!view) throw new ApiError(404, `No view ${id}.`);
+    let request: DiffRequest;
+    try {
+      request = checkDiffRequest(await readJson(req));
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(400, (error as Error).message);
+    }
+    let report: DiffReport | null;
+    try {
+      report = await options.verify(project, view, request);
+    } catch (error) {
+      throw new ApiError(/only http and https/.test((error as Error).message) ? 400 : 500, (error as Error).message);
+    }
+    if (!report) throw new ApiError(409, "Basis is taking other screenshots. Try again in a moment.");
+    return {
+      body: {
+        id: report.id,
+        pass: report.pass,
+        passWithExceptions: report.passWithExceptions,
+        shots: report.shots.map(({ file, status, percent, problems, withExceptions }) => ({
+          file,
+          status,
+          percent,
+          problems,
+          withExceptions: withExceptions.status,
+        })),
+        report: `${API_PATH}/projects/${encodeURIComponent(entry.id)}/verifications/${report.id}`,
+        page: options.reportPath(entry.id, report.id),
+      },
+    };
+  }
+  if (what === "views" && parts.length === 5 && parts[4] === "verifications" && method === "GET") {
+    return { body: { verifications: await options.verifications.list(entry.id, id) } };
+  }
+  if (what === "verifications" && parts.length === 4 && method === "GET") {
+    const report = await options.verifications.get(entry.id, id!);
+    if (!report) throw new ApiError(404, `No verification ${id}.`);
+    return { body: { ...report, page: options.reportPath(entry.id, report.id) } };
+  }
+  if (what === "verifications" && parts.length > 5 && parts[4] === "files" && method === "GET") {
+    const image = await options.verifications.file(entry.id, id!, parts.slice(5).join("/"));
+    if (!image) throw new ApiError(404, "No such image in that verification.");
+    res.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Length": image.byteLength,
+      "Cache-Control": "no-store",
+    });
+    res.end(image);
+    return undefined;
   }
   if (what === "kit" && parts.length === 3 && method === "POST") {
     const body = await readJson(req);

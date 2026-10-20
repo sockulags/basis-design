@@ -4,7 +4,11 @@ import { after, before, describe, test } from "node:test";
 import { strToU8, unzipSync, zipSync } from "fflate";
 import type { CaptureList } from "../shared/capture.ts";
 import type { ProjectEntry, VerifyKitSummary } from "../shared/protocol.ts";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { handlePipelineApi, viewName, type ApiOptions, type ApiProject } from "../server/api.ts";
+import { Verifications, type DiffReport, type DiffRequest } from "../server/diff.ts";
 
 const TOKEN = "secret-token";
 const ENTRY: ProjectEntry = { id: "p1", name: "Auth-service", dir: "/ws", repo: "/repo" };
@@ -55,7 +59,32 @@ describe("the pipeline API", () => {
       return { files: [{ path: "PROMPT.md", data: strToU8("kit") }], summary };
     },
     zip: (files, folder) => zipSync(Object.fromEntries(files.map((file) => [`${folder}/${file.path}`, file.data]))),
+    // basis-diff: records what it was asked and writes a report the way runDiff does.
+    verify: async (_, view, request) => {
+      diffs.push(request);
+      const { id, dir } = await store.create("p1", view.id);
+      const report = {
+        id,
+        view: view.id,
+        title: view.title,
+        createdAt: new Date().toISOString(),
+        pass: false,
+        passWithExceptions: true,
+        label: request.label ?? null,
+        shots: [{ file: "a.png", status: "fail", percent: 1.5, problems: [], withExceptions: { status: "pass" } }],
+        files: {},
+      } as unknown as DiffReport;
+      await (await import("node:fs/promises")).writeFile(path.join(dir, "report.json"), JSON.stringify(report));
+      return report;
+    },
+    get verifications() {
+      return store;
+    },
+    reportPath: (project, id) => `/verifications/${project}/${id}`,
   };
+  const diffs: DiffRequest[] = [];
+  let store: Verifications;
+  let storeDir = "";
   let server: http.Server;
   let base = "";
   before(async () => {
@@ -171,6 +200,50 @@ describe("the pipeline API", () => {
     assert.equal(missing.status, 404);
     const empty = await call("/v1/projects/p1/views/web-12/messages", { method: "POST", body: '{"text":" "}' });
     assert.equal(empty.status, 400);
+  });
+
+  test("runs basis-diff for a view, and lists and gives its reports", async () => {
+    storeDir = await mkdtemp(path.join(tmpdir(), "basis-api-diff-"));
+    store = new Verifications(storeDir);
+    try {
+      const body = { targets: { baseUrl: "http://localhost:3000", screens: { main: "/audit" } }, label: "WEB-12" };
+      const response = await call("/v1/projects/p1/views/web-12/verify", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 200);
+      const result = (await response.json()) as {
+        id: string;
+        pass: boolean;
+        page: string;
+        report: string;
+        shots: unknown[];
+      };
+      assert.equal(result.pass, false);
+      assert.deepEqual(result.shots, [
+        { file: "a.png", status: "fail", percent: 1.5, problems: [], withExceptions: "pass" },
+      ]);
+      assert.equal(result.page, `/verifications/p1/${result.id}`);
+      assert.equal(diffs.at(-1)?.label, "WEB-12");
+      const listed = (await (await call("/v1/projects/p1/views/web-12/verifications")).json()) as {
+        verifications: { id: string }[];
+      };
+      assert.deepEqual(
+        listed.verifications.map((item) => item.id),
+        [result.id],
+      );
+      const report = await call(result.report);
+      assert.equal(report.status, 200);
+      assert.equal(((await report.json()) as { page: string }).page, result.page);
+      assert.equal((await call("/v1/projects/p1/verifications/nope")).status, 404);
+      assert.equal((await call(`/v1/projects/p1/verifications/${result.id}/files/expected/a.png`)).status, 404);
+      const bad = await call("/v1/projects/p1/views/web-12/verify", { method: "POST", body: '{"targets":{}}' });
+      assert.equal(bad.status, 400);
+      const unknown = await call("/v1/projects/p1/views/web-99/verify", { method: "POST", body: JSON.stringify(body) });
+      assert.equal(unknown.status, 404);
+    } finally {
+      await rm(storeDir, { recursive: true, force: true });
+    }
   });
 
   test("is off without a token", async () => {

@@ -262,7 +262,7 @@ export class Screenshots {
   private readonly widths: () => number[];
 
   constructor(
-    private readonly pageUrl: string,
+    readonly pageUrl: string,
     {
       idleMs = 60_000,
       timeoutMs = 30_000,

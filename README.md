@@ -157,11 +157,30 @@ or its name.
 | `POST /v1/projects/:project/views` | `{ "issue": "WEB-12", "title": "…", "description": "…" }` starts the New view turn for the issue; answers 202 with the view's id (`web-12`) and kit folder |
 | `POST /v1/projects/:project/views/:view/messages` | `{ "text": "…" }` asks for changes to the view, in a turn of its own that keeps its id and opens a review; answers 202 |
 | `POST /v1/projects/:project/kit` | `{ "issue": "WEB-12" }`, or `{ "views": [...], "folder": "…" }`: the verification kit as a zip, its files under the kit's folder (`basis-verify/web-12/` for an issue), to unpack at the product repo's root |
+| `POST /v1/projects/:project/views/:view/verify` | basis-diff (below): `{ "targets": { "baseUrl": "http://localhost:3000", "screens": { "<screen>": "/path" } }, "exceptions": [...], "label": "WEB-12 at abc123" }` |
+| `GET /v1/projects/:project/views/:view/verifications` | The view's basis-diff reports, newest first |
+| `GET /v1/projects/:project/verifications/:id` | One report; its images at `…/files/expected\|actual\|diff/<view>/<shot>.png` |
 
 A typical step: `POST …/views` when the issue reaches design, poll `GET …/views/web-12` until it answers 200
 with `agent: "idle"`, let someone review it in Basis, then `POST …/kit` with the issue and commit the folder to
 the issue's branch, where the implementing agent finds `PROMPT.md`. One kit is built at a time; another request
 meanwhile gets 409.
+
+### basis-diff: proof the agent cannot make up
+
+The verification kit lets the agent that builds a feature compare its work with the design, but it does so on its
+own machine, with files it can change: the reference images, the exceptions, the scripts. basis-diff is the
+check it cannot touch. The agent (or a pipeline step) sends only the URLs of the product's pages for the view's
+screens. Basis photographs the view from its own design and those pages with the same browser and settings,
+compares them with the kit's own rules, and keeps the images and the report in `~/.basis/verifications/`,
+outside every workspace, with a SHA-256 of each image; nothing in the API changes or deletes one, and an image
+that no longer matches its hash is not served.
+
+The verdict, `pass`, leaves out only the elements marked as media (`data-basis-media`), whose places and sizes
+must still match. Exceptions in the request are the requester's claims: they count only in a second verdict,
+`passWithExceptions`, and are listed with their reasons, so a person decides whether they are fair. The answer
+names the report's page in Basis (`/verifications/<project>/<id>`): the design, the product and their difference
+for every shot. The product's pages must be reachable from where Basis runs.
 
 ## Privacy
 

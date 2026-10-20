@@ -24,6 +24,8 @@ import { BACKGROUND_PATH, HOST_PAGE } from "./background.ts";
 import { createInstruction, importInstruction, templateInstruction, viewInstruction } from "./brief.ts";
 import { buildStarterKit, slug, writeStarterKit, zipStarterKit } from "./export.ts";
 import { buildVerificationKit, writeVerificationKit, zipVerificationKit } from "./verify.ts";
+import { reportPage, runDiff, Verifications } from "./diff.ts";
+import { git } from "./exec.ts";
 import { OpenProjects } from "./open-projects.ts";
 import { guard, guardUpgrades, OpenProject, refuseHost, type ProjectOptions } from "./project.ts";
 import {
@@ -157,6 +159,53 @@ const chromeVite = await createVite({
 });
 const chromeGuard = guard((url) => url === "/preview.html" || url === "/capture.html");
 /** The HTTP API for pipelines (server/api.ts): token-protected, so it answers whatever host it is reached by. */
+/** basis-diff's reports (server/diff.ts), outside every workspace, and the page that shows one to people. */
+const verifications = new Verifications(path.join(home, "verifications"));
+const VERIFICATIONS_PATH = "/verifications";
+
+/** Runs basis-diff for a view of an open project, one capture at a time like the kits; null while one runs. */
+async function verifyView(
+  project: OpenProject,
+  view: Parameters<ApiOptions["verify"]>[1],
+  request: Parameters<ApiOptions["verify"]>[2],
+) {
+  if (verifying) return null;
+  verifying = true;
+  try {
+    const designCommit = (await git(project.workspace.dir, ["rev-parse", "HEAD"]).catch(() => "")).trim() || null;
+    const { id, dir } = await verifications.create(project.entry.id, view.id);
+    return await runDiff({
+      captureUrl: project.screenshots.pageUrl,
+      view,
+      project: project.entry.id,
+      designCommit,
+      request,
+      dir,
+      id,
+    });
+  } finally {
+    verifying = false;
+  }
+}
+
+/** A basis-diff report for people, `/verifications/<project>/<id>`, and its images under `…/files/`. */
+async function sendVerification(res: http.ServerResponse, pathname: string): Promise<void> {
+  const [project = "", id = "", files, ...rest] = pathname
+    .slice(VERIFICATIONS_PATH.length + 1)
+    .split("/")
+    .map(decodeURIComponent);
+  if (files === "files") {
+    const image = await verifications.file(project, id, rest.join("/"));
+    if (!image) return void res.writeHead(404).end("Not found");
+    res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
+    return void res.end(image);
+  }
+  const report = files === undefined ? await verifications.get(project, id) : null;
+  if (!report) return void res.writeHead(404, { "Content-Type": "text/plain" }).end("No such verification.");
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(reportPage(report, `${VERIFICATIONS_PATH}/${encodeURIComponent(project)}/${encodeURIComponent(id)}/files`));
+}
+
 const apiOptions: ApiOptions = {
   // On loopback without BASIS_API_TOKEN, a token of Basis' own (server/api-token.ts) keeps the API on for tools here.
   token: process.env.BASIS_API_TOKEN || (network.accessToken ? undefined : await localApiToken(home)),
@@ -164,6 +213,9 @@ const apiOptions: ApiOptions = {
   open: (entry) => open.open(entry),
   buildKit: (project, request) => buildKit(project as OpenProject, request),
   zip: zipVerificationKit,
+  verify: (project, view, request) => verifyView(project as OpenProject, view, request),
+  verifications,
+  reportPath: (project, id) => `${VERIFICATIONS_PATH}/${encodeURIComponent(project)}/${encodeURIComponent(id)}`,
 };
 chromeServer.on("request", (req, res) => {
   const pathname = req.url?.split("?")[0] ?? "";
@@ -186,6 +238,10 @@ guardUpgrades(chromeServer, network, () => port);
 
 /** The chrome's own pages and requests, once the host and access are known to be right. */
 function answerChrome(req: http.IncomingMessage, res: http.ServerResponse): void {
+  if (req.method === "GET" && req.url?.startsWith(`${VERIFICATIONS_PATH}/`)) {
+    void sendVerification(res, req.url.split("?")[0]!);
+    return;
+  }
   if (req.method === "GET" && req.url?.split("?")[0] === "/export/starter-kit.zip") {
     // The tab names its project; without one, the project shown last.
     const id = new URL(req.url, "http://local").searchParams.get("project") ?? projects.active?.id ?? "";

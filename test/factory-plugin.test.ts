@@ -10,6 +10,7 @@ import type { CaptureList } from "../shared/capture.ts";
 import type { VerifyKitSummary } from "../shared/protocol.ts";
 import { basisPlugin, pendingComment, viewIdFor, type BasisHookContext } from "../integrations/the-factory/basis.ts";
 import { handlePipelineApi, type ApiOptions, type ApiProject } from "../server/api.ts";
+import { Verifications } from "../server/diff.ts";
 import { zipVerificationKit } from "../server/verify.ts";
 
 const TOKEN = "factory-test-token";
@@ -63,6 +64,9 @@ describe("the Factory plugin against Basis' API", () => {
       summary: { folder: request.folder!, shots: 1 } as VerifyKitSummary,
     }),
     zip: zipVerificationKit,
+    verify: async () => null,
+    verifications: new Verifications(path.join(root, "verifications")),
+    reportPath: () => "",
   };
   let server: http.Server;
   let url = "";

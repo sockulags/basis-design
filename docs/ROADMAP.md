@@ -252,6 +252,24 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: basis-diff (`server/diff.ts`). Proof that an implementation looks like its view, which the agent
+  that built it cannot change: the kit's own loop runs where the agent can edit the reference images, the
+  exceptions and the scripts. The agent sends only URLs (`POST …/views/:view/verify`, the kit's targets format,
+  keyed by screen or view/screen, http and https only). Basis photographs the design from its live preview
+  (`takeShot` on the capture page) and the product's pages (as `capture.mjs app` does: viewport, colour scheme,
+  optional theme attribute, the neutral CSS, settling) with one browser, so fonts and antialiasing match, which
+  uploaded images from another machine never would. It judges with compare.mjs (`compareImages`,
+  `shotExclusions`, `exceptionsFor`). `pass` applies no exceptions but the media marker; declared exceptions
+  give `passWithExceptions` and are listed with their reasons, since an exception is a claim. Reports live in
+  `<BASIS_HOME>/verifications/<project>/<id>/` (report.json, expected/, actual/, diff/) with a SHA-256 per image;
+  the API can only add and read them, and `Verifications.file` serves an image only while it matches its hash.
+  People read a report at `/verifications/<project>/<id>` in the chrome (behind the access token in a container).
+  The report records the workspace commit the design was photographed at. Scripts for the page go as strings,
+  since tsx adds helpers to functions' source. Tested with a real browser against a stub capture page and product
+  (identical, different colour, a moved image placeholder, a declared whole-shot exception, a tampered image), the
+  API with a stand-in, and a throwaway Basis on its local token: Team members against its own capture page passed
+  at 0% where the screens matched and failed where a screen was pointed at another.
+
 - 2026-10-20: A local API token. On loopback without `BASIS_API_TOKEN`, Basis makes a token the first time and keeps
   it in `<BASIS_HOME>/api-token` (mode 600, `server/api-token.ts`), so the API is on for tools on the same machine,
   such as the MCP server and the Claude Code plugin, without setup; they read the file. Listening beyond loopback
