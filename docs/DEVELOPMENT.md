@@ -83,6 +83,10 @@ component source, patterns and the gallery specimens.
     the appended system prompt. The adapter still takes the initial permission mode from the user's
     `~/.claude/settings.json`, so `askingMode` switches the session to `ASKING_MODES` (Claude `default`, Codex
     `read-only`) after `session/new` and `session/resume`. Codex's other modes edit the workspace unasked.
+  - Claude's questions reach the user without their `allow_always` choices (`offered` in `server/agent.ts`). "Yes,
+    and don't ask again" writes a rule into the workspace's `.claude/settings.local.json`, which no later session
+    loads (`settingSources: []`), and the plan-mode ones switch the session to another mode. They stay only when
+    no plain "Yes" is left. Codex's stay: they last for its session or go into the rules of its own home.
   - The Codex adapter is `@agentclientprotocol/codex-acp` at a pinned version (`CODEX_ACP`); the old
     `@zed-industries/codex-acp` stopped in June 2026 and fails on newer models.
   - Codex loads none of the user's setup either (`codexEnv` in `server/codex.ts`). It runs with `CODEX_HOME` set to

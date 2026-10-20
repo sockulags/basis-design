@@ -102,6 +102,45 @@ describe("a linked product repo", () => {
   });
 });
 
+describe("a question to the user", () => {
+  const ALWAYS: acp.PermissionOption[] = [
+    { optionId: "allow-once", name: "Yes", kind: "allow_once" },
+    { optionId: "allow-with-updates", name: "Yes, and don't ask again for rm commands", kind: "allow_always" },
+    { optionId: "reject", name: "No", kind: "reject_once" },
+  ];
+
+  /** The choices the user is shown when the agent asks with `options`. */
+  async function shown(agentId: "claude" | "codex", options: acp.PermissionOption[]) {
+    const dir = path.join(root, `choices-${agentId}-${options.length}`);
+    await mkdir(path.join(dir, ".basis"), { recursive: true });
+    const agent = new AgentHost(new Workspace(dir), agentId, undefined, [], root);
+    const items: ChatItem[] = [];
+    agent.on("chat", (item) => items.push(item));
+    const pending = (
+      agent as unknown as { onPermission(params: unknown): Promise<acp.RequestPermissionResponse> }
+    ).onPermission({
+      sessionId: "s",
+      options,
+      toolCall: { toolCallId: "rm", kind: "execute", title: "rm -rf build", rawInput: { command: "rm -rf build" } },
+    });
+    const question = items.find((item) => item.kind === "permission");
+    assert.ok(question, "the user is asked");
+    agent.resolvePermission(question.id, null);
+    await pending;
+    return question.options.map((option) => option.optionId);
+  }
+
+  test("leaves out Claude's don't-ask-again, which a later session would not keep", async () => {
+    assert.deepEqual(await shown("claude", ALWAYS), ["allow-once", "reject"]);
+  });
+
+  test("keeps it when it is the only way to say yes, and keeps Codex's", async () => {
+    const only = ALWAYS.filter((option) => option.kind !== "allow_once");
+    assert.deepEqual(await shown("claude", only), ["allow-with-updates", "reject"]);
+    assert.deepEqual(await shown("codex", ALWAYS), ["allow-once", "allow-with-updates", "reject"]);
+  });
+});
+
 describe("after a turn, the fix loop", () => {
   /** The host's wait for the preview, with the generation the last turn's reload carries. */
   function waiting(reloaded: number | null) {

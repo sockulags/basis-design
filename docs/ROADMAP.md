@@ -252,6 +252,18 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: No "don't ask again" for Claude. Choosing "Yes, and don't ask again for … commands" in a question
+  from Claude made claude-agent-acp 0.92.0 answer with a rule for `localSettings`, which Claude Code wrote into
+  the workspace's `.claude/settings.local.json` (found in a real workspace with three rules). Basis opens Claude
+  with `settingSources: []`, so no later session loads it (a restart, another thread, or the resume `syncRepo`
+  does when the link changes), and the file lands in the workspace, where a turn's commit takes it in unless a
+  global gitignore keeps it out. Basis cannot tell the adapter to keep the rule for the session only, and
+  reading the rule back from the option's label would be guesswork, so `onPermission` leaves Claude's
+  `allow_always` choices out; that also drops the plan-mode choices that switch to auto or bypass mode. A choice
+  is kept when no plain "Yes" would remain. Codex's stay, since they last for the session or go into the rules
+  of Basis' Codex home, which it loads again. With the shell reads above approved by Basis, what still asks is
+  what the user should decide each time. Unit tests cover both agents and the case without a plain "Yes".
+
 - 2026-10-20: Claude's shell reads in the product repo, after retesting. Surveying a linked repo, Claude still
   asked for `cd "<repo>" && ls -la && git ls-files | grep … | sed … | sort | uniq -c` and for
   `cd "<repo>" && head -c 2500 README.md; echo; git ls-files … | grep -iE "\.(css|scss)$|…"`: Claude Code's own

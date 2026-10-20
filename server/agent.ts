@@ -1065,7 +1065,7 @@ ${message}`
     // Some tools (grep) name their path only in their input, not as locations.
     const located = (call.locations ?? []).map((location) => location.path);
     const paths = located.length ? located : inputPaths(call.rawInput, this.workspace.dir);
-    const options: PermissionChoice[] = params.options.map((option) => ({
+    const options: PermissionChoice[] = this.offered(params.options).map((option) => ({
       optionId: option.optionId,
       name: option.name,
       kind: option.kind,
@@ -1106,6 +1106,19 @@ ${message}`
     return chosen
       ? { outcome: { outcome: "selected", optionId: chosen.optionId } }
       : { outcome: { outcome: "cancelled" } };
+  }
+
+  /**
+   * The choices put to the user. Claude Code's "don't ask again" choices (`allow_always`) write a rule into the
+   * workspace's `.claude/settings.local.json`, which Basis never loads (SESSION_META loads no settings), so they
+   * promise what a later session does not keep and leave a file in the workspace; its plan-mode ones switch the
+   * session out of the mode Basis keeps it in (ASKING_MODES). So Claude's are left out, as long as a plain "Yes"
+   * remains. Codex's stay: they hold for its session, or go into the rules of the Codex home it starts with again.
+   */
+  private offered(options: acp.PermissionOption[]): acp.PermissionOption[] {
+    if (this.state.id !== "claude") return options;
+    const kept = options.filter((option) => option.kind !== "allow_always");
+    return kept.some((option) => option.kind === "allow_once") ? kept : options;
   }
 
   /**
