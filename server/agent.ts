@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -37,7 +37,7 @@ import { basisTool, basisToolTitle } from "./agent-tools.ts";
 import { AGENT_BRIEF, FIRST_PROMPT_PREAMBLE } from "./brief.ts";
 import { CLAUDE_MISSING, findClaude } from "./claude.ts";
 import { codexEnv } from "./codex.ts";
-import { isApprovableRead } from "./commands.ts";
+import { isApprovableClaudeRead, isApprovableRead } from "./commands.ts";
 import { isViewFile, unreported, type ScreenFinding } from "./stability.ts";
 import type { Workspace } from "./workspace.ts";
 
@@ -113,6 +113,15 @@ function agentEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
+/** Whether `target` is an existing folder, so a `cd` into it cannot fail and leave a command in another. */
+function isFolder(target: string): boolean {
+  try {
+    return statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Tool kinds that are auto-approved when every touched path is inside the workspace. */
 const SAFE_KINDS = new Set(["read", "edit", "search", "think"]);
 /**
@@ -131,8 +140,9 @@ const SYSTEM_PROMPT = { mode: "append" as const, content: [{ type: "text" as con
 
 /**
  * SESSION_META with the linked repo as one of Claude Code's working directories, where its read and search tools and
- * its read-only shell commands (`ls`, `find`, `grep`) run without asking, as they do in the workspace; git commands
- * that name the folder still ask (Claude Code's own check), and edits ask, which Basis refuses. Not ACP's own
+ * its read-only shell commands (`ls`, `find`, `grep`) run without asking, as they do in the workspace. Git commands
+ * after a `cd` into the folder ask (Claude Code's own check), and Basis approves those that only read (isShellRead);
+ * edits ask, which Basis refuses. Not ACP's own
  * `additionalDirectories`: Codex makes those writable.
  */
 export function sessionMeta(repo: string | undefined) {
@@ -144,7 +154,7 @@ export function sessionMeta(repo: string | undefined) {
  * Per agent, the session mode in which it asks before every edit, so edits go through onPermission and Basis'
  * rules for what the agent may change. Codex's read-only mode still runs read-only commands in its sandbox unasked,
  * except on Windows, where Basis' Codex home has no sandbox (server/codex.ts) and every command asks; Basis then
- * approves the ones that only read the workspace or the linked repo (isCodexRead).
+ * approves the ones that only read the workspace or the linked repo (isShellRead).
  */
 const ASKING_MODES: Record<AgentId, string> = { claude: "default", codex: "read-only" };
 const MAX_AUTO_FIXES = 2;
@@ -1067,7 +1077,7 @@ ${message}`
     const allowOnce = options.find((option) => option.kind === "allow_once");
     // Basis' own tools only look at the design, so they need no approval.
     const ownTool = basisTool(call) ?? this.basisCalls.get(`tool-${call.toolCallId}`);
-    if ((autoAllow || ownTool || this.isCodexRead(call)) && allowOnce)
+    if ((autoAllow || ownTool || this.isShellRead(call)) && allowOnce)
       return { outcome: { outcome: "selected", optionId: allowOnce.optionId } };
     // The linked repo is read-only, though Claude Code has it as a working directory: edits there are refused unasked.
     const inProduct = paths.find((p) => this.inRepo(p) && relativeInside(this.workspace.dir, p) === null);
@@ -1099,17 +1109,21 @@ ${message}`
   }
 
   /**
-   * A command Codex asks to run that only reads the workspace or the linked repo, as Claude Code's reads do there.
-   * Codex reports every command, reads included, as `execute`; the approval request carries the command line and
-   * its folder (`server/commands.ts` decides from those), and the paths Codex itself saw in it as locations, which
-   * must be readable too. Claude Code decides about its own read-only shell commands in its working directories
-   * (sessionMeta); the rest of its commands ask.
+   * A shell command the agent asks to run that only reads the workspace or the linked repo, as its read tools do
+   * there. Codex reports every command, reads included, as `execute`; the approval request carries the command line
+   * and its folder (`server/commands.ts` decides from those), and the paths Codex itself saw in it as locations, which
+   * must be readable too. Claude Code runs its own read-only commands in its working directories (sessionMeta) and
+   * asks for the rest; of those, Basis approves a Bash command that moves into a folder with `cd` and then only reads
+   * (isApprovableClaudeRead), which is how it looks around the linked repo.
    */
-  private isCodexRead(call: acp.RequestPermissionRequest["toolCall"]): boolean {
-    if (this.state.id !== "codex" || call.kind !== "execute") return false;
+  private isShellRead(call: acp.RequestPermissionRequest["toolCall"]): boolean {
+    if (call.kind !== "execute") return false;
     const readable = (target: string) => relativeInside(this.workspace.dir, target) !== null || this.inRepo(target);
-    const located = (call.locations ?? []).every((location) => readable(location.path));
-    return located && isApprovableRead(call.rawInput, this.workspace.dir, readable);
+    if (!(call.locations ?? []).every((location) => readable(location.path))) return false;
+    if (this.state.id === "codex") return isApprovableRead(call.rawInput, this.workspace.dir, readable);
+    // The adapter names the tool beside the standard fields; Claude Code's PowerShell tool reads commands otherwise.
+    if ((call as { name?: unknown }).name !== "Bash") return false;
+    return isApprovableClaudeRead(call.rawInput, readable, isFolder);
   }
 
   private async readTextFile(params: acp.ReadTextFileRequest): Promise<acp.ReadTextFileResponse> {

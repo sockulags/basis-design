@@ -63,6 +63,31 @@ describe("a linked product repo", () => {
     assert.ok(!items.some((item) => item.kind === "permission"), "nothing was put to the user");
   });
 
+  test("is surveyed with Claude's shell commands after a cd there, without asking", async () => {
+    const dir = path.join(root, "c", "workspace");
+    const repo = path.join(root, "c", "product");
+    const { agent, items } = await host(dir, repo);
+    const run = (command: string, name = "Bash") =>
+      (agent as unknown as { onPermission(params: unknown): Promise<acp.RequestPermissionResponse> }).onPermission({
+        sessionId: "s",
+        options: OPTIONS,
+        toolCall: { toolCallId: `bash-${items.length}`, name, kind: "execute", title: command, rawInput: { command } },
+      });
+    const survey = `cd "${repo}" && ls -la && git ls-files | grep -v node_modules | sed 's|/[^/]*$||' | sort | uniq -c`;
+    assert.equal(chosen(await run(survey)), "allow");
+    assert.ok(!items.some((item) => item.kind === "permission"), "nothing was put to the user");
+    for (const [command, name] of [
+      [`cd "${repo}" && rm -rf src`, "Bash"],
+      [`cd "${repo}" && ls`, "PowerShell"],
+    ] as const) {
+      const pending = run(command, name);
+      const question = items.findLast((item) => item.kind === "permission" && !item.resolved);
+      assert.ok(question, `${name} ${command} asks`);
+      agent.resolvePermission(question.id, null);
+      assert.equal(chosen(await pending), "cancelled");
+    }
+  });
+
   test("around the workspace still leaves the workspace's other files to the user", async () => {
     const repo = path.join(root, "b", "product");
     const dir = path.join(repo, "design");

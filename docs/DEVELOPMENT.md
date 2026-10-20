@@ -97,13 +97,14 @@ component source, patterns and the gallery specimens.
     runs in the user's own home with only those settings, and Basis says so on the console. No Windows sandbox is
     configured in Basis' home, so on Windows Codex asks before every command: the elevated sandbox is set up per
     home with an administrator prompt, and the unelevated one cannot start PowerShell installed from the Store.
-  - Basis approves Codex's commands that only read (`isCodexRead` in `server/agent.ts`), as Claude Code's reads are.
+  - Basis approves Codex's commands that only read (`isShellRead` in `server/agent.ts`), as Claude Code's reads are.
     Codex reports every command as `execute`, but its approval request carries the command line (the shell and
     script, POSIX-quoted, `"…\pwsh.exe" -Command 'Get-Content a.ts'`) and its folder. `server/commands.ts` reads
     PowerShell and POSIX scripts in a strict subset: plain words and quotes, `;`, `|`, `&&`, `||` and dropping
     errors (`2>$null`, `2>&1`); listed cmdlets with listed parameters (Get-Content, Get-ChildItem, Select-String,
     Test-Path, Get-Item, Resolve-Path and filters like Select-Object) and programs with listed options (`rg`,
-    `git status|diff|log|show`, and in POSIX shells `cat`, `head`, `tail`, `wc`, `ls`, `grep`, `find`). Anything
+    `git status|diff|log|show|ls-files`, and in POSIX shells `cat`, `head`, `tail`, `wc`, `ls`, `grep`, `find`,
+    `echo`, `sort`, `uniq` and `sed` with scripts that only print or substitute). Anything
     else (variables, subexpressions, script blocks, redirection into files, wildcards in paths, other programs or
     options) asks. Every path it reads, the folder and Codex's own locations must be in the workspace or the repo,
     and a shell started by path must not be.
@@ -599,8 +600,12 @@ comparison of the whole gallery between two history entries, the icon, and publi
   as `reach.ts` does, which needs the file extension (`./team-data.ts`, as the template writes them).
 - **Git in the linked repo:** Claude Code asks before a git command that names another folder (`git -C <repo>`,
   `cd <repo> && git ls-files`), even in its working directories; that is its own check, and the request reaches
-  Basis as a plain shell command. Basis leaves it to the user; the brief steers the agent to `ls`, `find`, `grep`
-  and its own tools.
+  Basis as a plain shell command. Basis approves it when it begins with `cd` to an existing absolute folder and
+  `&&`, and the rest only reads the workspace or the repo (`isApprovableClaudeRead` in `server/commands.ts`):
+  Claude Code's shell keeps its folder between calls, so without that `cd` Basis cannot know where relative paths
+  point, and the command still asks. After the `cd`, simple `for` loops over plain words and variables the
+  command sets itself are written out before the check (`expandVariables`); anything else that expands asks. The
+  brief tells the agent to write its shell commands that way.
 - **The export dialog** closed by itself once during testing, and it could not be reproduced.
 - **Binary images in past versions:** snapshot copies (`server/snapshots.ts`) are written from `git show` as text,
   so a PNG or JPEG in `views/assets/` shows broken on a review's before side. The brief has the agent write SVG

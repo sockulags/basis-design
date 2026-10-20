@@ -251,9 +251,12 @@ this folder:
 A project may design for a real product whose repo is linked in Basis; when it is, every message names it.
 
 - The repo is read-only. Read and search it with your read and search tools, or with plain shell commands that
-  only read (\`ls\`, \`find\`, \`grep\`, \`cat\`). Loops, variables and git commands that name its folder (\`git -C\`,
-  \`cd … && git\`) stop to ask the user every time, so list its files with \`ls\`, \`find\` or your search tools
-  instead. Never write to it: Basis refuses writes outside this folder.
+  only read (\`ls\`, \`find\`, \`grep\`, \`cat\`, \`head\`, \`sed -n\`, \`sort\`, \`uniq\`, \`diff\`, \`git ls-files\`,
+  \`git log\`). Start such a command with \`cd\` to an absolute path (\`cd "<repo>" && git ls-files | grep …\`).
+  After that \`cd\`, a \`for\` loop over file names you write out and variables you set to plain values in the
+  same command are fine (\`for f in a.css b.css; do diff "$W/$f" "$f"; done\`). Wildcards in paths, \`$(…)\`,
+  \`[ … ]\`, \`while\`, \`if\` and \`git -C\` stop to ask the user every time, so leave them out. Never write to it:
+  Basis refuses writes outside this folder.
 - \`product.md\` is what you know about the product: what it is, where its tokens and components live, its
   component inventory with the Basis counterparts, and its terms and conventions. Read it before looking in the
   repo, and keep it current when you learn something new, so later turns need not survey the repo again.

@@ -252,6 +252,33 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: Claude's shell reads in the product repo, after retesting. Surveying a linked repo, Claude still
+  asked for `cd "<repo>" && ls -la && git ls-files | grep … | sed … | sort | uniq -c` and for
+  `cd "<repo>" && head -c 2500 README.md; echo; git ls-files … | grep -iE "\.(css|scss)$|…"`: Claude Code's own
+  check stops `cd` followed by git, and the brief's advice did not keep the agent from it. Basis now approves such
+  a request itself (`isShellRead` in `server/agent.ts`, `isApprovableClaudeRead` in `server/commands.ts`) when the
+  tool is Bash, its input is the command with at most a description and a timeout, and the command begins with
+  `cd` to an absolute folder that exists, then `&&`, and the rest only reads the workspace or the repo. The
+  leading `cd` answers why this was left to the user before: Claude Code's shell keeps its folder between calls
+  and the request does not say which, but after that `cd` every relative path has a known base, and since the
+  folder exists the `cd` cannot fail and leave later commands somewhere else. A command without it still asks.
+  The read-only subset grew by `echo`, `sort` (not `-o`, `-T` or `--compress-program`), `uniq` (one file at most;
+  a second is its output), `sed` (`-n`, `-E`, `-r`, `-e`; scripts of `p`, `d`, `q`, `=` and `s` with the flags
+  `g`, `p`, `i`, `I` and a number, never `-i`, `-f`, `w`, `r`, `e`) and `git ls-files` (not `-X` or
+  `--exclude-from`), and a `$` in double quotes that the shell does not expand (`"…$|…"`) is now read as plain
+  text. Claude Code's PowerShell tool still asks, since it reads the same words differently. The brief tells the
+  agent to begin such commands with that `cd`. Unit tests cover both commands from the retest, the cases that
+  still ask, and the whole path through the permission handler. In the same retest Claude then asked for
+  `cd "<workspace>" && for f in components/Button.specimen.tsx …; do echo "== $f"; diff -w -B .basis/template/$f $f;
+  done`. Basis now writes out such commands before checking them (`expandVariables`): a statement `NAME=value`
+  sets a variable, and `for NAME in words; do body; done` becomes the body once per word. Values must be plain
+  words (no spaces, wildcards or `~`), so a variable stands for exactly its value whether quoted or not. A
+  variable the command does not set (the environment's), a loop variable after its loop, an assignment in front
+  of a command, nested loops, `while`, `if`, `[ … ]` and `$(…)` still ask. Keywords and assignments count only
+  when nothing in them is quoted or escaped, as the shell sees them. `diff` joined the reads (not `-l`, which
+  pipes through `pr`, `-S`, `-X`, `--exclude-from`, `--from-file` or `--to-file`). Wildcards still ask: what they
+  match is not in the command line.
+
 - 2026-10-19: Exact widths, chosen per project. Show at's frames are now content boxes: a frame's content is
   exactly the width shown and its 16px padding and dashed border lie outside it, for every block; a view's screen
   draws its edge as an outline instead of a border, so the page inside gets the full width too. Fit is unchanged.

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { isApprovableRead, readOnlyCommand } from "../server/commands.ts";
+import { isApprovableClaudeRead, isApprovableRead, readOnlyCommand } from "../server/commands.ts";
 
 const PWSH = String.raw`"C:\\Users\\lucas\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe"`;
 const WS = String.raw`C:\ws`;
@@ -227,7 +227,6 @@ describe("readOnlyCommand in POSIX shells", () => {
     assert.deepEqual(posix("bash -lc 'cat components/Button.tsx'"), inPosixWs("components/Button.tsx"));
     assert.deepEqual(posix("/bin/zsh -lc 'rg -n danger components'"), inPosixWs("components"));
     assert.deepEqual(posix("cat components/Button.tsx"), inPosixWs("components/Button.tsx"));
-    assert.deepEqual(posix(`sed -n 1p a`), null);
     assert.deepEqual(posix(`rg -n "font weight" components | head -n 20`), inPosixWs("components"));
     assert.deepEqual(posix("ls -la components && wc -l a b"), inPosixWs("components", "a", "b"));
     assert.deepEqual(posix("grep -rn danger components 2>/dev/null"), inPosixWs("components"));
@@ -235,6 +234,38 @@ describe("readOnlyCommand in POSIX shells", () => {
     assert.deepEqual(posix("git status --short; git diff"), inPosixWs());
     assert.deepEqual(posix("tail -5 a"), inPosixWs("a"));
     assert.deepEqual(posix("rg --files"), inPosixWs());
+  });
+
+  test("reads with sed, sort, uniq, echo and git ls-files", () => {
+    assert.deepEqual(posix("sed -n 1p a"), inPosixWs("a"));
+    assert.deepEqual(posix("sed -n '1,40p;/^export/p' a b"), inPosixWs("a", "b"));
+    assert.deepEqual(posix("git ls-files | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn | head -60"), inPosixWs());
+    assert.deepEqual(posix("sed -E -e 's/a+/b/g' -e '$d' a"), inPosixWs("a"));
+    assert.deepEqual(posix("sed -ne 's#x#y#p' a"), inPosixWs("a"));
+    assert.deepEqual(posix("sort -t , -k 2 a"), inPosixWs("a"));
+    assert.deepEqual(posix("echo; echo -n done"), inPosixWs());
+    assert.deepEqual(posix("git ls-files apps/login packages"), inPosixWs("apps/login", "packages"));
+    assert.deepEqual(posix(String.raw`git ls-files | grep -iE "\.(css|scss)$|theme"`), inPosixWs());
+  });
+
+  test("asks for sed, sort and uniq that write, read scripts or run commands", () => {
+    assert.equal(posix("sed -i 's/a/b/' a"), null);
+    assert.equal(posix("sed --in-place 's/a/b/' a"), null);
+    assert.equal(posix("sed -f script a"), null);
+    assert.equal(posix("sed 'w out' a"), null);
+    assert.equal(posix("sed '1w out' a"), null);
+    assert.equal(posix("sed 's/a/b/w out' a"), null);
+    assert.equal(posix("sed 's/a/b/e' a"), null);
+    assert.equal(posix("sed 'e rm -rf b' a"), null);
+    assert.equal(posix("sed 'r secret' a"), null);
+    assert.equal(posix("sed 's/a/b' a"), null);
+    assert.equal(posix("sed"), null);
+    assert.equal(posix("sort -o out a"), null);
+    assert.equal(posix("sort --output=out a"), null);
+    assert.equal(posix("sort --compress-program=sh a"), null);
+    assert.equal(posix("uniq a out"), null);
+    assert.equal(posix("git ls-files -X list"), null);
+    assert.equal(posix("git ls-files --exclude-from=list"), null);
   });
 
   test("asks for chained commands that are not reads", () => {
@@ -263,6 +294,11 @@ describe("readOnlyCommand in POSIX shells", () => {
     assert.equal(posix('cat "`rm -rf b`"'), null);
     assert.equal(posix("cat $HOME/.ssh/id_rsa"), null);
     assert.equal(posix("cat ${HOME}"), null);
+    assert.equal(posix('cat "$HOME"'), null);
+    assert.equal(posix('cat "${HOME}"'), null);
+    assert.equal(posix('cat "$(id)"'), null);
+    assert.equal(posix('cat "$1"'), null);
+    assert.deepEqual(posix('grep "a$" a'), inPosixWs("a"));
     assert.equal(posix("cat ~/.ssh/id_rsa"), null);
     assert.equal(posix("cat ../*"), null);
     assert.equal(posix("cat {a,b}"), null);
@@ -327,5 +363,110 @@ describe("isApprovableRead", () => {
     assert.equal(approved({ cwd: WS }), false);
     assert.equal(approved("Get-Content a"), false);
     assert.equal(approved(null), false);
+  });
+});
+
+describe("isApprovableClaudeRead", () => {
+  const REPO = String.raw`C:\repo`;
+  const inside = (root: string, target: string) => {
+    const relative = path.win32.relative(root, target);
+    return !relative.startsWith("..") && !path.win32.isAbsolute(relative);
+  };
+  const readable = (target: string) => inside(WS, target) || inside(REPO, target);
+  const folders = new Set([WS, REPO, String.raw`C:\repo\packages`, String.raw`C:\Users`].map((f) => f.toLowerCase()));
+  const isFolder = (target: string) => folders.has(path.win32.resolve(target).toLowerCase());
+  const approved = (command: string, extra: Record<string, unknown> = {}) =>
+    isApprovableClaudeRead({ command, description: "Look around", ...extra }, readable, isFolder, path.win32);
+
+  test("approves the commands Claude asked about while surveying a linked repo", () => {
+    assert.equal(
+      approved(
+        `cd "C:/repo" && ls -la && git ls-files | grep -v node_modules | head -300 | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn | head -60`,
+      ),
+      true,
+    );
+    assert.equal(
+      approved(
+        String.raw`cd "C:/repo" && head -c 2500 README.md; echo; git ls-files apps/login apps/admin packages | grep -v "\.test\." ; git ls-files | grep -iE "\.(css|scss)$|tailwind|theme|tokens"`,
+      ),
+      true,
+    );
+    assert.equal(
+      approved("cd C:/repo/packages && cat a/README.md ../apps/login/src/login.css", { timeout: 5000 }),
+      true,
+    );
+    assert.equal(approved(`cd "C:/ws" && git log --oneline -5`), true);
+  });
+
+  test("writes out loops over plain words and variables set in the command", () => {
+    // The loop Claude asked about while comparing the design with the template.
+    assert.equal(
+      approved(
+        `cd "C:/ws" && for f in components/Button.specimen.tsx components/Display.specimen.tsx; do echo "== $f"; diff -w -B .basis/template/$f $f; done`,
+      ),
+      true,
+    );
+    assert.equal(approved(`cd C:/repo && W="C:/ws"; diff a.css "$W/a.css" && diff -u b.css \${W}/b.css`), true);
+    assert.equal(approved("cd C:/repo && for f in a b; do head -5 $f; done; ls"), true);
+    assert.equal(approved("cd C:/repo && D=src && for f in a b; do cat $D/$f; done"), true);
+  });
+
+  test("asks for variables and loops it cannot follow exactly", () => {
+    // Set outside the command, so its value is unknown.
+    assert.equal(approved("cd C:/repo && cat $HOME/x"), false);
+    assert.equal(approved(`cd C:/repo && cat "$1"`), false);
+    // The loop variable is unset again after the loop.
+    assert.equal(approved("cd C:/repo && for f in a; do cat $f; done; cat $f"), false);
+    // Values that the shell would split, expand or take as a wildcard.
+    assert.equal(approved(`cd C:/repo && W="a b"; cat $W`), false);
+    assert.equal(approved("cd C:/repo && W=~/x; cat $W"), false);
+    assert.equal(approved("cd C:/repo && for f in src/*.css; do cat $f; done"), false);
+    assert.equal(approved(`cd C:/repo && for f in "a b"; do cat $f; done`), false);
+    // An assignment in front of a command sets its environment, not the shell's.
+    assert.equal(approved("cd C:/repo && W=x cat a"), false);
+    assert.equal(approved("cd C:/repo && W=x | cat a"), false);
+    // A quoted or escaped name is no assignment, a quoted keyword no keyword.
+    assert.equal(approved(`cd C:/repo && W"x"=a; cat $Wx`), false);
+    assert.equal(approved(`cd C:/repo && "for" f in a; do cat $f; done`), false);
+    // Nested loops, other compound commands and subshells.
+    assert.equal(approved("cd C:/repo && for f in a; do for g in b; do cat $f$g; done; done"), false);
+    assert.equal(approved("cd C:/repo && while true; do cat a; done"), false);
+    assert.equal(approved("cd C:/repo && if true; then cat a; fi"), false);
+    assert.equal(approved("cd C:/repo && for f in a; do d=$(diff $f b); done"), false);
+    assert.equal(approved("cd C:/repo && for f in a b; do cat $f; done extra"), false);
+    assert.equal(approved("cd C:/repo && for f in a b; do cat $f done"), false);
+    assert.equal(approved("cd C:/repo && for f in a b do cat $f; done"), false);
+    assert.equal(approved("cd C:/repo && diff -l a b"), false);
+  });
+
+  test("asks without a cd into an existing folder first, since the shell's folder is unknown", () => {
+    assert.equal(approved("git ls-files"), false);
+    assert.equal(approved("ls -la && cd C:/repo && git ls-files"), false);
+    assert.equal(approved("cd repo && git ls-files"), false);
+    assert.equal(approved("cd C:/repo/missing && git ls-files"), false);
+    assert.equal(approved("cd C:/repo; git ls-files"), false);
+    assert.equal(approved("cd C:/repo || git ls-files"), false);
+    assert.equal(approved("cd C:/repo &&"), false);
+    assert.equal(approved("cd C:/re* && ls"), false);
+  });
+
+  test("asks for reads outside, and for anything but reads", () => {
+    assert.equal(approved("cd C:/Users && ls"), false);
+    assert.equal(approved("cd C:/repo && cat ../secret.txt"), false);
+    assert.equal(approved("cd C:/repo && cat C:/Users/lucas/.ssh/id_rsa"), false);
+    assert.equal(approved("cd C:/repo && git ls-files > list.txt"), false);
+    assert.equal(approved("cd C:/repo && rm -rf src"), false);
+    assert.equal(approved("cd C:/repo && W=C:/Users; cat $W/x"), false);
+    assert.equal(approved("cd C:/repo && for f in a ../../secret; do cat $f; done"), false);
+    assert.equal(approved("cd C:/repo && for f in a b; do rm $f; done"), false);
+    assert.equal(approved("cd C:/repo && wc -l src/*.css"), false);
+  });
+
+  test("asks when the request wants more than running the command", () => {
+    assert.equal(approved("cd C:/repo && ls", { run_in_background: true }), false);
+    assert.equal(approved("cd C:/repo && ls", { dangerouslyDisableSandbox: true }), false);
+    assert.equal(approved("cd C:/repo && ls", { timeout: "soon" }), false);
+    assert.equal(isApprovableClaudeRead("cd C:/repo && ls", readable, isFolder, path.win32), false);
+    assert.equal(isApprovableClaudeRead(null, readable, isFolder, path.win32), false);
   });
 });
