@@ -145,6 +145,8 @@ export interface BuildKitOptions {
   widths: number[];
   /** The ids of the views to put in the kit; every view when absent. */
   views?: string[];
+  /** The kit's folder in the product repo (checked with kitFolder); basis-verify when absent. */
+  folder?: string;
   onProgress?: (step: string, done?: number, total?: number) => void;
 }
 
@@ -158,6 +160,7 @@ export async function buildVerificationKit({
   workspaceDir,
   widths,
   views: chosen,
+  folder = KIT_FOLDER,
   onProgress,
 }: BuildKitOptions): Promise<{ files: KitFile[]; summary: VerifyKitSummary }> {
   const temp = await mkdtemp(path.join(os.tmpdir(), "basis-verify-"));
@@ -262,10 +265,10 @@ export async function buildVerificationKit({
     const reached = [...new Set([...read.values()].flatMap((view) => view.files))].sort();
     const files: KitFile[] = [
       text(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`),
-      text("README.md", readme(design.name, generator, name, version, Math.min(...widths))),
-      text("PROMPT.md", promptFile(design.name, generator, manifest.views)),
-      text("SKILL.md", skillFile(manifest.views)),
-      ...manifest.views.map((view) => text(view.notes, viewNotes(view, read.get(view.id)!, design, KIT_FOLDER))),
+      text("README.md", readme(design.name, generator, name, version, Math.min(...widths), folder)),
+      text("PROMPT.md", promptFile(design.name, generator, manifest.views, folder)),
+      text("SKILL.md", skillFile(manifest.views, folder)),
+      ...manifest.views.map((view) => text(view.notes, viewNotes(view, read.get(view.id)!, design, folder))),
       ...(await Promise.all(
         reached.map(async (file) => ({ path: `source/${file}`, data: await readFile(path.join(workspaceDir, file)) })),
       )),
@@ -281,6 +284,7 @@ export async function buildVerificationKit({
     ];
     const summary: VerifyKitSummary = {
       browser: `${name} ${version}`,
+      folder,
       views: views.length,
       viewList: views.map((view) => ({ id: view.id, title: view.title })),
       screens: views.reduce((sum, view) => sum + view.screens.length, 0),
@@ -296,11 +300,12 @@ export async function buildVerificationKit({
   }
 }
 
-export function zipVerificationKit(files: KitFile[]): Uint8Array {
+/** The kit as a zip whose one folder is the kit's folder, to unpack at the root of the product's repo. */
+export function zipVerificationKit(files: KitFile[], folder: string = KIT_FOLDER): Uint8Array {
   const entries: Zippable = {};
   // PNGs are compressed already; deflating them again only costs time.
   for (const file of files)
-    entries[`${KIT_FOLDER}/${file.path}`] = [file.data, { level: file.path.endsWith(".png") ? 0 : 6 }];
+    entries[`${folder}/${file.path}`] = [file.data, { level: file.path.endsWith(".png") ? 0 : 6 }];
   return zipSync(entries);
 }
 
@@ -312,15 +317,15 @@ export interface SkillInstall {
 }
 
 /**
- * Writes the kit into `<project>/basis-verify/`. A folder by that name that is not a kit (no manifest) is left
- * alone; in a kit, the files Basis generates are replaced and the project's own (targets.json, exceptions.json,
+ * Writes the kit into `<project>/<folder>/` (`basis-verify/` by default). A folder there that is not a kit (no
+ * manifest) is left alone; in a kit, the files Basis generates are replaced and the project's own (targets.json, exceptions.json,
  * actual/) are kept. With `skill`, the kit's SKILL.md also goes to `<project>/.claude/skills/basis-verify/`,
  * replacing a file there only when Basis wrote it (it has the marker).
  */
 export async function writeVerificationKit(
   files: KitFile[],
   project: string,
-  { skill = false }: { skill?: boolean } = {},
+  { skill = false, folder = KIT_FOLDER }: { skill?: boolean; folder?: string } = {},
 ): Promise<{ ok: true; dir: string; skill?: SkillInstall } | { ok: false; error: string }> {
   const trimmed = project.trim();
   if (!trimmed || !path.isAbsolute(trimmed)) return { ok: false, error: "Enter an absolute folder path." };
@@ -331,7 +336,7 @@ export async function writeVerificationKit(
   }
   if (!existsSync(root) || !(await stat(root)).isDirectory())
     return { ok: false, error: "That folder does not exist." };
-  const dir = path.join(root, KIT_FOLDER);
+  const dir = path.join(root, ...folder.split("/"));
   if (existsSync(dir) && !existsSync(path.join(dir, MANIFEST)) && (await readdir(dir)).length > 0) {
     return { ok: false, error: `${dir} exists and is not a verification kit. Move it away or pick another folder.` };
   }
@@ -352,7 +357,14 @@ export async function writeVerificationKit(
   return { ok: true, dir, skill: { file, written: ours } };
 }
 
-function readme(name: string, generator: string, browser: string, version: string, narrowest: number): string {
+function readme(
+  name: string,
+  generator: string,
+  browser: string,
+  version: string,
+  narrowest: number,
+  kit: string,
+): string {
   return `# Verification kit: ${name}
 
 Generated by ${generator} with ${browser} ${version}. Basis replaces this folder's generated files
@@ -368,13 +380,13 @@ every one of them.
 
 \`PROMPT.md\` is written for the coding agent that builds these views in the product: the goal, where things are,
 each view, and the capture and compare loop with the rules for images, exceptions and when to stop. Tell the
-agent to read it (Basis' Export tab copies such a prompt), with the kit at \`basis-verify/\` in the product repo's
+agent to read it (Basis' Export tab copies such a prompt), with the kit at \`${kit}/\` in the product repo's
 root, where all its paths start.
 
 \`SKILL.md\` is the loop as a Claude Code skill. Basis can install it as \`${SKILL_PATH}\` when it writes the
 kit into the repo; to do it by hand, copy the file there. For agents that read \`AGENTS.md\`, add this paragraph:
 
-> ${agentsParagraph().split("\n").join("\n> ")}
+> ${agentsParagraph(kit).split("\n").join("\n> ")}
 
 ## Contents
 
@@ -409,7 +421,7 @@ npx playwright install chromium
    else is there.
 
    \`\`\`bash
-   node basis-verify/capture.mjs design
+   node ${kit}/capture.mjs design
    \`\`\`
 
 2. Point each screen at the page that implements it: copy \`targets.example.json\` to \`targets.json\` and fill
@@ -422,13 +434,13 @@ npx playwright install chromium
 3. Start the app and capture it:
 
    \`\`\`bash
-   node basis-verify/capture.mjs app
+   node ${kit}/capture.mjs app
    \`\`\`
 
 4. Compare:
 
    \`\`\`bash
-   node basis-verify/compare.mjs
+   node ${kit}/compare.mjs
    \`\`\`
 
    Each shot prints PASS, FAIL (with the share of differing pixels, and what is wrong with the elements left

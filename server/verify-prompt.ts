@@ -4,10 +4,9 @@ import { KIT_FOLDER } from "../shared/capture.ts";
  * The verification kit's texts for the agent that builds the design in the product: PROMPT.md (the goal, the
  * views and how to work), SKILL.md (the same loop as a Claude Code skill) and a paragraph for AGENTS.md in the
  * README. The loop, the rules for images and exceptions and when to stop are written once, here, and shared by
- * PROMPT.md and SKILL.md. Paths are relative to the product repo's root, where the kit is `basis-verify/`.
+ * PROMPT.md and SKILL.md. Paths are relative to the product repo's root, where the kit is `kit` (`basis-verify/`
+ * unless another folder was chosen).
  */
-
-const kit = KIT_FOLDER;
 
 /** Where Claude Code finds the skill in the product repo, when Basis installs it there. */
 export const SKILL_PATH = ".claude/skills/basis-verify/SKILL.md";
@@ -22,7 +21,7 @@ export interface PromptView {
 }
 
 /** The loop, the rules for images and exceptions, and when to stop: shared by PROMPT.md and SKILL.md. */
-function loop(example: { view: string; screen: string }): string {
+function loop(example: { view: string; screen: string }, kit: string): string {
   const one = `${example.view}/${example.screen}`;
   return `## The loop
 
@@ -107,7 +106,12 @@ function example(views: PromptView[]): { view: string; screen: string } {
 }
 
 /** `PROMPT.md`: the goal, where things are in the kit, the views with pointers to their notes, and the loop. */
-export function promptFile(designSystem: string, generator: string, views: PromptView[]): string {
+export function promptFile(
+  designSystem: string,
+  generator: string,
+  views: PromptView[],
+  kit: string = KIT_FOLDER,
+): string {
   const rows = views.map(
     (view) =>
       `| ${view.title} (\`${view.id}\`) | ${view.screens.map((screen) => `\`${screen.id}\` ${screen.label}`).join(", ")} | \`${kit}/views/${view.id}.md\` |`,
@@ -155,11 +159,19 @@ ${rows.join("\n") || "| (none) | | |"}
    data, fixtures or mocks for that, never constants in the shipped code.
 5. Work in the loop below until every shot of those screens passes, or until a reason to stop comes up.
 
-${loop(example(views))}`;
+${loop(example(views), kit)}`;
 }
 
 /** `SKILL.md`: the loop as a Claude Code skill, in the kit and, when asked, in the product's `.claude/skills/`. */
-export function skillFile(views: PromptView[]): string {
+export function skillFile(views: PromptView[], folder: string = KIT_FOLDER): string {
+  // Kits in folders of their own under basis-verify/ (one per view or issue) share one skill, which names none.
+  const root = folder.split("/")[0]!;
+  const nested = folder !== root;
+  const kit = nested ? `${root}/<kit>` : folder;
+  const where = nested
+    ? `Each verification kit is a folder under \`${root}/\` at the root of the repo, named for its view or issue (\`${folder}/\` is one). Use the kit of what you build, written \`${kit}/\` below, and read its \`PROMPT.md\` first: the goal, the views and how to build one. Each view's notes are in \`${kit}/views/<view>.md\`.`
+    : `The kit is in \`${kit}/\` at the root of the repo. Read \`${kit}/PROMPT.md\` first: the goal, the views and how
+to build one. Each view's notes are in \`${kit}/views/<view>.md\`.`;
   return `---
 name: basis-verify
 description: "Build or check a screen designed in Basis against the verification kit in ${kit}/. Captures the design and the implementation, compares them pixel for pixel, reads the diffs and fixes until they match. Use when implementing a view from ${kit}/, or when asked to verify a page against the Basis design."
@@ -169,14 +181,13 @@ ${SKILL_MARKER} Basis replaces this file when it writes the verification kit aga
 
 # Build and verify against the Basis design
 
-The kit is in \`${kit}/\` at the root of the repo. Read \`${kit}/PROMPT.md\` first: the goal, the views and how
-to build one. Each view's notes are in \`${kit}/views/<view>.md\`.
+${where}
 
-${loop(example(views))}`;
+${loop(example(views), kit)}`;
 }
 
 /** The same instructions as one paragraph, for a product whose agents read AGENTS.md rather than skills. */
-export function agentsParagraph(): string {
+export function agentsParagraph(kit: string = KIT_FOLDER): string {
   return `To build a view from the Basis design, read \`${kit}/PROMPT.md\` and the view's notes in \`${kit}/views/\`.
 Capture the design with \`node ${kit}/capture.mjs design --only <view>\`, build the screens with the product's
 own components and tokens, point \`${kit}/targets.json\` at their pages, capture them with

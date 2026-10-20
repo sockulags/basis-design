@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { strToU8 } from "fflate";
-import { captureShots } from "../shared/capture.ts";
+import { captureShots, kitFolder, viewKitFolder } from "../shared/capture.ts";
 import { DEFAULT_DESIGN } from "../shared/design.ts";
 import { kitPrompt } from "../shared/kit-prompt.ts";
 import { readSources } from "../server/reach.ts";
@@ -348,5 +348,41 @@ test("compare.mjs --only compares one screen and leaves the rest of the kit out"
     assert.match(all.out, /MISSING\s+v\/b@2\.png/);
   } finally {
     await rm(kit, { recursive: true, force: true });
+  }
+});
+
+test("a kit can go into a folder of its own, which its texts name", () => {
+  assert.equal(kitFolder("basis-verify/web-12"), "basis-verify/web-12");
+  assert.equal(kitFolder(String.raw` basis-verify\WEB-12/ `), "basis-verify/WEB-12");
+  assert.equal(viewKitFolder("billing"), "basis-verify/billing");
+  for (const bad of ["", "/abs", "C:/x", "a/../b", "..", "a/./b", ".hidden", "a b", "a/b/c/d/e", "a//b"]) {
+    assert.equal(kitFolder(bad), null, bad);
+  }
+  const views = [{ id: "web-12", title: "WEB-12 Sign in", screens: [{ id: "form", label: "Form" }] }];
+  const folder = "basis-verify/web-12";
+  assert.match(promptFile("Acme", "basis-design 0", views, folder), /`basis-verify\/web-12\/views\/web-12\.md`/);
+  assert.match(agentsParagraph(folder), /basis-verify\/web-12\/PROMPT\.md/);
+  assert.match(kitPrompt({ views, zip: false, folder }), /into `basis-verify\/web-12\/`/);
+  // One skill serves every kit under basis-verify/, so it names the folder of none.
+  const skill = skillFile(views, folder);
+  assert.match(skill, /Each verification kit is a folder under `basis-verify\/`/);
+  assert.match(skill, /node basis-verify\/<kit>\/capture\.mjs design/);
+});
+
+test("kits written into folders of their own leave each other alone", async () => {
+  const project = await mkdtemp(path.join(tmpdir(), "basis-kits-"));
+  try {
+    const kit = (name: string) => [
+      { path: "basis-verify.json", data: strToU8("{}") },
+      { path: "PROMPT.md", data: strToU8(name) },
+    ];
+    const first = await writeVerificationKit(kit("a"), project, { folder: "basis-verify/web-12" });
+    const second = await writeVerificationKit(kit("b"), project, { folder: "basis-verify/web-13" });
+    assert.ok(first.ok && second.ok);
+    assert.equal(first.dir, path.join(project, "basis-verify", "web-12"));
+    assert.equal(await readFile(path.join(project, "basis-verify", "web-12", "PROMPT.md"), "utf8"), "a");
+    assert.equal(await readFile(path.join(project, "basis-verify", "web-13", "PROMPT.md"), "utf8"), "b");
+  } finally {
+    await rm(project, { recursive: true, force: true });
   }
 });

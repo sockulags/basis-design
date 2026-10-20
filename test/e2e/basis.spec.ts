@@ -225,15 +225,22 @@ export default defineSpecimen({
   await expect(views.getByText("Choose at least one view.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Build .zip" })).toBeDisabled();
 
+  // A view picked out of several gets a folder of its own, so its kit never replaces another view's.
   await views.getByRole("checkbox", { name: "Billing" }).check();
+  const folder = page.getByLabel("Kit folder in the product");
+  await expect(folder).toHaveValue("basis-verify/billing");
+  await folder.fill("../outside");
+  await expect(page.getByRole("button", { name: "Build .zip" })).toBeDisabled();
+  await folder.fill("basis-verify/billing");
   await page.getByRole("button", { name: "Build .zip" }).click();
   await expect(page.getByText(/Captured \d+ shots? of 1 screen in 1 view/)).toBeVisible({ timeout: 90_000 });
   const response = await page.request.get(`${basis.url}/export/verification-kit.zip`);
   const files = unzipSync(new Uint8Array(await response.body()));
-  const manifest = JSON.parse(new TextDecoder().decode(files["basis-verify/basis-verify.json"]));
+  expect(Object.keys(files).every((file) => file.startsWith("basis-verify/billing/"))).toBe(true);
+  const manifest = JSON.parse(new TextDecoder().decode(files["basis-verify/billing/basis-verify.json"]));
   expect(manifest.views.map((view: { id: string }) => view.id)).toEqual(["billing"]);
-  expect(Object.keys(files).some((file) => file.startsWith("basis-verify/screens/team-members/"))).toBe(false);
-  expect(files["basis-verify/views/team-members.md"]).toBeUndefined();
+  expect(Object.keys(files).some((file) => file.includes("/screens/team-members/"))).toBe(false);
+  await expect(page.getByLabel("Prompt for the agent")).toContainText("basis-verify/billing/PROMPT.md");
 
   // The choice is kept for the project the next time the dialog opens.
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();

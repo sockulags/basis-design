@@ -223,7 +223,11 @@ component source, patterns and the gallery specimens.
     `server/verify-kit/`. Images a view imports are built into `design/assets/` like any Vite asset. With `views`
     (ids, from the Export dialog's checkboxes, `useViewChoice` in `src/shell/VerifyKit.tsx`) only those views are
     captured, and the notes, source, targets and prompt cover only them; `design/` is always the whole design.
-    Writing such a kit replaces the views a kit there had. The chrome asks for it over the bridge (`verify-kit`), gets
+    The kit has a folder in the product (`folder`, checked by `kitFolder` in `shared/capture.ts`): `basis-verify`
+    by default, `basis-verify/<view>` suggested for one view picked out of several (`viewKitFolder`). PROMPT.md,
+    the notes, README and the zip use it; SKILL.md, which one install serves for every kit, names
+    `basis-verify/<kit>` when kits sit in folders of their own. The scripts find the kit from their own folder.
+    The chrome asks for it over the bridge (`verify-kit`), gets
     `verify-progress` and `verify-result` back, and downloads a zip from `GET /export/verification-kit.zip`; or
     the kit is written into `<product>/basis-verify/`, replacing only what Basis generates (`GENERATED`), and with
     `skill` its SKILL.md also into `<product>/.claude/skills/basis-verify/`, over a file there only when it has

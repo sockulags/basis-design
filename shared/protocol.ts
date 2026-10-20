@@ -138,6 +138,8 @@ export interface ExportWriteResult {
 export interface VerifyKitSummary {
   /** The browser that took the screenshots, with its version. */
   browser: string;
+  /** The kit's folder in the product repo, and in its zip. */
+  folder: string;
   views: number;
   /** The views in the kit, for the prompt the user copies for the implementing agent. */
   viewList: { id: string; title: string }[];
@@ -322,7 +324,7 @@ export type ClientMessage =
    * `skill`, writing into a folder also installs the kit's SKILL.md in its `.claude/skills/basis-verify/`.
    */
   /** `views` names the views to put in the kit; all of them when absent. */
-  | { type: "verify-kit"; project?: string; skill?: boolean; views?: string[] }
+  | { type: "verify-kit"; project?: string; skill?: boolean; views?: string[]; folder?: string }
   /** Shows another project in this tab; the one it showed goes on in the background. */
   | { type: "project-switch"; id: string }
   /** Creates a project from Basis' defaults, or as a copy of the open project's design system, and opens it. */

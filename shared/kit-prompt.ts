@@ -12,20 +12,22 @@ export interface KitPromptOptions {
   view?: string;
   /** True when the kit was built as a zip, which the user unpacks themselves. */
   zip: boolean;
+  /** The kit's folder in the product repo; basis-verify/ when absent. */
+  folder?: string;
 }
 
-export function kitPrompt({ views, view, zip }: KitPromptOptions): string {
+export function kitPrompt({ views, view, zip, folder = KIT_FOLDER }: KitPromptOptions): string {
   const chosen = views.find((item) => item.id === view);
   const named = (item: { id: string; title: string }) => `"${item.title}" (${item.id})`;
   const where = zip
-    ? `Basis' verification kit for this design is in \`${KIT_FOLDER}/\` at the root of this repo, unpacked from the .zip Basis built. If it is somewhere else, use the folder that holds PROMPT.md and basis-verify.json, and read the paths in it from there.`
-    : `Basis wrote a verification kit for this design into \`${KIT_FOLDER}/\` at the root of this repo.`;
+    ? `Basis' verification kit for this design is in \`${folder}/\` at the root of this repo, unpacked from the .zip Basis built. If it is somewhere else, use the folder that holds PROMPT.md and basis-verify.json, and read the paths in it from there.`
+    : `Basis wrote a verification kit for this design into \`${folder}/\` at the root of this repo.`;
   const what = chosen
     ? `Build the view ${named(chosen)} in this product so that it matches the design.`
     : `Build the views it holds in this product so that they match the design: ${views.map(named).join(", ")}.`;
   const read = chosen
-    ? `Read \`${KIT_FOLDER}/PROMPT.md\` and the view's notes in \`${KIT_FOLDER}/views/${chosen.id}.md\` first, and follow them.`
-    : `Read \`${KIT_FOLDER}/PROMPT.md\` first and follow it.`;
+    ? `Read \`${folder}/PROMPT.md\` and the view's notes in \`${folder}/views/${chosen.id}.md\` first, and follow them.`
+    : `Read \`${folder}/PROMPT.md\` first and follow it.`;
   return [
     where,
     "",

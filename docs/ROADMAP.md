@@ -252,6 +252,18 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ## Decision log
 
+- 2026-10-20: A kit's folder in the product. Writing a kit of some views replaced the kit already there, views
+  and all, which is wrong for a kit per feature or issue. Rather than merging kits (their shots would come from
+  different versions of the design), each kit can have a folder of its own: the Verification kit tab has a "Kit
+  folder in the product" field, `basis-verify` for all views, and `basis-verify/<view id>` suggested when one
+  view is picked out of several. A view named for its issue (id `web-12`) then has its kit in
+  `basis-verify/web-12/`, which is also where a pipeline step such as the-factory's would look. The folder is
+  relative, without `..`, of letters, digits, `.`, `_` and `-`, at most four names deep (`kitFolder`), and the
+  server checks it again. PROMPT.md, the notes, README, the copied prompt and the zip use it; the installed
+  SKILL.md, shared by every kit, points at `basis-verify/<kit>` when kits have folders of their own. Unit tests
+  for the folder check, the texts and two kits written side by side; the e2e test of the view choice builds a
+  kit of one view into its folder.
+
 - 2026-10-20: The verification kit of chosen views. The Verification kit tab lists the design's views as
   checkboxes with one for all of them, and both Build .zip and Write kit build the kit of the checked ones
   (`views` in the `verify-kit` message; `captureViews` skips the rest). Every view is checked until the user picks

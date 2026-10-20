@@ -239,12 +239,12 @@ export function ExportDialog({
         <footer className={styles.dialogFooter}>
           {tab === "verify" ? (
             <>
-              <span className={styles.muted}>basis-verify/ · takes a few seconds per screen</span>
+              <span className={styles.muted}>{viewChoice.request.folder}/ · takes a few seconds per screen</span>
               <button
                 type="button"
                 className={styles.primaryButton}
-                disabled={verify.progress !== null || (verify.views.length > 0 && viewChoice.chosen.size === 0)}
-                onClick={() => send({ type: "verify-kit", views: viewChoice.request })}
+                disabled={verify.progress !== null || !viewChoice.ready}
+                onClick={() => send({ type: "verify-kit", ...viewChoice.request })}
               >
                 {verify.progress ? "Building…" : "Build .zip"}
               </button>

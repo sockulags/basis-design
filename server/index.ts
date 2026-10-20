@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createServer as createVite } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
+import { kitFolder } from "../shared/capture.ts";
 import { isComponentName, isPageId, pageById } from "../shared/frame.ts";
 import { parseWidths, widthList } from "../shared/widths.ts";
 import {
@@ -241,37 +242,81 @@ function sendVerificationZip(res: http.ServerResponse): void {
   res.end(verificationZip.data);
 }
 
-/** Builds a project's verification kit, reporting progress to the tabs that show it. */
+/** What a verification kit is built from: the views in it (all when absent) and its folder in the product. */
+interface KitRequest {
+  views?: string[];
+  folder?: string;
+}
+
+/** The kit request in a bridge or API message, or an error for a folder that is not one (kitFolder). */
+function kitRequest(views: unknown, folder: unknown): KitRequest | { error: string } {
+  const chosen = Array.isArray(views) ? views.filter((id): id is string => typeof id === "string") : undefined;
+  if (folder === undefined || folder === "") return { views: chosen };
+  const checked = typeof folder === "string" ? kitFolder(folder) : null;
+  if (!checked)
+    return { error: "The kit's folder must be a path inside the product, such as basis-verify/web-12, without '..'." };
+  return { views: chosen, folder: checked };
+}
+
+/**
+ * Builds a project's verification kit, one at a time, since each takes the browser for a while. Null when one is
+ * being built already.
+ */
+async function buildKit(
+  target: OpenProject,
+  request: KitRequest,
+  onProgress?: (step: string, done?: number, total?: number) => void,
+): Promise<Awaited<ReturnType<typeof buildVerificationKit>> | null> {
+  if (verifying) return null;
+  verifying = true;
+  try {
+    return await buildVerificationKit({
+      design: target.workspace.state.design,
+      workspaceDir: target.workspace.dir,
+      widths: widthList(target.widths),
+      views: request.views,
+      folder: request.folder,
+      onProgress,
+    });
+  } finally {
+    verifying = false;
+  }
+}
+
+/** Builds a project's verification kit for the Export dialog, reporting progress to the tabs that show it. */
 async function verificationKit(
   target: OpenProject,
   project: string | undefined,
   skill: boolean,
-  views: string[] | undefined,
+  request: KitRequest | { error: string },
   socket: WebSocket,
 ): Promise<void> {
-  if (verifying) {
-    send(socket, { type: "verify-result", result: { ok: false, error: "A verification kit is already being built." } });
+  const id = target.entry.id;
+  if ("error" in request) {
+    send(socket, { type: "verify-result", result: { ok: false, error: request.error } });
     return;
   }
-  verifying = true;
-  const id = target.entry.id;
   try {
-    const { files, summary } = await buildVerificationKit({
-      design: target.workspace.state.design,
-      workspaceDir: target.workspace.dir,
-      widths: widthList(target.widths),
-      views,
-      onProgress: (step, done, total) => sendProject(id, { type: "verify-progress", step, done, total }),
-    });
+    const built = await buildKit(target, request, (step, done, total) =>
+      sendProject(id, { type: "verify-progress", step, done, total }),
+    );
+    if (!built) {
+      send(socket, {
+        type: "verify-result",
+        result: { ok: false, error: "A verification kit is already being built." },
+      });
+      return;
+    }
+    const { files, summary } = built;
     if (project === undefined) {
       verificationZip = {
         name: `${slug(target.workspace.state.design.name)}-verification-kit.zip`,
-        data: zipVerificationKit(files),
+        data: zipVerificationKit(files, summary.folder),
       };
       sendProject(id, { type: "verify-result", result: { ok: true, summary } });
       return;
     }
-    const written = await writeVerificationKit(files, project, { skill });
+    const written = await writeVerificationKit(files, project, { skill, folder: summary.folder });
     sendProject(id, {
       type: "verify-result",
       result: written.ok
@@ -280,8 +325,6 @@ async function verificationKit(
     });
   } catch (error) {
     sendProject(id, { type: "verify-result", result: { ok: false, error: (error as Error).message } });
-  } finally {
-    verifying = false;
   }
 }
 
@@ -577,7 +620,7 @@ async function handle(message: Tagged<ClientMessage>, socket: WebSocket): Promis
         project,
         typeof message.project === "string" ? message.project : undefined,
         message.skill === true,
-        Array.isArray(message.views) ? message.views.filter((id) => typeof id === "string") : undefined,
+        kitRequest(message.views, message.folder),
         socket,
       );
       return;

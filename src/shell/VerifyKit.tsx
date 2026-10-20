@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { KIT_FOLDER, kitFolder, viewKitFolder } from "../../shared/capture.ts";
 import { kitPrompt } from "../../shared/kit-prompt.ts";
 import type { ClientMessage, VerifyKitResult } from "../../shared/protocol.ts";
 import { BrowseButton } from "./FolderField.tsx";
@@ -39,25 +40,39 @@ function storedViews(workspace: string): string[] | null {
   }
 }
 
-/** Which views go into the kit. */
+/** Which views go into the kit, and the kit's folder in the product. */
 export interface ViewChoice {
   chosen: Set<string>;
   toggle: (id: string) => void;
   setAll: (all: boolean) => void;
-  /** The ids to build the kit from, or undefined for every view. */
-  request: string[] | undefined;
+  folder: string;
+  setFolder: (folder: string) => void;
+  /** False when the folder is not one a kit can go into (kitFolder). */
+  folderValid: boolean;
+  /** Whether there is a kit to build: some view chosen (when there are views) and a valid folder. */
+  ready: boolean;
+  /** What the kit is built from: the chosen ids (undefined for every view) and the folder. */
+  request: { views?: string[]; folder: string };
 }
 
 /**
  * The views chosen for the kit, remembered per project. Every view until the user picks some, so views added
  * later are in the kit too; checking them all goes back to that. Chosen views that are gone are dropped, and when
- * none of them is left, every view is chosen again.
+ * none of them is left, every view is chosen again. The folder is the one Basis suggests for the choice (a view's
+ * own under basis-verify/, so kits of views never replace each other) until the user types another, which lasts
+ * until the choice changes.
  */
 export function useViewChoice(workspace: string, views: KitView[]): ViewChoice {
   const [stored, setStored] = useState(() => storedViews(workspace));
+  const [typed, setTyped] = useState<{ choice: string; folder: string } | null>(null);
   const ids = views.map((view) => view.id);
   const kept = stored?.filter((id) => ids.includes(id));
   const chosen = new Set(!kept || (kept.length === 0 && stored!.length > 0) ? ids : kept);
+  const key = [...chosen].sort().join("\n");
+  // A view picked out of several gets its own folder; all of them, one or many, share basis-verify/.
+  const suggested = chosen.size === 1 && ids.length > 1 ? viewKitFolder([...chosen][0]!) : KIT_FOLDER;
+  const folder = typed?.choice === key ? typed.folder : suggested;
+  const valid = kitFolder(folder);
   const store = (next: string[] | null) => {
     const value = next && next.length === ids.length ? null : next;
     setStored(value);
@@ -67,7 +82,11 @@ export function useViewChoice(workspace: string, views: KitView[]): ViewChoice {
     chosen,
     toggle: (id) => store(chosen.has(id) ? [...chosen].filter((other) => other !== id) : [...chosen, id]),
     setAll: (all) => store(all ? null : []),
-    request: chosen.size === ids.length ? undefined : [...chosen],
+    folder,
+    setFolder: (value) => setTyped({ choice: key, folder: value }),
+    folderValid: valid !== null,
+    ready: valid !== null && (ids.length === 0 || chosen.size > 0),
+    request: { views: chosen.size === ids.length ? undefined : [...chosen], folder: valid ?? KIT_FOLDER },
   };
 }
 
@@ -88,11 +107,10 @@ export function VerifyKit({ workspace, views, choice, repo, progress, result: la
   const [stale] = useState(latest);
   const result = latest === stale ? null : latest;
   const busy = progress !== null;
-  const none = views.length > 0 && choice.chosen.size === 0;
 
   const build = (project?: string) => {
     if (project !== undefined) writePref(targetPref(workspace), project);
-    send({ type: "verify-kit", project, skill: project !== undefined && skill, views: choice.request });
+    send({ type: "verify-kit", project, skill: project !== undefined && skill, ...choice.request });
   };
 
   return (
@@ -104,6 +122,30 @@ export function VerifyKit({ workspace, views, choice, repo, progress, result: la
         target is 0% difference, and anything allowed to differ is a named exception.
       </p>
       {views.length > 0 && <ViewPicker views={views} choice={choice} />}
+      <div className={styles.kitWrite}>
+        <label htmlFor="verify-folder">Kit folder in the product</label>
+        <div className={styles.kitWriteRow}>
+          <input
+            id="verify-folder"
+            value={choice.folder}
+            onChange={(event) => choice.setFolder(event.target.value)}
+            aria-invalid={!choice.folderValid}
+            aria-describedby="verify-folder-note"
+            spellCheck={false}
+          />
+        </div>
+        {choice.folderValid ? (
+          <span id="verify-folder-note" className={styles.kitNote}>
+            Relative to the product repo's root. A kit of one view gets that view's own folder, so kits of different
+            views never replace each other.
+          </span>
+        ) : (
+          <span id="verify-folder-note" className={styles.kitError}>
+            Use a path inside the product, such as <code>basis-verify/web-12</code>: letters, digits, <code>.</code>,{" "}
+            <code>_</code> and <code>-</code>, without <code>..</code>.
+          </span>
+        )}
+      </div>
       <form
         className={styles.kitWrite}
         onSubmit={(event) => {
@@ -126,13 +168,13 @@ export function VerifyKit({ workspace, views, choice, repo, progress, result: la
             onPick={setTarget}
             onError={setBrowseError}
           />
-          <button type="submit" className={styles.chromeButton} disabled={!target.trim() || busy || none}>
+          <button type="submit" className={styles.chromeButton} disabled={!target.trim() || busy || !choice.ready}>
             Write kit
           </button>
         </div>
         <span className={styles.kitNote}>
-          The kit goes into <code>basis-verify/</code> there. Writing it again replaces everything Basis generated
-          there, including views left out this time, and keeps the project's targets, exceptions and captures.
+          The kit goes into <code>{choice.request.folder}/</code> there. Writing a kit into the same folder again
+          replaces what Basis generated in it, and keeps the project's targets, exceptions and captures.
         </span>
         <label className={styles.projectCheck}>
           <input
@@ -234,7 +276,7 @@ function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> })
           )}
         </p>
       )}
-      <CopyPrompt views={summary.viewList} zip={!dir} />
+      <CopyPrompt views={summary.viewList} zip={!dir} folder={summary.folder} />
       {summary.failed.length > 0 && (
         <p className={styles.kitWarning}>
           {plural(summary.failed.length, "shot")} of screens that failed to render: {summary.failed.join(", ")}.
@@ -261,12 +303,12 @@ function Summary({ result }: { result: Extract<VerifyKitResult, { ok: true }> })
 }
 
 /** The prompt for the agent that builds the design in the product, for one view or all, ready to copy. */
-function CopyPrompt({ views, zip }: { views: { id: string; title: string }[]; zip: boolean }) {
+function CopyPrompt({ views, zip, folder }: { views: { id: string; title: string }[]; zip: boolean; folder: string }) {
   const [view, setView] = useState("");
   const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
   const text = useRef<HTMLPreElement>(null);
   // With one view there is nothing to choose: the prompt names it.
-  const prompt = kitPrompt({ views, view: views.length === 1 ? views[0]!.id : view || undefined, zip });
+  const prompt = kitPrompt({ views, view: views.length === 1 ? views[0]!.id : view || undefined, zip, folder });
 
   const copy = () => {
     // Say so at once; the clipboard answers in a moment, and only a refusal changes the label again.

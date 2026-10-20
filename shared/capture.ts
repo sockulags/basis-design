@@ -115,8 +115,24 @@ export function listWidths(param: string | null): number[] {
   return widths.length ? widths : DEFAULT_CAPTURE_WIDTHS;
 }
 
-/** The verification kit's folder in the product repo, and the folder inside its zip. */
+/** The verification kit's folder in the product repo, and the folder inside its zip, unless another is chosen. */
 export const KIT_FOLDER = "basis-verify";
+
+/**
+ * A folder for a kit, relative to the product repo's root with `/` between names (`basis-verify/web-12`), or null
+ * when it is not one: empty, absolute, with `..`, or with names of other characters than letters, digits, `.`,
+ * `_` and `-`. At most four names deep.
+ */
+export function kitFolder(text: string): string | null {
+  const names = text.trim().replace(/\\/g, "/").replace(/\/+$/, "").split("/");
+  if (names.length > 4) return null;
+  return names.every((name) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) ? names.join("/") : null;
+}
+
+/** The kit folder Basis suggests for one view: its own folder under basis-verify/, so kits of views never meet. */
+export function viewKitFolder(view: string): string {
+  return `${KIT_FOLDER}/${view}`;
+}
 
 /** The attribute the capture page sets on <html> once a screen has settled and can be photographed. */
 export const READY_ATTRIBUTE = "data-basis-ready";
