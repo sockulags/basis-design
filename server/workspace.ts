@@ -433,12 +433,13 @@ export class Workspace extends EventEmitter<Events> {
 
   /** Reads the agent's review.json: opens a review, updates the open one, or reports what is wrong with it. */
   private async readReviewRequest(): Promise<void> {
-    const before = JSON.stringify(this.reviews.errors);
-    const request = await this.reviews.readRequest();
-    if (JSON.stringify(this.reviews.errors) !== before) this.emit("design", this.state);
-    if (!request) return;
+    // Read and applied in one step of the queue: a request read before an approve or discard that ran meanwhile
+    // would otherwise open the review again once they end it.
     await this.serial(async () => {
-      if (await this.reviews.apply(request)) this.emit("review", this.reviews.state);
+      const before = JSON.stringify(this.reviews.errors);
+      const request = await this.reviews.readRequest();
+      if (JSON.stringify(this.reviews.errors) !== before) this.emit("design", this.state);
+      if (request && (await this.reviews.apply(request))) this.emit("review", this.reviews.state);
     });
   }
 
