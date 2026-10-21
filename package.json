@@ -1,6 +1,6 @@
 {
   "name": "basis-design",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Prompt a complete design system into existence with your own coding agent over ACP.",
   "keywords": [
     "design-system",
