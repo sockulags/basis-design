@@ -108,6 +108,10 @@ export function isRemoteMedia(resourceType: string, url: string, pageOrigin: str
 export async function openCapturePage(page: Page, url: string, timeout = 60_000): Promise<void> {
   await page.goto(url);
   await page.waitForSelector(`html[${READY_ATTRIBUTE}]`, { state: "attached", timeout });
+  // Ready says the page is rendered, not that it is painted: wait for its fonts and two frames, as the product's
+  // side waits until it settles, so a screenshot never catches the page before its first paint.
+  await page.evaluate(`document.fonts.ready.then(() => new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve))))`);
 }
 
 /**
