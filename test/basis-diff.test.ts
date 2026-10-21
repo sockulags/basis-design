@@ -6,6 +6,7 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import type { CaptureView } from "../shared/capture.ts";
 import { checkDiffRequest, reportPage, runDiff, targetUrl, Verifications } from "../server/diff.ts";
+import { decodePng } from "../server/verify-kit/compare.mjs";
 
 /** A page as the capture page or the product renders it: a coloured block, and an image placeholder at `mediaAt`. */
 function page(color: string, mediaAt: number, ready: boolean): string {
@@ -65,7 +66,31 @@ describe("basis-diff", () => {
 
   test("passes when Basis' photographs of the design and the product are the same", async () => {
     const { store, report } = await run("/same", { label: "WEB-12 at abc" });
-    assert.equal(report.pass, true);
+    // On a failure, say how the two photographs differ: the numbers, and a pixel inside and outside the block.
+    const { status, percent, differingPixels, expectedSize, actualSize, problems } = report.shots[0]!;
+    const sample = async (side: string) => {
+      const data = await store.file("auth-service", report.id, `${side}/web-12/log@320x200.png`);
+      if (!data) return null;
+      const image = decodePng(data);
+      const at = (x: number, y: number) => [
+        ...image.data.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 4),
+      ];
+      return { block: at(100, 30), outside: at(300, 150) };
+    };
+    assert.equal(
+      report.pass,
+      true,
+      JSON.stringify({
+        status,
+        percent,
+        differingPixels,
+        expectedSize,
+        actualSize,
+        problems,
+        expected: report.pass ? null : await sample("expected"),
+        actual: report.pass ? null : await sample("actual"),
+      }),
+    );
     assert.equal(report.shots[0]!.status, "pass");
     assert.equal(report.designCommit, "abc123");
     assert.equal(report.shots[0]!.url, `${base}/same`);

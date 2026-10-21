@@ -246,7 +246,7 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 
 ### Release
 
-- [ ] **Prepare 0.3.0.** Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.0.md` in the voice of the 0.2.0
+- [x] **Prepare 0.3.0.** Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.0.md` in the voice of the 0.2.0
       notes, check CI is green on all platforms, and report to Lucas. Do not publish, tag or release; Lucas
       publishes and asks for the tag.
 
