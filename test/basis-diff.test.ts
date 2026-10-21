@@ -65,7 +65,13 @@ describe("basis-diff", () => {
 
   test("passes when Basis' photographs of the design and the product are the same", async () => {
     const { store, report } = await run("/same", { label: "WEB-12 at abc" });
-    assert.equal(report.pass, true);
+    // On a failure, say how the two photographs differ.
+    const { status, percent, differingPixels, expectedSize, actualSize, problems } = report.shots[0]!;
+    assert.equal(
+      report.pass,
+      true,
+      JSON.stringify({ status, percent, differingPixels, expectedSize, actualSize, problems }),
+    );
     assert.equal(report.shots[0]!.status, "pass");
     assert.equal(report.designCommit, "abc123");
     assert.equal(report.shots[0]!.url, `${base}/same`);
