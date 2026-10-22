@@ -249,6 +249,9 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 - [x] **Prepare 0.3.0.** Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.0.md` in the voice of the 0.2.0
       notes, check CI is green on all platforms, and report to Lucas. Do not publish, tag or release; Lucas
       publishes and asks for the tag.
+- [x] **Prepare 0.3.1.** The design agent's `typecheck` tool and its brief on reading with its own tools and
+      waiting for subagents. Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.1.md`,
+      check CI is green, and report to Lucas. Do not publish, tag or release; Lucas publishes and asks for the tag.
 
 ## Decision log
 
