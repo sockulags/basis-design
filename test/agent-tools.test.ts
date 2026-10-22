@@ -9,13 +9,14 @@ import {
   basisTool,
   basisToolTitle,
   describeShots,
+  describeTypeErrors,
   handleToolRequest,
   MAX_SHOT_HEIGHT,
   parseScreenshotArgs,
   toolServer,
   TOOLS_PATH,
   toolsUrl,
-  type ToolScreenshots,
+  type ToolProject,
 } from "../server/agent-tools.ts";
 import { planCapture, type Screenshot } from "../server/screenshots.ts";
 
@@ -133,23 +134,40 @@ test("Basis' own tools are told apart from every other tool", () => {
   assert.equal(basisToolTitle("screenshot", { target: "Navbar" }), "Screenshot of Navbar");
   assert.equal(basisToolTitle("screenshot", { target: "team", screen: "invite" }), "Screenshot of team (invite)");
   assert.equal(basisToolTitle("screenshot", {}), "Screenshot");
+  assert.equal(basisTool({ title: "mcp__basis__typecheck" }), "typecheck");
+  assert.equal(basisToolTitle("typecheck", {}), "Type check");
   assert.equal(
     basisToolTitle("screenshot", { server: "basis", tool: "screenshot", arguments: { target: "Navbar" } }),
     "Screenshot of Navbar",
   );
 });
 
-/** Basis' tool route with stand-in screenshots, and the MCP server script talking to it as an agent would. */
+test("a type check says how many errors there are, and shows at most 50", () => {
+  assert.equal(describeTypeErrors([]), "No type errors in components/, patterns/ or views/.");
+  assert.equal(describeTypeErrors(["a.tsx(1,1): error TS1"]), "1 type error:\na.tsx(1,1): error TS1");
+  const many = Array.from({ length: 60 }, (_, index) => `e${index}`);
+  const text = describeTypeErrors(many);
+  assert.match(text, /^60 type errors:\ne0\n/);
+  assert.match(text, /\ne49\nThe first 50 are shown\.$/);
+  assert.doesNotMatch(text, /e50/);
+});
+
+/** Basis' tool route with stand-in screenshots and type check, and the MCP server script talking to it as an agent would. */
 async function withToolServer(work: (rpc: (method: string, params?: unknown) => Promise<unknown>) => Promise<void>) {
   const secret = "s3cret";
-  const screenshots: ToolScreenshots = {
-    capture: async (target, options) => {
-      const plan = planCapture(list, target, options);
-      return { plan, shots: plan.shots.map((item) => shot(item.width, item.theme)) };
+  const project: ToolProject = {
+    screenshots: {
+      capture: async (target, options) => {
+        const plan = planCapture(list, target, options);
+        return { plan, shots: plan.shots.map((item) => shot(item.width, item.theme)) };
+      },
     },
+    typecheck: async () => [
+      "patterns/Navbar.tsx(3,7): error TS2322: Type 'number' is not assignable to type 'string'.",
+    ],
   };
   const server = http.createServer(
-    (req, res) => void handleToolRequest(req, res, secret, (project) => (project === "acme" ? screenshots : null)),
+    (req, res) => void handleToolRequest(req, res, secret, (name) => (name === "acme" ? project : null)),
   );
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = toolsUrl(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, "acme");
@@ -192,7 +210,7 @@ test("the MCP server lists Basis' tools and forwards calls to Basis", async () =
     const { tools } = (await rpc("tools/list")) as { tools: { name: string }[] };
     assert.deepEqual(
       tools.map((tool) => tool.name),
-      ["screenshot"],
+      ["screenshot", "typecheck"],
     );
     const result = (await rpc("tools/call", { name: "screenshot", arguments: { target: "buttons" } })) as {
       content: { type: string; text?: string; mimeType?: string }[];
@@ -211,6 +229,12 @@ test("the MCP server lists Basis' tools and forwards calls to Basis", async () =
     };
     assert.equal(refused.isError, true);
     assert.match(refused.content[0]!.text, /No specimen or view "nothing"/);
+    const checked = (await rpc("tools/call", { name: "typecheck" })) as {
+      content: { text: string }[];
+      isError?: boolean;
+    };
+    assert.equal(checked.isError, undefined);
+    assert.match(checked.content[0]!.text, /^1 type error:\npatterns\/Navbar\.tsx\(3,7\): error TS2322/);
     await assert.rejects(rpc("resources/list"), /Method not found/);
   });
 });

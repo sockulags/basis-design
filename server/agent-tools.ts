@@ -77,7 +77,28 @@ export const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "typecheck",
+    title: "Type check",
+    description: [
+      "Type-checks components/, patterns/ and views/ from what is saved now, against the gallery contracts, as Basis does after every turn.",
+      "Returns TypeScript's errors, or says there are none.",
+    ].join(" "),
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
 ];
+
+/** At most this many type errors go back to the agent; it sees how many there were. */
+const MAX_TYPE_ERRORS = 50;
+
+/** The text a typecheck call returns: TypeScript's errors, one a line, or that there are none. */
+export function describeTypeErrors(errors: string[]): string {
+  if (errors.length === 0) return "No type errors in components/, patterns/ or views/.";
+  const shown = errors.slice(0, MAX_TYPE_ERRORS);
+  const count = errors.length === 1 ? "1 type error" : `${errors.length} type errors`;
+  const more = errors.length > shown.length ? `\nThe first ${shown.length} are shown.` : "";
+  return `${count}:\n${shown.join("\n")}${more}`;
+}
 
 /** A screenshot call's arguments, checked: what to photograph and how. Throws with what is wrong. */
 export function parseScreenshotArgs(raw: unknown): { target: ShotTarget; options: ShotOptions } {
@@ -133,12 +154,20 @@ function label(shot: Screenshot): string {
 /** What the tools need of the open project's screenshots (server/screenshots.ts). */
 export type ToolScreenshots = Pick<Screenshots, "capture">;
 
+/** What the tools need of the open project: its screenshots, and its type check (Workspace.check). */
+export interface ToolProject {
+  screenshots: ToolScreenshots;
+  typecheck: () => Promise<string[]>;
+}
+
 /** Runs one of Basis' tools. */
-export async function callTool(name: unknown, args: unknown, screenshots: ToolScreenshots): Promise<ToolResult> {
-  if (name !== "screenshot") return failure(`Basis has no tool "${String(name)}".`);
+export async function callTool(name: unknown, args: unknown, project: ToolProject): Promise<ToolResult> {
+  if (name !== "screenshot" && name !== "typecheck") return failure(`Basis has no tool "${String(name)}".`);
   try {
+    if (name === "typecheck")
+      return { content: [{ type: "text", text: describeTypeErrors(await project.typecheck()) }] };
     const { target, options } = parseScreenshotArgs(args);
-    const { plan, shots } = await screenshots.capture(target, options);
+    const { plan, shots } = await project.screenshots.capture(target, options);
     const content: ToolContent[] = [{ type: "text", text: describeShots(plan, shots) }];
     for (const [index, shot] of shots.entries()) {
       content.push({ type: "text", text: `${index + 1}. ${label(shot)}` });
@@ -193,6 +222,7 @@ export function basisToolTitle(tool: string, rawInput: unknown): string {
   // Codex reports `{ server, tool, arguments }`, Claude Code the arguments themselves.
   const raw = object(rawInput);
   const input = "arguments" in raw && "server" in raw ? object(raw.arguments) : raw;
+  if (tool === "typecheck") return "Type check";
   if (tool !== "screenshot" || typeof input.target !== "string") return "Screenshot";
   return `Screenshot of ${input.target}${typeof input.screen === "string" ? ` (${input.screen})` : ""}`;
 }
@@ -200,13 +230,13 @@ export function basisToolTitle(tool: string, rawInput: unknown): string {
 /**
  * Answers the MCP server: `GET /agent-tools/<project>/list` and `POST /agent-tools/<project>/call` with
  * `{ name, arguments }`. Only with the secret, so a web page or another local program cannot use the tools.
- * `screenshots` gives the named project's, or null when it is not open.
+ * `project` gives the named project, or null when it is not open.
  */
 export async function handleToolRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   secret: string,
-  screenshots: (project: string) => ToolScreenshots | null,
+  project: (name: string) => ToolProject | null,
 ): Promise<void> {
   const reply = (status: number, body: unknown) => {
     res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -215,12 +245,12 @@ export async function handleToolRequest(
   const given = Buffer.from(req.headers.authorization ?? "");
   const expected = Buffer.from(`Bearer ${secret}`);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return reply(401, {});
-  const [project, action] =
+  const [encoded, action] =
     req.url
       ?.split("?")[0]
       ?.match(/^\/agent-tools\/([^/]+)\/(list|call)$/)
       ?.slice(1) ?? [];
-  if (!project) return reply(404, {});
+  if (!encoded) return reply(404, {});
   if (req.method === "GET" && action === "list") return reply(200, { tools: TOOLS });
   if (req.method !== "POST" || action !== "call") return reply(404, {});
   let body: { name?: unknown; arguments?: unknown };
@@ -236,11 +266,11 @@ export async function handleToolRequest(
   }
   let name: string;
   try {
-    name = decodeURIComponent(project);
+    name = decodeURIComponent(encoded);
   } catch {
     return reply(404, {});
   }
-  const open = screenshots(name);
+  const open = project(name);
   if (!open) return reply(200, failure("This project is not open in Basis now. Try again in a moment."));
   reply(200, await callTool(body.name, body.arguments, open));
 }

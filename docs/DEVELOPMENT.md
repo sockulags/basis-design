@@ -114,14 +114,16 @@ component source, patterns and the gallery specimens.
     else (variables, subexpressions, script blocks, redirection into files, wildcards in paths, other programs or
     options) asks. Every path it reads, the folder and Codex's own locations must be in the workspace or the repo,
     and a shell started by path must not be.
-  - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` tool. The agent
+  - Every session gets Basis' own MCP server (`server/agent-tools.ts`), with the `screenshot` and `typecheck` tools. The agent
     starts `server/agent-tools-mcp.mjs` with Node over stdio (the transport every ACP agent supports); the script
     has no dependencies and only speaks MCP's JSON-RPC, forwarding `tools/list` and `tools/call` to the chrome
     server at `/agent-tools/<project>/` on 127.0.0.1 with a secret made at each start (in the script's env), so no
     other program or page can use the route. Each project's server has its own URL (`toolsUrl`), so the tool
     photographs through that project's `screenshots` whichever project a tab shows: by default
     the narrowest width (for a specimen, the project's Mobile width) in both themes, at most four images, full pages cut at 2000 px with the cut said in the
-    text. `onPermission` approves Basis' own tools without asking: Claude Code titles them `mcp__basis__<tool>`,
+    text. The `typecheck` tool runs that project's `Workspace.check` (the same check as after every turn, which
+    also updates what the chrome shows) and returns at most 50 of TypeScript's errors, so the agent need not run
+    `tsc` in a shell, which would wait for the user's approval. `onPermission` approves Basis' own tools without asking: Claude Code titles them `mcp__basis__<tool>`,
     Codex `mcp.basis.<tool>`, and Codex's approval request carries only the id of the tool call it reported
     before, so `AgentHost` remembers those ids. The chat shows such a call as "Screenshot of <target>".
   - After each turn it gathers problems (token validation, `tsc` against the contracts, review.json problems,

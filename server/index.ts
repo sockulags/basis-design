@@ -263,7 +263,10 @@ function answerChrome(req: http.IncomingMessage, res: http.ServerResponse): void
     return;
   }
   if (req.url?.startsWith(`${TOOLS_PATH}/`)) {
-    void handleToolRequest(req, res, toolsSecret, (project) => open.get(project)?.screenshots ?? null);
+    void handleToolRequest(req, res, toolsSecret, (id) => {
+      const project = open.get(id);
+      return project ? { screenshots: project.screenshots, typecheck: () => project.workspace.check() } : null;
+    });
     return;
   }
   chromeGuard(req, res, () => chromeVite.middlewares(req, res));
