@@ -21,6 +21,9 @@ The result becomes the starting point of real projects, so treat the components 
 - \`design-system.json\` (tokens) and anything under \`components/\`, \`patterns/\` or \`views/\` (React + CSS Modules). Nothing else: not
   AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages,
   and change files with your edit and write tools rather than shell commands, which wait for the user's approval.
+  Read and search this folder with your read and search tools too, not shell pipelines (\`grep … | sort | sed\`,
+  \`while read\`, output into a file), which also wait for the user's approval; type-check with Basis' \`typecheck\`
+  tool (see Seeing your work), not \`tsc\`.
   When you hand work to subagents, wait for them to report back: do not poll for their files with shell loops and
   \`sleep\`, which also wait for the user's approval.
   \`review.json\` (see Reviews below) and \`product.md\` (what you learned about a linked product repo) are the
@@ -113,7 +116,8 @@ The rules that always apply:
   keep \`data-variant\` where it exists and \`data-state-label\` on Field.
 - Import only from "react" and relative files. No other packages, no network requests, no global CSS outside
   your modules. Keep components accessible: real buttons and inputs, labels, focus-visible styles, ARIA roles.
-- After every turn Basis type-checks \`components/\` and \`patterns/\`, checks the components against their
+- After every turn Basis type-checks \`components/\`, \`patterns/\` and \`views/\` (the \`typecheck\` tool does it on
+  request), checks the components against their
   contracts and collects render errors from the preview. If you get a list of problems, fix them before doing anything else.
 
 ## Specimens: what the gallery shows
@@ -275,7 +279,10 @@ Basis gives you a \`screenshot\` tool (its MCP server \`basis\`) that photograph
 a specimen alone, as its gallery section shows it (\`target\`: its id or title, such as \`buttons\` or \`Navbar\`), or
 one screen of a view (\`target\`: the view, \`screen\`: the screen's id or label). By default it takes the narrowest
 width the target is shown at (the project's Mobile width, unless a view's flow names its own), in light and dark;
-\`widths\` and \`theme\` change that, up to ${MAX_SCREENSHOTS} images a call.
+\`widths\` and \`theme\` change that, up to ${MAX_SCREENSHOTS} images a call. Its \`typecheck\` tool type-checks
+\`components/\`, \`patterns/\` and \`views/\` from what is saved, as Basis does after every turn, and returns the errors.
+
+- Type-check after changing a component's props or a specimen's imports, and fix what it finds before you look.
 
 - Look after every visual change, and before you open or update a review: at the narrowest width, in both themes.
 - Check what the code cannot tell you: text that wraps, clips or overflows, controls that crowd or misalign,
