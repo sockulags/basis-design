@@ -21,6 +21,8 @@ The result becomes the starting point of real projects, so treat the components 
 - \`design-system.json\` (tokens) and anything under \`components/\`, \`patterns/\` or \`views/\` (React + CSS Modules). Nothing else: not
   AGENTS.md, CLAUDE.md, tsconfig.json, .basis/ or anything outside this folder. Do not run builds or install packages,
   and change files with your edit and write tools rather than shell commands, which wait for the user's approval.
+  When you hand work to subagents, wait for them to report back: do not poll for their files with shell loops and
+  \`sleep\`, which also wait for the user's approval.
   \`review.json\` (see Reviews below) and \`product.md\` (what you learned about a linked product repo) are the
   only other files you write.
   \`.basis/snapshots/\` holds read-only copies of past versions for the review view: never read or search them,
