@@ -118,12 +118,18 @@ export function isApprovableClaudeRead(
       continue;
     }
     // A wildcard expands to names in one folder, so the command is checked as if it named that folder, which must
-    // be readable too (also where grep takes the word for its pattern).
+    // be readable too (also where grep takes the word for its pattern). In an option's value (`--include=*.ts`) it
+    // can only expand to names that begin with the same option, so the word is checked as it stands.
     if (args.some((arg) => arg.glob) && (args[0]!.glob || !GLOB_PROGRAMS.has(args[0]!.values[0]!))) return false;
-    const globbed = args.filter((arg) => arg.glob).map((arg) => globFolder(arg.values[0]!));
+    const inOption = (arg: Arg) => OPTION_GLOB.test(arg.values[0]!);
+    const globbed = args.filter((arg) => arg.glob && !inOption(arg)).map((arg) => globFolder(arg.values[0]!));
     if (globbed.some((folder) => folder === null)) return false;
     const found = posixCommand(
-      args.map((arg) => (arg.glob ? { ...arg, values: [globFolder(arg.values[0]!)!], glob: false } : arg)),
+      args.map((arg) =>
+        arg.glob
+          ? { ...arg, values: [inOption(arg) ? arg.values[0]! : globFolder(arg.values[0]!)!], glob: false }
+          : arg,
+      ),
     );
     if (!found) return false;
     for (const target of [...found, ...(globbed as string[])].map((item) => gitBashPath(item, paths))) {
@@ -137,6 +143,8 @@ export function isApprovableClaudeRead(
 
 /** Programs whose arguments may hold a wildcard: whatever names it expands to, they only read them. */
 const GLOB_PROGRAMS = new Set(["ls", "cat", "head", "tail", "wc", "grep"]);
+/** A long option whose value holds a wildcard, in no other folder: `--include=*.ts`. */
+const OPTION_GLOB = /^--[a-z][a-z-]*=[^/\\]*$/;
 
 /**
  * The folder whose names a wildcard word expands to, or null when it could expand to anything else. It must begin
@@ -237,6 +245,8 @@ function split(tokens: Token[]): Arg[][] | null {
 
 /** Only printable ASCII: PowerShell takes typographic quotes and dashes for quotes and dashes. */
 const PLAIN = /^[\x20-\x7e]*$/;
+/** Claude Code's Bash may also hold letters such as `ä`, which bash keeps in a word; still no quotes or dashes. */
+const BASH_TEXT = /^(?:[\x20-\x7e]|\p{L}|\p{M})*$/u;
 
 /** What may follow a `$` for the shell to expand it; before anything else (`"a$"`, `"$|"`) it is a plain `$`. */
 const EXPANDS = /^[A-Za-z0-9_{([@*#?$!-]/;
@@ -256,11 +266,12 @@ function variableAt(text: string, at: number): { name: string; last: number } | 
 /**
  * POSIX shell words: single quotes, double quotes without expansions, backslash escapes, `;`, `|`, `&&`, `||` and
  * the redirections that only drop or merge errors (`2>/dev/null`, `2>&1`). Null for anything that expands, runs a
- * subshell, redirects into a file or starts a comment. With `variables`, `$NAME` and `${NAME}` are kept as marks
+ * subshell, redirects into a file or starts a comment. With `variables` (Claude Code's Bash), letters beyond ASCII
+ * are words too, and `$NAME` and `${NAME}` are kept as marks
  * for expandVariables, and words say whether they are literal and what they assign.
  */
 export function posixTokens(text: string, variables = false): Token[] | null {
-  if (!PLAIN.test(text.replace(/\t/g, " "))) return null;
+  if (!(variables ? BASH_TEXT : PLAIN).test(text.replace(/\t/g, " "))) return null;
   const tokens: Token[] = [];
   let word = null as string | null;
   let quoted = false;

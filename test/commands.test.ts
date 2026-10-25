@@ -517,6 +517,22 @@ describe("isApprovableClaudeRead", () => {
     assert.equal(approved("cd C:/repo && c*t a"), false);
   });
 
+  test("approves a wildcard in an option's value, and letters beyond ASCII", () => {
+    // What Claude asked while bringing a Swedish UI's texts into a design.
+    assert.equal(
+      approved(
+        String.raw`cd "C:/repo" && grep -rn "message:" packages/cli/src --include=*.ts | grep -i "plan\|läser\|tittar\|skriver" | head -20; grep -rn "\"job\.\|progress" packages/studio/src/messages/sv.ts | sed -n '1,40p' | grep -v "^\s*$" | head -40`,
+      ),
+      true,
+    );
+    assert.equal(approved("cd C:/repo && cat src/Översikt.tsx"), true);
+    // An option's value in another folder, an option grep does not know, and typographic quotes or dashes.
+    assert.equal(approved("cd C:/repo && grep -rn a --include=../*.ts"), false);
+    assert.equal(approved("cd C:/repo && grep -rn a --pre=*.sh"), false);
+    assert.equal(approved("cd C:/repo && cat \u201ca\u201d"), false);
+    assert.equal(approved("cd C:/repo && grep \u2013r a"), false);
+  });
+
   test("asks when the request wants more than running the command", () => {
     assert.equal(approved("cd C:/repo && ls", { run_in_background: true }), false);
     assert.equal(approved("cd C:/repo && ls", { dangerouslyDisableSandbox: true }), false);
