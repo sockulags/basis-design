@@ -76,7 +76,8 @@ export function isApprovableRead(
  * the command and a description or timeout, nothing else (not in the background). Its shell keeps the folder it was
  * left in between commands, which the request does not say, so the command must begin with `cd` to an absolute
  * folder that exists, followed by `&&`; the rest runs there and must only read what is `readable`. Git Bash on
- * Windows takes `C:/…` as such a folder. Simple loops and variables are written out first (expandVariables). A
+ * Windows takes `C:/…` and `/c/…` as such a folder. A wildcard is allowed where it can only expand to names in a
+ * readable folder, for programs that only read whatever it expands to (globFolder). Simple loops and variables are written out first (expandVariables). A
  * later `cd` to an existing absolute folder moves the rest there; when `&&` or `||` may skip it, what follows
  * could run in either folder, so its paths must be readable from both.
  */
@@ -97,7 +98,7 @@ export function isApprovableClaudeRead(
   if (!cd || !isArg(cd) || cd.quoted || cd.values[0] !== "cd") return false;
   if (!folder || !isArg(folder) || folder.glob || !and || isArg(and) || and.op !== "&&") return false;
   const folderOf = (arg: Arg | undefined) => {
-    const target = arg && !arg.glob ? arg.values[0]! : "";
+    const target = arg && !arg.glob ? gitBashPath(arg.values[0]!, paths) : "";
     return paths.isAbsolute(target) && plainPath(target, paths) && isFolder(target) ? paths.resolve(target) : null;
   };
   const first = folderOf(folder);
@@ -116,16 +117,53 @@ export function isApprovableClaudeRead(
       cwds = op === ";" ? [target] : [...new Set([...cwds, target])];
       continue;
     }
-    if (args.some((arg) => arg.glob)) return false;
-    const found = posixCommand(args);
+    // A wildcard expands to names in one folder, so the command is checked as if it named that folder, which must
+    // be readable too (also where grep takes the word for its pattern). In an option's value (`--include=*.ts`) it
+    // can only expand to names that begin with the same option, so the word is checked as it stands.
+    if (args.some((arg) => arg.glob) && (args[0]!.glob || !GLOB_PROGRAMS.has(args[0]!.values[0]!))) return false;
+    const inOption = (arg: Arg) => OPTION_GLOB.test(arg.values[0]!);
+    const globbed = args.filter((arg) => arg.glob && !inOption(arg)).map((arg) => globFolder(arg.values[0]!));
+    if (globbed.some((folder) => folder === null)) return false;
+    const found = posixCommand(
+      args.map((arg) =>
+        arg.glob
+          ? { ...arg, values: [inOption(arg) ? arg.values[0]! : globFolder(arg.values[0]!)!], glob: false }
+          : arg,
+      ),
+    );
     if (!found) return false;
-    for (const target of found) {
+    for (const target of [...found, ...(globbed as string[])].map((item) => gitBashPath(item, paths))) {
       if (!plainPath(target, paths)) return false;
       reads.push(...cwds.map((cwd) => paths.resolve(cwd, target)));
     }
     reads.push(...cwds);
   }
   return reads.every(readable);
+}
+
+/** Programs whose arguments may hold a wildcard: whatever names it expands to, they only read them. */
+const GLOB_PROGRAMS = new Set(["ls", "cat", "head", "tail", "wc", "grep"]);
+/** A long option whose value holds a wildcard, in no other folder: `--include=*.ts`. */
+const OPTION_GLOB = /^--[a-z][a-z-]*=[^/\\]*$/;
+
+/**
+ * The folder whose names a wildcard word expands to, or null when it could expand to anything else. It must begin
+ * with a plain character that is no `-`, so no name it expands to is taken as an option, and no part from the first
+ * wildcard on may begin with a dot, since `.*` matches `..` in some shells and a later `..` climbs back out.
+ */
+function globFolder(word: string): string | null {
+  if (/^[-*?[\]]/.test(word) || word.includes("\\")) return null;
+  const parts = word.split("/");
+  const first = parts.findIndex((part) => /[*?[\]]/.test(part));
+  if (parts.slice(first).some((part) => part.startsWith("."))) return null;
+  if (first === 0) return ".";
+  return parts.slice(0, first).join("/") || "/";
+}
+
+/** Git Bash on Windows writes a drive as `/c/…`, which is `C:/…` there. */
+function gitBashPath(target: string, paths: PlatformPath): string {
+  const drive = paths.sep === "\\" ? /^\/([A-Za-z])(?=\/|$)/.exec(target) : null;
+  return drive ? `${drive[1]!.toUpperCase()}:${target.slice(2) || "/"}` : target;
 }
 
 /** The commands of a POSIX script with the separator before each (`;` for the first), or null for an empty one. */
@@ -207,6 +245,8 @@ function split(tokens: Token[]): Arg[][] | null {
 
 /** Only printable ASCII: PowerShell takes typographic quotes and dashes for quotes and dashes. */
 const PLAIN = /^[\x20-\x7e]*$/;
+/** Claude Code's Bash may also hold letters such as `ä`, which bash keeps in a word; still no quotes or dashes. */
+const BASH_TEXT = /^(?:[\x20-\x7e]|\p{L}|\p{M})*$/u;
 
 /** What may follow a `$` for the shell to expand it; before anything else (`"a$"`, `"$|"`) it is a plain `$`. */
 const EXPANDS = /^[A-Za-z0-9_{([@*#?$!-]/;
@@ -226,11 +266,12 @@ function variableAt(text: string, at: number): { name: string; last: number } | 
 /**
  * POSIX shell words: single quotes, double quotes without expansions, backslash escapes, `;`, `|`, `&&`, `||` and
  * the redirections that only drop or merge errors (`2>/dev/null`, `2>&1`). Null for anything that expands, runs a
- * subshell, redirects into a file or starts a comment. With `variables`, `$NAME` and `${NAME}` are kept as marks
+ * subshell, redirects into a file or starts a comment. With `variables` (Claude Code's Bash), letters beyond ASCII
+ * are words too, and `$NAME` and `${NAME}` are kept as marks
  * for expandVariables, and words say whether they are literal and what they assign.
  */
 export function posixTokens(text: string, variables = false): Token[] | null {
-  if (!PLAIN.test(text.replace(/\t/g, " "))) return null;
+  if (!(variables ? BASH_TEXT : PLAIN).test(text.replace(/\t/g, " "))) return null;
   const tokens: Token[] = [];
   let word = null as string | null;
   let quoted = false;

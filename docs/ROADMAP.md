@@ -252,6 +252,9 @@ Still open from round 1, for Lucas: **what deviation is acceptable** when someth
 - [x] **Prepare 0.3.1.** The design agent's `typecheck` tool and its brief on reading with its own tools and
       waiting for subagents. Bump the version, write the release notes to `$TEMP/basis-release-notes-0.3.1.md`,
       check CI is green, and report to Lucas. Do not publish, tag or release; Lucas publishes and asks for the tag.
+- [x] **Prepare 0.3.2.** Basis approves the agent's reads with Git Bash drive paths (`/c/…`) and wildcards that
+      only list names in a readable folder. Bump the version, write the release notes to
+      `$TEMP/basis-release-notes-0.3.2.md`, check CI is green, and report to Lucas. Do not publish, tag or release.
 
 ## Decision log
 

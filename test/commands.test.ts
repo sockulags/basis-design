@@ -483,7 +483,54 @@ describe("isApprovableClaudeRead", () => {
     assert.equal(approved("cd C:/repo && W=C:/Users; cat $W/x"), false);
     assert.equal(approved("cd C:/repo && for f in a ../../secret; do cat $f; done"), false);
     assert.equal(approved("cd C:/repo && for f in a b; do rm $f; done"), false);
-    assert.equal(approved("cd C:/repo && wc -l src/*.css"), false);
+  });
+
+  test("takes Git Bash's /c/… for the drive", () => {
+    assert.equal(approved("cd /c/repo && git ls-files . | head -60"), true);
+    assert.equal(approved("cd /c/repo/packages && cat /c/ws/a.css"), true);
+    assert.equal(approved("cd /c/Users && ls"), false);
+    assert.equal(approved("cd /c/repo && cat /c/Users/lucas/.ssh/id_rsa"), false);
+    assert.equal(approved("cd /d/repo && ls"), false);
+  });
+
+  test("approves wildcards that only list names in a readable folder", () => {
+    // What Claude asked while bringing in a linked repo's views.
+    assert.equal(
+      approved(
+        "cd /c/repo/packages && git ls-files . | head -60; ls tickets; ls tickets/*/; ls tickets/*/runs/*/ 2>/dev/null | head -30",
+      ),
+      true,
+    );
+    assert.equal(approved("cd C:/repo && wc -l src/*.css && grep -n color src/*/theme.ts"), true);
+    assert.equal(approved("cd C:/repo && head -5 a*"), true);
+    // Names it expands to could be taken for options, or reach outside.
+    assert.equal(approved("cd C:/repo && ls *"), false);
+    assert.equal(approved("cd C:/repo && head -n*"), false);
+    assert.equal(approved("cd C:/repo && ls ../*"), false);
+    assert.equal(approved("cd C:/repo/packages && ls ../../*"), false);
+    assert.equal(approved("cd C:/repo && cat src/.*"), false);
+    assert.equal(approved("cd C:/repo && cat src/*/../../../x"), false);
+    assert.equal(approved("cd C:/repo && cat /c/Users/*/x"), false);
+    // Only programs that read whatever it expands to: uniq writes to a second name, git and find are not listed.
+    assert.equal(approved("cd C:/repo && uniq src/*"), false);
+    assert.equal(approved("cd C:/repo && git ls-files src/*"), false);
+    assert.equal(approved("cd C:/repo && c*t a"), false);
+  });
+
+  test("approves a wildcard in an option's value, and letters beyond ASCII", () => {
+    // What Claude asked while bringing a Swedish UI's texts into a design.
+    assert.equal(
+      approved(
+        String.raw`cd "C:/repo" && grep -rn "message:" packages/cli/src --include=*.ts | grep -i "plan\|läser\|tittar\|skriver" | head -20; grep -rn "\"job\.\|progress" packages/studio/src/messages/sv.ts | sed -n '1,40p' | grep -v "^\s*$" | head -40`,
+      ),
+      true,
+    );
+    assert.equal(approved("cd C:/repo && cat src/Översikt.tsx"), true);
+    // An option's value in another folder, an option grep does not know, and typographic quotes or dashes.
+    assert.equal(approved("cd C:/repo && grep -rn a --include=../*.ts"), false);
+    assert.equal(approved("cd C:/repo && grep -rn a --pre=*.sh"), false);
+    assert.equal(approved("cd C:/repo && cat \u201ca\u201d"), false);
+    assert.equal(approved("cd C:/repo && grep \u2013r a"), false);
   });
 
   test("asks when the request wants more than running the command", () => {
