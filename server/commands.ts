@@ -76,7 +76,8 @@ export function isApprovableRead(
  * the command and a description or timeout, nothing else (not in the background). Its shell keeps the folder it was
  * left in between commands, which the request does not say, so the command must begin with `cd` to an absolute
  * folder that exists, followed by `&&`; the rest runs there and must only read what is `readable`. Git Bash on
- * Windows takes `C:/…` as such a folder. Simple loops and variables are written out first (expandVariables). A
+ * Windows takes `C:/…` and `/c/…` as such a folder. A wildcard is allowed where it can only expand to names in a
+ * readable folder, for programs that only read whatever it expands to (globFolder). Simple loops and variables are written out first (expandVariables). A
  * later `cd` to an existing absolute folder moves the rest there; when `&&` or `||` may skip it, what follows
  * could run in either folder, so its paths must be readable from both.
  */
@@ -97,7 +98,7 @@ export function isApprovableClaudeRead(
   if (!cd || !isArg(cd) || cd.quoted || cd.values[0] !== "cd") return false;
   if (!folder || !isArg(folder) || folder.glob || !and || isArg(and) || and.op !== "&&") return false;
   const folderOf = (arg: Arg | undefined) => {
-    const target = arg && !arg.glob ? arg.values[0]! : "";
+    const target = arg && !arg.glob ? gitBashPath(arg.values[0]!, paths) : "";
     return paths.isAbsolute(target) && plainPath(target, paths) && isFolder(target) ? paths.resolve(target) : null;
   };
   const first = folderOf(folder);
@@ -116,16 +117,45 @@ export function isApprovableClaudeRead(
       cwds = op === ";" ? [target] : [...new Set([...cwds, target])];
       continue;
     }
-    if (args.some((arg) => arg.glob)) return false;
-    const found = posixCommand(args);
+    // A wildcard expands to names in one folder, so the command is checked as if it named that folder, which must
+    // be readable too (also where grep takes the word for its pattern).
+    if (args.some((arg) => arg.glob) && (args[0]!.glob || !GLOB_PROGRAMS.has(args[0]!.values[0]!))) return false;
+    const globbed = args.filter((arg) => arg.glob).map((arg) => globFolder(arg.values[0]!));
+    if (globbed.some((folder) => folder === null)) return false;
+    const found = posixCommand(
+      args.map((arg) => (arg.glob ? { ...arg, values: [globFolder(arg.values[0]!)!], glob: false } : arg)),
+    );
     if (!found) return false;
-    for (const target of found) {
+    for (const target of [...found, ...(globbed as string[])].map((item) => gitBashPath(item, paths))) {
       if (!plainPath(target, paths)) return false;
       reads.push(...cwds.map((cwd) => paths.resolve(cwd, target)));
     }
     reads.push(...cwds);
   }
   return reads.every(readable);
+}
+
+/** Programs whose arguments may hold a wildcard: whatever names it expands to, they only read them. */
+const GLOB_PROGRAMS = new Set(["ls", "cat", "head", "tail", "wc", "grep"]);
+
+/**
+ * The folder whose names a wildcard word expands to, or null when it could expand to anything else. It must begin
+ * with a plain character that is no `-`, so no name it expands to is taken as an option, and no part from the first
+ * wildcard on may begin with a dot, since `.*` matches `..` in some shells and a later `..` climbs back out.
+ */
+function globFolder(word: string): string | null {
+  if (/^[-*?[\]]/.test(word) || word.includes("\\")) return null;
+  const parts = word.split("/");
+  const first = parts.findIndex((part) => /[*?[\]]/.test(part));
+  if (parts.slice(first).some((part) => part.startsWith("."))) return null;
+  if (first === 0) return ".";
+  return parts.slice(0, first).join("/") || "/";
+}
+
+/** Git Bash on Windows writes a drive as `/c/…`, which is `C:/…` there. */
+function gitBashPath(target: string, paths: PlatformPath): string {
+  const drive = paths.sep === "\\" ? /^\/([A-Za-z])(?=\/|$)/.exec(target) : null;
+  return drive ? `${drive[1]!.toUpperCase()}:${target.slice(2) || "/"}` : target;
 }
 
 /** The commands of a POSIX script with the separator before each (`;` for the first), or null for an empty one. */
